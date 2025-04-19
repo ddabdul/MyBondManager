@@ -1,5 +1,5 @@
 //  MaturedBondsView.swift
-//  BondPortfolioV2
+//  MyBondManager
 //
 //  Created by Olivier on 17/04/2025.
 //

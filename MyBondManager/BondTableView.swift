@@ -6,12 +6,6 @@
 //
 
 
-//  BondTableView.swift
-//  BondPortfolioV2
-//
-//  Created by You on 04/18/2025.
-//
-
 import SwiftUI
 
 /// Reuse your existing formatters:

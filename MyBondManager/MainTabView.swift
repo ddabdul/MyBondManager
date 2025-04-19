@@ -1,5 +1,5 @@
 //  MainTabView.swift
-//  BondPortfolioV2
+//  MyBondManager
 //
 //  Created by Olivier on 13/04/2025.
 //

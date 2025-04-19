@@ -1,5 +1,5 @@
 //  ScrapError.swift
-//  BondPortfolioV2
+//  MyBondManager
 //
 //  Created by Olivier on 18/04/2025.
 //

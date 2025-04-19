@@ -1,6 +1,6 @@
 //
 //  BondPortfolioView.swift
-//  BondPortfolioV2
+//  MyBondManager
 //
 //  Created by Olivier on 11/04/2025.
 //
