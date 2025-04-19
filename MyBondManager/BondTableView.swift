@@ -80,8 +80,8 @@ struct BondTableView: View {
                     Text(String(format: "%.2f%%", bond.yieldAtAcquisition * 100))
                 }
             }
-            .onChange(of: sortOrder) { newOrder in
-                // keep your viewModel.bonds in sync with the user's sort choices:
+            // react to sortOrder changes using the new two‑parameter onChange API
+            .onChange(of: sortOrder) { oldOrder, newOrder in
                 viewModel.bonds.sort(using: newOrder)
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
