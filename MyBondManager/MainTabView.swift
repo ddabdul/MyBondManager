@@ -21,7 +21,7 @@ struct MainTabView: View {
             // ──────────────────────────────────
             NavigationView {
                 PortfolioSummaryView(viewModel: viewModel)
-                BondPortfolioView(viewModel: viewModel)
+                BondTableView(viewModel: viewModel)
                     .toolbar {
                         ToolbarItem(placement: .primaryAction) {
                             Button {
