@@ -30,13 +30,7 @@ struct BondTableView: View {
                 Text("My Bond Portfolio")
                     .font(.largeTitle)
                 Spacer()
-                Button {
-                    // your add‑bond action
-                } label: {
-                    Image(systemName: "plus")
-                        // use standard “add” style for macOS:
-                        .imageScale(.large)
-                }
+
             }
             .padding()
             
