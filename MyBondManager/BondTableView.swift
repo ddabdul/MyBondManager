@@ -48,6 +48,57 @@ private let bondDateFormatter: DateFormatter = {
 }()
 
 // —————————————————————————————
+// MARK: – Detail View
+// —————————————————————————————
+struct BondDetailView: View {
+    let bond: Bond
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(bond.name)
+                    .font(.title2)
+                    .bold()
+                Spacer()
+                Button("Close") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+
+            Divider()
+
+            Group {
+                HStack {
+                    Text("Acquisition Price:")
+                    Spacer()
+                    Text(bond.acquisitionPriceFormatted)
+                }
+                HStack {
+                    Text("Acquisition Date:")
+                    Spacer()
+                    Text(bond.acquisitionDate, formatter: bondDateFormatter)
+                }
+                HStack {
+                    Text("Depot Bank:")
+                    Spacer()
+                    Text(bond.depotBank)
+                }
+                HStack {
+                    Text("YTM:")
+                    Spacer()
+                    Text(bond.ytmFormatted)
+                }
+            }
+            Spacer()
+        }
+        .padding()
+        .frame(minWidth: 400, minHeight: 200)
+    }
+}
+
+// —————————————————————————————
 // MARK: – BondTableView
 // —————————————————————————————
 struct BondTableView: View {
@@ -58,9 +109,25 @@ struct BondTableView: View {
         .init(\.maturityDate, order: .forward)
     ]
 
+    /// track the selected bond's ID for selection
+    @State private var selectedBondID: Bond.ID?
+
     /// we sort on‑the‑fly rather than mutating the VM
     private var sortedBonds: [Bond] {
         viewModel.bonds.sorted(using: sortOrder)
+    }
+
+    /// binding adapter to show the BondDetailView
+    private var selectedBondForSheet: Binding<Bond?> {
+        Binding<Bond?>(
+            get: {
+                guard let id = selectedBondID else { return nil }
+                return sortedBonds.first { $0.id == id }
+            },
+            set: { newBond in
+                selectedBondID = newBond?.id
+            }
+        )
     }
 
     var body: some View {
@@ -69,6 +136,9 @@ struct BondTableView: View {
             bondTable
         }
         .frame(minWidth: 800, minHeight: 400)
+        .sheet(item: selectedBondForSheet) { bond in
+            BondDetailView(bond: bond)
+        }
     }
 
     // ————————————————————————
@@ -80,7 +150,7 @@ struct BondTableView: View {
                 .font(.largeTitle)
                 .foregroundColor(.white)
             Spacer()
-            // you can re‑add your “Add” + “Matured” buttons here…
+            // re-add your “Add” + “Matured” buttons here…
         }
         .padding()
         .background(
@@ -99,73 +169,46 @@ struct BondTableView: View {
     // The Table
     // ————————————————————————
     private var bondTable: some View {
-        Table(sortedBonds, sortOrder: $sortOrder) {
-            // 1) Bond Name (left‑aligned text)
+        Table(
+            sortedBonds,
+            selection: $selectedBondID,
+            sortOrder: $sortOrder
+        ) {
+            // 1) Bond Name
             TableColumn("Bond Name", value: \.name) { bond in
                 Text(bond.name)
                     .multilineTextAlignment(.leading)
             }
             .width(min: 150, ideal: 200, max: 300)
 
-            // 2) Issuer (left)
+            // 2) Issuer
             TableColumn("Issuer", value: \.issuer) { bond in
                 Text(bond.issuer)
                     .multilineTextAlignment(.leading)
             }
             .width(min: 120, ideal: 160, max: 240)
 
-            // 3) Acq. Price (right)
-            TableColumn("Acq. Price", value: \.initialPrice) { bond in
-                Text(bond.acquisitionPriceFormatted)
-                    .multilineTextAlignment(.trailing)
-            }
-            .width(min: 80, ideal: 100)
-
-            // 4) Nominal (right)
+            // 3) Nominal
             TableColumn("Nominal", value: \.parValue) { bond in
                 Text(bond.parValueFormatted)
                     .multilineTextAlignment(.trailing)
             }
             .width(min: 80, ideal: 100)
 
-            // 5) Coupon (right)
+            // 4) Coupon
             TableColumn("Coupon", value: \.couponRate) { bond in
                 Text(bond.couponFormatted)
                     .multilineTextAlignment(.trailing)
             }
             .width(min: 60, ideal: 80)
 
-            // 6) Acq. Date (center)
-            TableColumn("Acq. Date", value: \.acquisitionDate) { bond in
-                Text(bond.acquisitionDate, formatter: bondDateFormatter)
-                    .multilineTextAlignment(.center)
-            }
-            .width(min: 80)
-
-            // 7) Mat. Date (center)
+            // 5) Maturity Date
             TableColumn("Mat. Date", value: \.maturityDate) { bond in
                 Text(bond.maturityDate, formatter: bondDateFormatter)
                     .multilineTextAlignment(.center)
             }
             .width(min: 80)
-
-            // 8) Depot Bank (left)
-            TableColumn("Depot Bank", value: \.depotBank) { bond in
-                Text(bond.depotBank)
-                    .multilineTextAlignment(.leading)
-            }
-            .width(min: 100, ideal: 120)
-
-            // 9) YTM (right, not sortable)
-            TableColumn("YTM") { bond in
-              Text(bond.ytmFormatted)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-            .width(min: 60, ideal: 80)
-
-
         }
-        // let SwiftUI handle the visuals — no manual .onChange needed
         .tableStyle(.inset(alternatesRowBackgrounds: true))
     }
 }
