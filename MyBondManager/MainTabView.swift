@@ -62,7 +62,7 @@ struct MainTabView: View {
                 PortfolioSummaryView(viewModel: viewModel)
                     .navigationSplitViewColumnWidth(min: 250, ideal: 350, max: 400)
             } detail: {
-                CashFlowMonthlyView(viewModel: viewModel)
+                CashFlowView(viewModel: viewModel)
             }
             .tabItem {
                 Label("Cash Flow", systemImage: "dollarsign.circle")
