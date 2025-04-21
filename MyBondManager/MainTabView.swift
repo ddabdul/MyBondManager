@@ -44,7 +44,7 @@ struct MainTabView: View {
             }
             // Present modals for adding and matured bonds
             .sheet(isPresented: $showingAddBondView) {
-                AddBondView(viewModel: viewModel)
+                AddBondViewAsync(viewModel: viewModel)
             }
             .sheet(isPresented: $showingMaturedSheet) {
                 MaturedBondsView()

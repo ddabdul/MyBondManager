@@ -1,158 +1,156 @@
-//
-//  AddBondView.swift
-//  MyBondManager
-//
-//  Created by Olivier on 11/04/2025.
-//
-
+// AddBondViewAsync.swift
 import SwiftUI
 
-struct AddBondView: View {
-    @Environment(\.dismiss) var dismiss
+@available(macOS 13.0, *)
+struct AddBondViewAsync: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: BondPortfolioViewModel
-
     private let scraper = BondDataScraper()
 
-    // User inputs
-    @State private var isin: String = ""
-    @State private var acquisitionDate: Date = Date()
-    @State private var parValue: String = ""
-    @State private var acquisitionPrice: String = ""
-    @State private var depotBank: String = ""
+    // MARK: – Inputs
+    @State private var isin            = ""
+    @State private var acquisitionDate = Date()
+    @State private var parValue        = ""
+    @State private var acquisitionPrice = ""
+    @State private var depotBank       = ""
 
-    // Scraped fields
-    @State private var name: String = ""
-    @State private var issuer: String = ""
-    @State private var wkn: String = ""
-    @State private var maturityDate: Date = Date()
-    @State private var couponRate: String = ""
+    // MARK: – Scraped
+    @State private var name          = ""
+    @State private var issuer        = ""
+    @State private var wkn           = ""
+    @State private var maturityDate  = Date()
+    @State private var couponRate    = ""
 
-    // Loading / error
-    @State private var isLoading = false
-    @State private var errorMessage = ""
+    @State private var isLoading     = false
+    @State private var errorMessage  = ""
 
     var body: some View {
-        VStack(alignment: .leading) {
-            Text("Add Bond")
-                .font(.title)
-                .padding(.top)
+        ZStack {
+            //–– Main content, disabled when loading
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Add Bond")
+                        .font(.title)
+                        .padding(.bottom, 8)
 
-            Form {
-                Section("Required for Scraping") {
-                    TextField("ISIN", text: $isin)
-                        // Keep uppercase on macOS 14+
-                        .onChange(of: isin) { _, new in
-                            isin = new.uppercased()
+                    GroupBox("Required for Scraping") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("ISIN", text: $isin, onCommit: {
+                                isin = isin.uppercased()
+                            })
+                            DatePicker("Acquisition Date",
+                                       selection: $acquisitionDate,
+                                       displayedComponents: .date)
                         }
+                        .padding(.vertical, 4)
+                    }
 
-                    DatePicker("Acquisition Date", selection: $acquisitionDate, displayedComponents: .date)
-                }
+                    GroupBox("Manual Inputs") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("Par Value",       text: $parValue)
+                            TextField("Acquisition Price", text: $acquisitionPrice)
+                            TextField("Depot Bank",      text: $depotBank)
+                        }
+                        .padding(.vertical, 4)
+                    }
 
-                Section("Manual Inputs") {
-                    TextField("Par Value", text: $parValue)
-                    TextField("Acquisition Price", text: $acquisitionPrice)
-                    TextField("Depot Bank", text: $depotBank)
-                }
+                    GroupBox("Scraped Data") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("Bond Name",      text: $name).disabled(true)
+                            TextField("Issuer",         text: $issuer).disabled(true)
+                            TextField("WKN",            text: $wkn).disabled(true)
+                            DatePicker("Maturity Date",
+                                       selection: $maturityDate,
+                                       displayedComponents: .date)
+                                .disabled(true)
+                            TextField("Coupon Rate (%)", text: $couponRate).disabled(true)
+                        }
+                        .padding(.vertical, 4)
+                    }
 
-                Section("Scraped Data") {
-                    TextField("Bond Name", text: $name)
-                        .disabled(true)
-                    TextField("Issuer", text: $issuer)
-                        .disabled(true)
-                    TextField("WKN", text: $wkn)
-                        .disabled(true)
-                    DatePicker("Maturity Date", selection: $maturityDate, displayedComponents: .date)
-                        .disabled(true)
-                    TextField("Coupon Rate (%)", text: $couponRate)
-                        .disabled(true)
-                }
+                    if !errorMessage.isEmpty {
+                        Text(errorMessage)
+                            .foregroundColor(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
-                if !errorMessage.isEmpty {
-                    Text(errorMessage)
-                        .foregroundColor(.red)
-                }
-
-                if isLoading {
                     HStack {
+                        Button("Cancel") {
+                            dismiss()
+                        }
+                        .keyboardShortcut(.cancelAction)
+
                         Spacer()
-                        ProgressView("Scraping…")
-                        Spacer()
+
+                        Button("Scrape Data") {
+                            startScrape()
+                        }
+                        .disabled(isLoading || isin.isEmpty)
+
+                        Button("Save") {
+                            saveBond()
+                        }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(isLoading
+                                  || name.isEmpty
+                                  || issuer.isEmpty
+                                  || wkn.isEmpty
+                                  || parValue.isEmpty
+                                  || acquisitionPrice.isEmpty
+                                  || depotBank.isEmpty)
                     }
                 }
+                .padding(20)
             }
-            .padding([.leading, .trailing])
+            .disabled(isLoading)
 
-            HStack {
-                Button("Cancel") {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Spacer()
-
-                Button("Scrape Data") {
-                    scrapeAll()
-                }
-                .disabled(isLoading || isin.isEmpty)
-
-                Button("Save") {
-                    saveBond()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(isLoading
-                          || name.isEmpty
-                          || issuer.isEmpty
-                          || wkn.isEmpty
-                          || parValue.isEmpty
-                          || acquisitionPrice.isEmpty
-                          || depotBank.isEmpty)
+            //–– Overlay spinner
+            if isLoading {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                ProgressView("Scraping…")
+                    .padding(20)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(8)
+                    .shadow(radius: 4)
             }
-            .padding()
         }
-        .frame(minWidth: 600, minHeight: 500)
+        .frame(minWidth: 600, minHeight: 500) // only in Preview; window sizing lives in your App/Scene
     }
 
-    private func scrapeAll() {
-        isLoading = true
-        errorMessage = ""
+    /// Kicks off the scrape but defers every state‐change to the next runloop turn,
+    /// so AppKit/SwiftUI has finished any layout before we mutate @State.
+    private func startScrape() {
+        // 1) defer entering loading state
+        DispatchQueue.main.async {
+            isLoading = true
+            errorMessage = ""
+        }
 
-        scraper.fetchNameAndWKN(fromINGFor: isin) { result in
-            switch result {
-            case .success(let pair):
-                self.name = pair.name
-                self.wkn  = pair.wkn
+        Task {
+            do {
+                let (nm, wk)       = try await scraper.fetchNameAndWKN(isin: isin)
+                let comp          = try await scraper.fetchIssuer(isin: isin)
+                let dts           = try await scraper.fetchDates(isin: isin)
+                let cp            = try await scraper.fetchCouponRate(isin: isin)
+                let cpStr         = String(format: "%.2f", cp)
 
-                scraper.fetchIssuer(fromINGFor: isin) { issuerResult in
-                    if case .success(let emittent) = issuerResult {
-                        self.issuer = emittent
-                    } else if case .failure(let err) = issuerResult {
-                        self.errorMessage = err.localizedDescription
-                    }
+                DispatchQueue.main.async {
+                    name         = nm
+                    wkn          = wk
+                    issuer       = comp
+                    maturityDate = dts.maturity
+                    couponRate   = cpStr
 
-                    scraper.fetchDates(fromINGFor: isin) { dateResult in
-                        if case .success(let tup) = dateResult {
-                            self.maturityDate = tup.maturity
-                        } else if case .failure(let err) = dateResult {
-                            self.errorMessage = err.localizedDescription
-                        }
+                    isLoading    = false
 
-                        scraper.fetchCouponRate(fromINGFor: isin) { couponResult in
-                            DispatchQueue.main.async {
-                                switch couponResult {
-                                case .success(let rate):
-                                    self.couponRate = String(format: "%.2f", rate)
-                                case .failure(let err):
-                                    self.errorMessage = err.localizedDescription
-                                }
-                                self.isLoading = false
-                            }
-                        }
-                    }
                 }
-
-            case .failure(let err):
-                self.errorMessage = err.localizedDescription
-                self.isLoading = false
+            } catch {
+                print(">>> Scrape ERROR: \(error)")
+                DispatchQueue.main.async {
+                    errorMessage = error.localizedDescription
+                    isLoading    = false
+                }
             }
         }
     }
@@ -160,8 +158,8 @@ struct AddBondView: View {
     private func saveBond() {
         guard let par    = Double(parValue),
               let coupon = Double(couponRate),
-              let price  = Double(acquisitionPrice)
-        else {
+              let price  = Double(acquisitionPrice) else {
+            print(">>> Save failed: numeric conversion error")
             errorMessage = "Numeric conversion failed."
             return
         }
@@ -182,8 +180,8 @@ struct AddBondView: View {
     }
 }
 
-struct AddBondView_Previews: PreviewProvider {
+struct AddBondViewAsync_Previews: PreviewProvider {
     static var previews: some View {
-        AddBondView(viewModel: BondPortfolioViewModel())
+        AddBondViewAsync(viewModel: BondPortfolioViewModel())
     }
 }

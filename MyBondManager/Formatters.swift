@@ -40,4 +40,12 @@ enum Formatters {
         f.dateStyle = .short
         return f
     }()
+    
+    /// Strict parser for ISO‑style dates without times
+    static let isoDateOnly: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale     = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
 }
