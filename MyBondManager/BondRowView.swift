@@ -6,26 +6,6 @@
 
 import SwiftUI
 
-// zero‑decimal currency formatter
-extension NumberFormatter {
-    static let zeroDecimalCurrency: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.maximumFractionDigits = 0
-        f.minimumFractionDigits = 0
-        return f
-    }()
-}
-
-// date formatter for acquisition & maturity dates
-private let bondDateFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateStyle = .short
-    return f
-}()
-
-// MARK: — Header Row
-
 struct BondRowHeaderView: View {
     @Binding var sortOption: BondSortOption
 
@@ -79,8 +59,6 @@ struct BondRowHeaderView: View {
     }
 }
 
-// MARK: — Data Row
-
 struct BondRowView: View {
     let bond: Bond
 
@@ -95,20 +73,18 @@ struct BondRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             // 3) Acquisition date
-            Text(bond.acquisitionDate, formatter: bondDateFormatter)
+            Text(Formatters.shortDate.string(from: bond.acquisitionDate))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             // 4) Acquisition price
             Text(
-                NumberFormatter.zeroDecimalCurrency
-                    .string(from: NSNumber(value: bond.initialPrice)) ?? "-"
+                Formatters.currency.string(from: NSNumber(value: bond.initialPrice)) ?? "-"
             )
             .frame(maxWidth: .infinity, alignment: .trailing)
 
             // 5) Par value
             Text(
-                NumberFormatter.zeroDecimalCurrency
-                    .string(from: NSNumber(value: bond.parValue)) ?? "-"
+                Formatters.currency.string(from: NSNumber(value: bond.parValue)) ?? "-"
             )
             .frame(maxWidth: .infinity, alignment: .trailing)
 
@@ -117,7 +93,7 @@ struct BondRowView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
 
             // 7) Maturity date
-            Text(bond.maturityDate, formatter: bondDateFormatter)
+            Text(Formatters.shortDate.string(from: bond.maturityDate))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             // 8) Depot bank
@@ -133,8 +109,6 @@ struct BondRowView: View {
     }
 }
 
-// MARK: — Preview
-
 struct BondRowView_Previews: PreviewProvider {
     static var previews: some View {
         let sample = Bond(
@@ -149,8 +123,7 @@ struct BondRowView_Previews: PreviewProvider {
             maturityDate: Date().addingTimeInterval(60*60*24*365),
             acquisitionDate: Date().addingTimeInterval(-60*60*24*180),
             depotBank: "Consor",
-            // ensure you’ve added this property to your model:
-      //      yieldAtAcquisition: 0.025
+    //        yieldAtAcquisition: 0.025
         )
 
         VStack(spacing: 0) {
@@ -159,7 +132,6 @@ struct BondRowView_Previews: PreviewProvider {
             BondRowView(bond: sample)
         }
         .previewLayout(.fixed(width: 950, height: 70))
-        .background(Color.black)  // for contrast
+        .background(Color.black)
     }
 }
-

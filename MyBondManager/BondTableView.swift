@@ -1,30 +1,21 @@
-//
 //  BondTableView.swift
 //  MyBondManager
 //
 //  Created by Olivier on 19/04/2025.
 //
-
 import SwiftUI
 
 // —————————————————————————————
 // MARK: – Bond + Formatters
 // —————————————————————————————
 extension Bond {
-    private static let currencyFormatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.maximumFractionDigits = 0
-        f.minimumFractionDigits = 0
-        return f
-    }()
-
+    /// Re‑use global currency formatter
     var acquisitionPriceFormatted: String {
-        Self.currencyFormatter.string(from: NSNumber(value: initialPrice)) ?? "–"
+        Formatters.currency.string(from: NSNumber(value: initialPrice)) ?? "–"
     }
 
     var parValueFormatted: String {
-        Self.currencyFormatter.string(from: NSNumber(value: parValue)) ?? "–"
+        Formatters.currency.string(from: NSNumber(value: parValue)) ?? "–"
     }
 
     var couponFormatted: String {
@@ -35,23 +26,6 @@ extension Bond {
         String(format: "%.2f%%", yieldAtAcquisition * 100)
     }
 }
-
-// date formatter for both table & detail
-private let bondDateFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateStyle = .short
-    return f
-}()
-
-// summarization currency formatter
-private let summaryCurrencyFormatter: NumberFormatter = {
-    let f = NumberFormatter()
-    f.numberStyle = .currency
-    f.maximumFractionDigits = 0
-    f.minimumFractionDigits = 0
-    return f
-}()
-
 
 // —————————————————————————————
 // MARK: – BondSummary Model
@@ -70,18 +44,16 @@ struct BondSummary: Identifiable {
     /// Sum of all parValues
     var totalNominal: Double { records.reduce(0) { $0 + $1.parValue } }
 
-    /// Formatted total nominal
+    /// Formatted total nominal using global formatter
     var formattedTotalParValue: String {
-        summaryCurrencyFormatter
-            .string(from: NSNumber(value: totalNominal)) ?? "–"
+        Formatters.currency.string(from: NSNumber(value: totalNominal)) ?? "–"
     }
 
-    /// Re‑use Bond’s coupon formatter
+    /// Coupon rate formatted
     var couponFormatted: String {
         String(format: "%.2f%%", couponRate)
     }
 }
-
 
 // —————————————————————————————
 // MARK: – BondTableView
@@ -142,16 +114,7 @@ struct BondTableView: View {
             Spacer()
         }
         .padding()
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.purple.opacity(0.8),
-                    Color.blue.opacity(0.8)
-                ]),
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        )
+        .background(AppTheme.tileBackground)
     }
 
     private var bondTable: some View {
@@ -191,7 +154,7 @@ struct BondTableView: View {
 
             // 4) Maturity Date
             TableColumn("Maturity Date", value: \.maturityDate) { s in
-                Text(s.maturityDate, formatter: bondDateFormatter)
+                Text(Formatters.shortDate.string(from: s.maturityDate))
                     .multilineTextAlignment(.center)
             }
             .width(min: 80)
@@ -199,7 +162,6 @@ struct BondTableView: View {
         .tableStyle(.inset(alternatesRowBackgrounds: true))
     }
 }
-
 
 // —————————————————————————————
 // MARK: – Detail View for Summarized Bond
@@ -228,7 +190,7 @@ struct BondSummaryDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Issuer: \(summary.issuer)")
                     Text("Coupon: \(summary.couponFormatted)")
-                    Text("Maturity: \(bondDateFormatter.string(from: summary.maturityDate))")
+                    Text("Maturity: \(Formatters.shortDate.string(from: summary.maturityDate))")
                     Text("Total Nominal: \(summary.formattedTotalParValue)")
                     if summary.recordCount > 1 {
                         Text("(Summarized \(summary.recordCount) records)")
@@ -257,7 +219,7 @@ struct BondSummaryDetailView: View {
                         HStack {
                             Text("Acquisition Date:")
                             Spacer()
-                            Text(bond.acquisitionDate, formatter: bondDateFormatter)
+                            Text(Formatters.shortDate.string(from: bond.acquisitionDate))
                         }
                         HStack {
                             Text("Depot Bank:")
@@ -281,7 +243,6 @@ struct BondSummaryDetailView: View {
         .frame(minWidth: 400, minHeight: 300)
     }
 }
-
 
 // —————————————————————————————
 // MARK: – Preview
