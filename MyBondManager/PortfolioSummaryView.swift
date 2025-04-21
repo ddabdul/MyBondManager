@@ -9,18 +9,26 @@ import SwiftUI
 struct PortfolioSummaryView: View {
     @ObservedObject var viewModel: BondPortfolioViewModel
     @State private var selectedDepotBank: String = "All"
-    
+
+    // --- State for Potential Bond YTM Calculation ---
+    @State private var potentialPrice: String = ""
+    @State private var potentialCouponRate: String = ""
+    @State private var potentialMaturityDate: Date = Date()
+    @State private var calculatedYTM: Double? = nil
+
     // Unique depot banks with "All"
     private var depotBanks: [String] {
         let banks = Set(viewModel.bonds.map { $0.depotBank })
         return ["All"] + banks.sorted()
     }
-    
+
     // Filtered bonds
     private var filteredBonds: [Bond] {
-        selectedDepotBank == "All" ? viewModel.bonds : viewModel.bonds.filter { $0.depotBank == selectedDepotBank }
+        selectedDepotBank == "All"
+            ? viewModel.bonds
+            : viewModel.bonds.filter { $0.depotBank == selectedDepotBank }
     }
-    
+
     // MARK: - Summary Metrics
     private var numberOfBonds: Int { filteredBonds.count }
     private var totalAcquisitionCost: Double { filteredBonds.reduce(0) { $0 + $1.initialPrice } }
@@ -33,12 +41,12 @@ struct PortfolioSummaryView: View {
         }
         return totalYears / Double(filteredBonds.count)
     }
-    
+
     // MARK: - Next Maturity
     private var nextMaturingBond: Bond? {
         filteredBonds.min { $0.maturityDate < $1.maturityDate }
     }
-    
+
     // MARK: - Next Coupon Calculation
     private func nextCouponDate(for bond: Bond) -> Date? {
         let calendar = Calendar.current
@@ -53,30 +61,16 @@ struct PortfolioSummaryView: View {
         }
         return calendar.date(from: nextYearComponents)
     }
-    
+
     private var nextCouponDateOverall: Date? {
         filteredBonds.compactMap { nextCouponDate(for: $0) }.min()
     }
-    
+
     private var bondsWithNextCoupon: [Bond] {
         guard let date = nextCouponDateOverall else { return [] }
         return filteredBonds.filter { nextCouponDate(for: $0) == date }
     }
-    
-    // MARK: - Formatting Helpers
-    private func formatDate(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        return f.string(from: date)
-    }
-    
-    private func formatCurrency(_ value: Double) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.maximumFractionDigits = 0
-        return f.string(from: NSNumber(value: value)) ?? "–"
-    }
-    
+
     // MARK: - Next Coupon Summary
     private var nextCouponPayer: String {
         switch bondsWithNextCoupon.count {
@@ -85,74 +79,134 @@ struct PortfolioSummaryView: View {
         default: return "Multiple"
         }
     }
-    
+
     private var nextCouponTotal: String {
         let total = bondsWithNextCoupon.reduce(0) { sum, bond in
             sum + bond.parValue * (bond.couponRate / 100)
         }
-        return formatCurrency(total)
+        return Formatters.currency.string(from: NSNumber(value: total)) ?? "–"
     }
-    
+
     private var nextCouponInfo: String {
         guard let date = nextCouponDateOverall else { return "–" }
         return """
 Payer: \(nextCouponPayer)
-Date: \(formatDate(date))
+Date: \(Formatters.mediumDate.string(from: date))
 Total: \(nextCouponTotal)
 """
     }
-    
+
+    // MARK: - Approximate YTM Calculation
+    /// Estimated Yield‑to‑Maturity at time of acquisition:
+    /// YTM = (C + (F – P) / n) ÷ ((F + P) / 2)
+    /// • C = coupon payment per year
+    /// • F = par value (100)
+    /// • P = price paid
+    /// • n = years to maturity (fractional)
+    private func calculateYTM() {
+        let parValue = 100.0
+        guard let price = Double(potentialPrice),
+              let couponRate = Double(potentialCouponRate) else {
+            calculatedYTM = nil
+            return
+        }
+        let coupon = parValue * couponRate / 100.0
+        let interval = potentialMaturityDate.timeIntervalSince(Date())
+        let years = interval / (365 * 24 * 3600)
+        guard years > 0 else {
+            calculatedYTM = nil
+            return
+        }
+        let numerator = coupon + (parValue - price) / years
+        let denominator = (parValue + price) / 2
+        let ytm = (numerator / denominator) * 100.0
+        calculatedYTM = ytm
+    }
+
     // MARK: - Body
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Header with filter
-            HStack {
-                Text("Portfolio Summary")
-                    .font(.title2).bold()
-                Spacer()
-                Picker("Depot Bank", selection: $selectedDepotBank) {
-                    ForEach(depotBanks, id: \.self) { bank in
-                        Text(bank).tag(bank)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // Header with filter
+                HStack {
+                    Text("Portfolio Summary")
+                        .font(.title2).bold()
+                    Spacer()
+                    Picker("Depot Bank", selection: $selectedDepotBank) {
+                        ForEach(depotBanks, id: \.self) { bank in
+                            Text(bank).tag(bank)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .frame(maxWidth: 150)
+                }
+                .padding(.bottom, 8)
+
+                // Metrics Grid
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    MetricView(icon: "doc.plaintext", title: "Bonds", value: "\(numberOfBonds)")
+                    MetricView(icon: "dollarsign.circle", title: "Acquisition", value: Formatters.currency.string(from: NSNumber(value: totalAcquisitionCost)) ?? "–")
+                    MetricView(icon: "banknote", title: "Principal", value: Formatters.currency.string(from: NSNumber(value: totalPrincipal)) ?? "–")
+                    MetricView(icon: "clock.arrow.circlepath", title: "Maturity (yrs)", value: String(format: "%.1f", averageMaturityYears))
+                }
+
+                // Next Maturity Tile
+                MetricView(
+                    icon: "flag.checkered",
+                    title: "Next Maturity",
+                    value: nextMaturingBond.map {
+                        "\($0.name)\nDate: \(Formatters.mediumDate.string(from: $0.maturityDate))\nNominal: \(Formatters.currency.string(from: NSNumber(value: $0.parValue)) ?? "–")"
+                    } ?? "–"
+                )
+                .frame(maxWidth: .infinity)
+
+                // Next Coupon Tile
+                MetricView(
+                    icon: "calendar.badge.clock",
+                    title: "Next Coupon",
+                    value: nextCouponInfo
+                )
+                .frame(maxWidth: .infinity)
+
+                // --- Potential Bond YTM Section ---
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Estimate Bond YTM")
+                        .font(.headline)
+                    HStack(spacing: 12) {
+                        TextField("Price", text: $potentialPrice)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        TextField("Coupon Rate (%)", text: $potentialCouponRate)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                    }
+                    DatePicker("Maturity Date", selection: $potentialMaturityDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                    Button("Calculate YTM") {
+                        calculateYTM()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    if let ytm = calculatedYTM {
+                        Text("Yield to Maturity: \(String(format: "%.2f", ytm))%")
+                            .font(.subheadline).bold()
                     }
                 }
-                .pickerStyle(MenuPickerStyle())
-                .frame(maxWidth: 150)
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(.ultraThinMaterial)
+                        .shadow(color: Color.primary.opacity(0.1), radius: 4, x: 0, y: 2)
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.bottom)
             }
-            .padding(.bottom, 8)
-            
-            // Metrics Grid
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                MetricView(icon: "doc.plaintext", title: "Bonds", value: "\(numberOfBonds)")
-                MetricView(icon: "dollarsign.circle", title: "Acquisition", value: formatCurrency(totalAcquisitionCost))
-                MetricView(icon: "banknote", title: "Principal", value: formatCurrency(totalPrincipal))
-                MetricView(icon: "clock.arrow.circlepath", title: "Maturity (yrs)", value: String(format: "%.1f", averageMaturityYears))
-            }
-            
-            // Next Maturity Tile
-            MetricView(
-                icon: "flag.checkered",
-                title: "Next Maturity",
-                value: nextMaturingBond.map {
-                    "\($0.name)\nDate: \(formatDate($0.maturityDate))\nNominal: \(formatCurrency($0.parValue))"
-                } ?? "–"
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: Color.primary.opacity(0.1), radius: 4, x: 0, y: 2)
             )
-            .frame(maxWidth: .infinity)
-            
-            // Next Coupon Tile
-            MetricView(
-                icon: "calendar.badge.clock",
-                title: "Next Coupon",
-                value: nextCouponInfo
-            )
-            .frame(maxWidth: .infinity)
+            .padding([.horizontal, .top])
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.ultraThinMaterial)
-                .shadow(color: Color.primary.opacity(0.1), radius: 4, x: 0, y: 2)
-        )
-        .padding([.horizontal, .top])
     }
 }
 
@@ -160,7 +214,7 @@ struct MetricView: View {
     let icon: String
     let title: String
     let value: String
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon)
@@ -183,3 +237,4 @@ struct MetricView: View {
         .cornerRadius(8)
     }
 }
+
