@@ -6,15 +6,6 @@
 
 import SwiftUI
 
-// Define a shared gradient (assumes assets or system colors exist)
-extension LinearGradient {
-    static let tileBackground = LinearGradient(
-        gradient: Gradient(colors: [Color("GradientStart"), Color("GradientEnd")]),
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-}
-
 struct PortfolioSummaryView: View {
     @ObservedObject var viewModel: BondPortfolioViewModel
     @State private var selectedDepotBank: String = "All"
@@ -28,6 +19,7 @@ struct PortfolioSummaryView: View {
         selectedDepotBank == "All" ? viewModel.bonds : viewModel.bonds.filter { $0.depotBank == selectedDepotBank }
     }
     
+    // Summary metrics
     private var numberOfBonds: Int { filteredBonds.count }
     private var totalAcquisitionCost: Double { filteredBonds.reduce(0) { $0 + $1.initialPrice } }
     private var totalPrincipal: Double { filteredBonds.reduce(0) { $0 + $1.parValue } }
@@ -40,16 +32,45 @@ struct PortfolioSummaryView: View {
         return totalYears / Double(filteredBonds.count)
     }
     
+    // Compute next coupon date for a given bond (anniversary of maturity date)
+    private func nextCoupon(for bond: Bond) -> Date? {
+        let calendar = Calendar.current
+        let maturity = bond.maturityDate
+        // Extract month and day from maturityDate
+        let month = calendar.component(.month, from: maturity)
+        let day = calendar.component(.day, from: maturity)
+        // Construct this year's coupon date
+        var components = calendar.dateComponents([.year], from: Date())
+        components.month = month
+        components.day = day
+        guard let thisYearDate = calendar.date(from: components) else { return nil }
+        // If that date has passed, schedule next year
+        if thisYearDate < Date() {
+            components.year! += 1
+        }
+        return calendar.date(from: components)
+    }
+    
+    // Next maturing bond
     private var nextMaturingBond: Bond? {
         filteredBonds.min { $0.maturityDate < $1.maturityDate }
     }
     
+    // Next coupon across all bonds
+    private var nextCouponDate: Date? {
+        filteredBonds.compactMap { nextCoupon(for: $0) }.min()
+    }
+    private var nextCouponBonds: [Bond] {
+        guard let date = nextCouponDate else { return [] }
+        return filteredBonds.filter { nextCoupon(for: $0) == date }
+    }
+    
+    // Formatters
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         return formatter.string(from: date)
     }
-    
     private func formatCurrency(_ value: Double) -> String {
         let f = NumberFormatter()
         f.numberStyle = .currency
@@ -57,49 +78,58 @@ struct PortfolioSummaryView: View {
         return f.string(from: NSNumber(value: value)) ?? "–"
     }
     
-    private var nextNominal: String {
-        guard let bond = nextMaturingBond else { return "–" }
-        return formatCurrency(bond.parValue)
+    // Coupon total for next payment (couponRate is percent)
+    private var nextCouponTotal: String {
+        let totalAmount = nextCouponBonds.reduce(0) { sum, bond in
+            // couponRate is in percent, so divide by 100
+            sum + (bond.parValue * (bond.couponRate / 100))
+        }
+        return formatCurrency(totalAmount)
     }
-    
-    private var nextInterestExpected: String {
-        guard let bond = nextMaturingBond else { return "–" }
-        let years = bond.maturityDate.timeIntervalSince(Date()) / (365 * 24 * 3600)
-        let interest = bond.parValue * bond.couponRate * years
-        return formatCurrency(interest)
+    private var nextCouponInfo: String {
+        guard let date = nextCouponDate else { return "–" }
+        return "Date: \(formatDate(date))\nTotal: \(nextCouponTotal)"
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Header
+            // Header with bank filter
             HStack {
                 Text("Portfolio Summary")
                     .font(.title2)
                     .bold()
                 Spacer()
                 Picker("Depot Bank", selection: $selectedDepotBank) {
-                    ForEach(depotBanks, id: \.self) { bank in
-                        Text(bank).tag(bank)
-                    }
+                    ForEach(depotBanks, id: \.self) { bank in Text(bank).tag(bank) }
                 }
                 .pickerStyle(MenuPickerStyle())
                 .frame(maxWidth: 150)
             }
             .padding(.bottom, 8)
             
-            // Four key metrics in grid
+            // Core metrics grid
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 MetricView(icon: "doc.plaintext", title: "Bonds", value: "\(numberOfBonds)")
-                MetricView(icon: "eurosign.circle", title: "Acquisition", value: formatCurrency(totalAcquisitionCost))
+                MetricView(icon: "dollarsign.circle", title: "Acquisition", value: formatCurrency(totalAcquisitionCost))
                 MetricView(icon: "banknote", title: "Principal", value: formatCurrency(totalPrincipal))
                 MetricView(icon: "clock.arrow.circlepath", title: "Maturity (yrs)", value: String(format: "%.1f", averageMaturityYears))
             }
             
-            // Next maturity as full-width card
+            // Next maturity (full width)
             MetricView(
                 icon: "flag.checkered",
                 title: "Next Maturity",
-                value: "\(nextMaturingBond?.name ?? "–")\nDate: \(nextMaturingBond.map { formatDate($0.maturityDate) } ?? "–")\nNominal: \(nextNominal)\nInterest: \(nextInterestExpected)"
+                value: nextMaturingBond.map { bond in
+                    "\(bond.name)\nDate: \(formatDate(bond.maturityDate))\nNominal: \(formatCurrency(bond.parValue))"
+                } ?? "–"
+            )
+            .frame(maxWidth: .infinity)
+            
+            // Next coupon (full width)
+            MetricView(
+                icon: "calendar.badge.clock",
+                title: "Next Coupon",
+                value: nextCouponInfo
             )
             .frame(maxWidth: .infinity)
         }
@@ -113,11 +143,12 @@ struct PortfolioSummaryView: View {
     }
 }
 
+// Reusable metric card
 struct MetricView: View {
     let icon: String
     let title: String
     let value: String
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon)
@@ -138,7 +169,7 @@ struct MetricView: View {
         }
         .padding(12)
         .background(
-            LinearGradient.tileBackground
+            AppTheme.tileBackground
         )
         .cornerRadius(8)
     }

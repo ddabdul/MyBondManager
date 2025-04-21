@@ -16,34 +16,36 @@ struct MainTabView: View {
             // ──────────────────────────────────
             // Portfolio Tab
             // ──────────────────────────────────
-            NavigationView {
+            NavigationSplitView {
+                // Sidebar: ~1/3 width for the summary
                 PortfolioSummaryView(viewModel: viewModel)
+                    .navigationSplitViewColumnWidth(min: 250, ideal: 350, max: 400)
+            } detail: {
+                // Detail: ~2/3 width for the table
                 BondTableView(viewModel: viewModel)
-            }
-            .toolbar {
-                // 1) Add‑bond button
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingAddBondView = true
-                    } label: {
-                        Image(systemName: "plus")
+                    .toolbar {
+                        // 1) Add‑bond button
+                        ToolbarItem(placement: .primaryAction) {
+                            Button {
+                                showingAddBondView = true
+                            } label: {
+                                Image(systemName: "plus")
+                            }
+                        }
+                        // 2) Matured‑bonds button
+                        ToolbarItem(placement: .primaryAction) {
+                            Button {
+                                showingMaturedSheet = true
+                            } label: {
+                                Label("Matured", systemImage: "clock.arrow.circlepath")
+                            }
+                        }
                     }
-                }
-
-                // 2) Matured‑bonds button
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingMaturedSheet = true
-                    } label: {
-                        Label("Matured", systemImage: "clock.arrow.circlepath")
-                    }
-                }
             }
-            // Present AddBondView when you tap the “+”
+            // Present modals for adding and matured bonds
             .sheet(isPresented: $showingAddBondView) {
                 AddBondView(viewModel: viewModel)
             }
-            // Present MaturedBondsView when you tap the clock
             .sheet(isPresented: $showingMaturedSheet) {
                 MaturedBondsView()
                     .frame(minWidth: 700, minHeight: 400)
@@ -55,8 +57,11 @@ struct MainTabView: View {
             // ──────────────────────────────────
             // Cash‑Flow Tab
             // ──────────────────────────────────
-            NavigationView {
+            NavigationSplitView {
+                // Same 1:3 split for cash‑flow scenario
                 PortfolioSummaryView(viewModel: viewModel)
+                    .navigationSplitViewColumnWidth(min: 250, ideal: 350, max: 400)
+            } detail: {
                 CashFlowMonthlyView(viewModel: viewModel)
             }
             .tabItem {
