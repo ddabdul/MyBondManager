@@ -1,10 +1,3 @@
-//
-//  BondPortfolioManagerApp.swift
-//  MyBondManager
-//
-//  Created by Olivier on 19/04/2025.
-//
-
 
 //  MyBondManagerApp.swift
 //  MyBondManager

@@ -3,15 +3,16 @@
     <entity name="BondEntity" representedClassName="BondEntity" syncable="YES">
         <attribute name="acquisitionDate" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="couponRate" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
-        <attribute name="depotBank" optional="YES" attributeType="String"/>
+        <attribute name="depotBank" attributeType="String"/>
         <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="initialPrice" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="isin" attributeType="String"/>
         <attribute name="issuer" attributeType="String"/>
+        <attribute name="maturityDate" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="name" attributeType="String"/>
         <attribute name="parValue" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="wkn" attributeType="String"/>
-        <attribute name="yieldToMaturity" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="yieldToMaturity" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
     </entity>
     <entity name="Item" representedClassName="Item" syncable="YES" codeGenerationType="class">
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
