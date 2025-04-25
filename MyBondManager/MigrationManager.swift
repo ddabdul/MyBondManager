@@ -1,60 +1,66 @@
-//
-//  MigrationManager.swift
-//  MyBondManager
-//
-//  Created by Olivier on 25/04/2025.
-//
-
-
 import Foundation
 import CoreData
 
-/// Manages one-time migration of existing JSON bond data into Core Data:
-/// 1. Verifies Core Data store is empty to avoid duplicate imports.
-/// 2. Loads and decodes `bonds.json` into `[Bond]`.
-/// 3. Creates `BondEntity` for each bond, computing and storing YTM via `update(from:)`.
-/// 4. Saves context and logs how many bonds were migrated. Does NOT delete the JSON file, keeping it for backup.
 struct MigrationManager {
-    /// Call this on first launch after shipping Core Data
-    /// - Returns: number of bonds migrated; 0 if already migrated or on failure
+    /// Returns the number of bonds imported
     @discardableResult
     static func migrateJSONIfNeeded() -> Int {
         let ctx = PersistenceController.shared.container.viewContext
 
-        // 1. Skip if already migrated
+        // 1) Skip if Core Data already has bonds
         let countRequest: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
-        let storedCount = (try? ctx.count(for: countRequest)) ?? 0
-        guard storedCount == 0 else {
-            print("No migration needed: \(storedCount) bonds already in Core Data.")
+        if let storedCount = try? ctx.count(for: countRequest), storedCount > 0 {
+            print("📦 Core Data already has \(storedCount) bonds – skipping migration.")
             return 0
         }
 
-        // 2. Load JSON
-        let fileURL = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+        // 2) Locate bonds.json in Documents
+        let documentsDir = FileManager.default
+            .urls(for: .documentDirectory, in: .userDomainMask)
             .first!
-            .appendingPathComponent("bonds.json")
+        let fileURL = documentsDir.appendingPathComponent("bonds.json")
 
-        guard let data = try? Data(contentsOf: fileURL),
-              let bonds = try? JSONDecoder().decode([Bond].self, from: data) else {
-            print("Failed to load or decode bonds.json")
+        // Diagnostic logging
+        print("🔍 Looking for bonds.json at: \(fileURL.path)")
+        let exists = FileManager.default.fileExists(atPath: fileURL.path)
+        print("📁 File exists in Documents? \(exists)")
+
+        // 3) Load the data
+        let data: Data
+        do {
+            if exists {
+                data = try Data(contentsOf: fileURL)
+            } else if let bundleURL = Bundle.main.url(forResource: "bonds", withExtension: "json") {
+                print("🛠️ Falling back to bundled bonds.json at: \(bundleURL.path)")
+                data = try Data(contentsOf: bundleURL)
+            } else {
+                print("❌ No JSON file found in Documents or bundle.")
+                return 0
+            }
+        } catch {
+            print("❌ Failed to load bonds.json data: \(error)")
             return 0
         }
 
-        // 3. Import into Core Data (YTM computed in update)
+        // 4) Decode into [Bond]
+        let bonds: [Bond]
+        do {
+            bonds = try JSONDecoder().decode([Bond].self, from: data)
+        } catch {
+            print("❌ Failed to decode bonds.json: \(error)")
+            return 0
+        }
+
+        // 5) Import into Core Data
         for bond in bonds {
             let entity = BondEntity(context: ctx)
             entity.update(from: bond)
         }
-        do {
-            try ctx.save()
-            print("Successfully migrated \(bonds.count) bonds into Core Data.")
-        } catch {
-            print("Migration save error: \(error)")
-            return 0
-        }
+        PersistenceController.shared.saveContext()
+        print("✅ Imported \(bonds.count) bonds into Core Data.")
 
-        // 4. Summary: JSON file retained as backup
+        // 6) Leave the JSON file in place as a backup
         return bonds.count
     }
 }
+

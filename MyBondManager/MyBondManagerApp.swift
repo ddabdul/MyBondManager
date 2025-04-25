@@ -13,6 +13,13 @@ struct BondPortfolioManagerApp: App {
     @State private var showMaturedAlert: Bool = false
 
     init() {
+        // 0) Perform the one-time JSON → Core Data migration
+                let migratedCount = MigrationManager.migrateJSONIfNeeded()
+                if migratedCount > 0 {
+                    print("🌱 Migration complete: \(migratedCount) bonds imported into Core Data.")
+                }
+        
+        
         // 1) Perform the one‑time migration & capture only the bonds that *just* matured
         let justMatured = BondPersistence.shared.migrateAndReturnNewlyMatured()
         if !justMatured.isEmpty {
