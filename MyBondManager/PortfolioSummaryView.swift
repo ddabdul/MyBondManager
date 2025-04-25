@@ -1,38 +1,53 @@
-//  PortfolioSummaryView.swift
-//  MyBondManager
-//
-//  Created by Olivier on 13/04/2025.
-//
+// PortfolioSummary
+// Using CoreData
+
 
 import SwiftUI
+import CoreData
 
 struct PortfolioSummaryView: View {
-    @ObservedObject var viewModel: BondPortfolioViewModel
-    @State private var selectedDepotBank: String = "All"
+    // MARK: – Core Data Fetch
+    @Environment(\.managedObjectContext) private var moc
+    @FetchRequest(
+        // adjust sort descriptors to your preference
+        sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.acquisitionDate, ascending: false)],
+        animation: .default
+    )
+    private var bondEntities: FetchedResults<BondEntity>
 
-    // --- State for Potential Bond YTM Calculation ---
+    // MARK: – UI State
+    @State private var selectedDepotBank: String = "All"
     @State private var potentialPrice: String = ""
     @State private var potentialCouponRate: String = ""
     @State private var potentialMaturityDate: Date = Date()
     @State private var calculatedYTM: Double? = nil
 
-    // Unique depot banks with "All"
+    // MARK: – Helpers
+
+    /// Unique depot banks in your store, prefixed with “All”
     private var depotBanks: [String] {
-        let banks = Set(viewModel.bonds.map { $0.depotBank })
+        let banks = Set(bondEntities.map { $0.depotBank })
         return ["All"] + banks.sorted()
     }
 
-    // Filtered bonds
-    private var filteredBonds: [Bond] {
-        selectedDepotBank == "All"
-            ? viewModel.bonds
-            : viewModel.bonds.filter { $0.depotBank == selectedDepotBank }
+    /// Apply the “All” filter
+    private var filteredBonds: [BondEntity] {
+        guard selectedDepotBank != "All" else { return Array(bondEntities) }
+        return bondEntities.filter { $0.depotBank == selectedDepotBank }
     }
 
-    // MARK: - Summary Metrics
+    // MARK: – Summary Metrics
+
     private var numberOfBonds: Int { filteredBonds.count }
-    private var totalAcquisitionCost: Double { filteredBonds.reduce(0) { $0 + $1.initialPrice } }
-    private var totalPrincipal: Double { filteredBonds.reduce(0) { $0 + $1.parValue } }
+
+    private var totalAcquisitionCost: Double {
+        filteredBonds.reduce(0) { $0 + $1.initialPrice }
+    }
+
+    private var totalPrincipal: Double {
+        filteredBonds.reduce(0) { $0 + $1.parValue }
+    }
+
     private var averageMaturityYears: Double {
         guard !filteredBonds.isEmpty else { return 0 }
         let totalYears = filteredBonds.reduce(0) { sum, bond in
@@ -42,41 +57,45 @@ struct PortfolioSummaryView: View {
         return totalYears / Double(filteredBonds.count)
     }
 
-    // MARK: - Next Maturity
-    private var nextMaturingBond: Bond? {
+    // MARK: – Next Maturity
+
+    private var nextMaturingBond: BondEntity? {
         filteredBonds.min { $0.maturityDate < $1.maturityDate }
     }
 
-    // MARK: - Next Coupon Calculation
-    private func nextCouponDate(for bond: Bond) -> Date? {
+    // MARK: – Next Coupon Date
+
+    private func nextCouponDate(for bond: BondEntity) -> Date? {
         let calendar = Calendar.current
         let md = bond.maturityDate
-        let components = calendar.dateComponents([.month, .day], from: md)
-        var nextYearComponents = calendar.dateComponents([.year], from: Date())
-        nextYearComponents.month = components.month
-        nextYearComponents.day = components.day
-        guard let thisYearDate = calendar.date(from: nextYearComponents) else { return nil }
-        if thisYearDate < Date() {
-            nextYearComponents.year! += 1
+        let mdComponents = calendar.dateComponents([.month, .day], from: md)
+        var next = calendar.dateComponents([.year], from: Date())
+        next.month = mdComponents.month
+        next.day   = mdComponents.day
+
+        guard let thisYear = calendar.date(from: next) else { return nil }
+        if thisYear < Date() {
+            next.year! += 1
         }
-        return calendar.date(from: nextYearComponents)
+        return calendar.date(from: next)
     }
 
     private var nextCouponDateOverall: Date? {
-        filteredBonds.compactMap { nextCouponDate(for: $0) }.min()
+        filteredBonds
+            .compactMap(nextCouponDate(for:))
+            .min()
     }
 
-    private var bondsWithNextCoupon: [Bond] {
+    private var bondsWithNextCoupon: [BondEntity] {
         guard let date = nextCouponDateOverall else { return [] }
         return filteredBonds.filter { nextCouponDate(for: $0) == date }
     }
 
-    // MARK: - Next Coupon Summary
     private var nextCouponPayer: String {
         switch bondsWithNextCoupon.count {
-        case 0: return "–"
-        case 1: return bondsWithNextCoupon.first!.name
-        default: return "Multiple"
+        case 0:    return "–"
+        case 1:    return bondsWithNextCoupon.first!.name
+        default:   return "Multiple"
         }
     }
 
@@ -90,19 +109,14 @@ struct PortfolioSummaryView: View {
     private var nextCouponInfo: String {
         guard let date = nextCouponDateOverall else { return "–" }
         return """
-Payer: \(nextCouponPayer)
-Date: \(Formatters.mediumDate.string(from: date))
-Total: \(nextCouponTotal)
-"""
+        Payer: \(nextCouponPayer)
+        Date:  \(Formatters.mediumDate.string(from: date))
+        Total: \(nextCouponTotal)
+        """
     }
 
-    // MARK: - Approximate YTM Calculation
-    /// Estimated Yield‑to‑Maturity at time of acquisition:
-    /// YTM = (C + (F – P) / n) ÷ ((F + P) / 2)
-    /// • C = coupon payment per year
-    /// • F = par value (100)
-    /// • P = price paid
-    /// • n = years to maturity (fractional)
+    // MARK: – YTM Estimate
+
     private func calculateYTM() {
         let parValue = 100.0
         guard let price = Double(potentialPrice),
@@ -117,17 +131,17 @@ Total: \(nextCouponTotal)
             calculatedYTM = nil
             return
         }
-        let numerator = coupon + (parValue - price) / years
+        let numerator   = coupon + (parValue - price) / years
         let denominator = (parValue + price) / 2
-        let ytm = (numerator / denominator) * 100.0
-        calculatedYTM = ytm
+        calculatedYTM = (numerator / denominator) * 100.0
     }
 
-    // MARK: - Body
+    // MARK: – View Body
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Header with filter
+                // Header + Filter
                 HStack {
                     Text("Portfolio Summary")
                         .font(.title2).bold()
@@ -144,15 +158,15 @@ Total: \(nextCouponTotal)
 
                 // Metrics Grid
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    MetricView(icon: "doc.plaintext", title: "Bonds", value: "\(numberOfBonds)")
-                    MetricView(icon: "dollarsign.circle", title: "Acquisition", value: Formatters.currency.string(from: NSNumber(value: totalAcquisitionCost)) ?? "–")
-                    MetricView(icon: "banknote", title: "Principal", value: Formatters.currency.string(from: NSNumber(value: totalPrincipal)) ?? "–")
+                    MetricView(icon: "doc.plaintext",     title: "Bonds",        value: "\(numberOfBonds)")
+                    MetricView(icon: "dollarsign.circle", title: "Acquisition",  value: Formatters.currency.string(from: NSNumber(value: totalAcquisitionCost)) ?? "–")
+                    MetricView(icon: "banknote",          title: "Principal",    value: Formatters.currency.string(from: NSNumber(value: totalPrincipal)) ?? "–")
                     MetricView(icon: "clock.arrow.circlepath", title: "Maturity (yrs)", value: String(format: "%.1f", averageMaturityYears))
                 }
 
                 // Next Maturity Tile
                 MetricView(
-                    icon: "flag.checkered",
+                    icon:  "flag.checkered",
                     title: "Next Maturity",
                     value: nextMaturingBond.map {
                         "\($0.name)\nDate: \(Formatters.mediumDate.string(from: $0.maturityDate))\nNominal: \(Formatters.currency.string(from: NSNumber(value: $0.parValue)) ?? "–")"
@@ -162,28 +176,29 @@ Total: \(nextCouponTotal)
 
                 // Next Coupon Tile
                 MetricView(
-                    icon: "calendar.badge.clock",
+                    icon:  "calendar.badge.clock",
                     title: "Next Coupon",
                     value: nextCouponInfo
                 )
                 .frame(maxWidth: .infinity)
 
-                // --- Potential Bond YTM Section ---
+                // YTM Estimate Section
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Estimate Bond YTM")
                         .font(.headline)
+
                     HStack(spacing: 12) {
                         TextField("Price", text: $potentialPrice)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                         TextField("Coupon Rate (%)", text: $potentialCouponRate)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                     }
+
                     DatePicker("Maturity Date", selection: $potentialMaturityDate, displayedComponents: .date)
                         .datePickerStyle(.compact)
-                    Button("Calculate YTM") {
-                        calculateYTM()
-                    }
-                    .buttonStyle(.borderedProminent)
+
+                    Button("Calculate YTM", action: calculateYTM)
+                        .buttonStyle(.borderedProminent)
 
                     if let ytm = calculatedYTM {
                         Text("Yield to Maturity: \(String(format: "%.2f", ytm))%")
@@ -237,4 +252,3 @@ struct MetricView: View {
         .cornerRadius(8)
     }
 }
-

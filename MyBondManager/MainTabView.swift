@@ -18,13 +18,13 @@ struct MainTabView: View {
             // ──────────────────────────────────
             NavigationSplitView {
                 // Sidebar: ~1/3 width for the summary
-                PortfolioSummaryView(viewModel: viewModel)
+                PortfolioSummaryView()
                     .navigationSplitViewColumnWidth(min: 250, ideal: 350, max: 400)
             } detail: {
                 // Detail: ~2/3 width for the table
                 BondTableView(viewModel: viewModel)
                     .toolbar {
-                        // 1) Add‑bond button
+                        // 1) Add-bond button
                         ToolbarItem(placement: .primaryAction) {
                             Button {
                                 showingAddBondView = true
@@ -32,7 +32,7 @@ struct MainTabView: View {
                                 Image(systemName: "plus")
                             }
                         }
-                        // 2) Matured‑bonds button
+                        // 2) Matured-bonds button
                         ToolbarItem(placement: .primaryAction) {
                             Button {
                                 showingMaturedSheet = true
@@ -55,11 +55,11 @@ struct MainTabView: View {
             }
 
             // ──────────────────────────────────
-            // Cash‑Flow Tab
+            // Cash-Flow Tab
             // ──────────────────────────────────
             NavigationSplitView {
-                // Same 1:3 split for cash‑flow scenario
-                PortfolioSummaryView(viewModel: viewModel)
+                // Sidebar: ~1/3 width for the summary
+                PortfolioSummaryView()
                     .navigationSplitViewColumnWidth(min: 250, ideal: 350, max: 400)
             } detail: {
                 CashFlowView(viewModel: viewModel)
@@ -68,11 +68,20 @@ struct MainTabView: View {
                 Label("Cash Flow", systemImage: "dollarsign.circle")
             }
         }
+        // Inject the real viewContext for every child view
+        .environment(
+            \.managedObjectContext,
+            PersistenceController.shared.container.viewContext
+        )
     }
 }
 
 struct MainTabView_Previews: PreviewProvider {
     static var previews: some View {
         MainTabView()
+            .environment(
+                \.managedObjectContext,
+                PersistenceController.shared.container.viewContext
+            )
     }
 }
