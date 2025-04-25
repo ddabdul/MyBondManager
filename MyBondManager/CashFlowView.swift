@@ -42,7 +42,7 @@ struct CashFlowView: View {
             let couponAmt = bond.parValue * bond.couponRate / 100
             let maturity = bond.maturityDate
             let comps = calendar.dateComponents([.month, .day], from: maturity)
-            var year = calendar.component(.year, from: now)
+            let year = calendar.component(.year, from: now)
             var result: [CouponEvent] = []
             var next = DateComponents(year: year, month: comps.month, day: comps.day)
             if let d = calendar.date(from: next), d < now {
