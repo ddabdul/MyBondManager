@@ -39,7 +39,7 @@ struct BondPortfolioView: View {
         }
         // Present the add‐bond sheet
         .sheet(isPresented: $showingAddBondView) {
-            AddBondViewAsync(viewModel: viewModel)
+            AddBondViewAsync()
         }
         // Standard macOS toolbar “add” button
         .toolbar {

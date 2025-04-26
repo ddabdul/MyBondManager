@@ -23,28 +23,29 @@ struct MainTabView: View {
             } detail: {
                 // Detail: ~2/3 width for the table
                 BondTableView()
-                    .toolbar {
-                        // 1) Add-bond button
-                        ToolbarItem(placement: .primaryAction) {
-                            Button {
-                                showingAddBondView = true
-                            } label: {
-                                Image(systemName: "plus")
-                            }
-                        }
-                        // 2) Matured-bonds button
-                        ToolbarItem(placement: .primaryAction) {
-                            Button {
-                                showingMaturedSheet = true
-                            } label: {
-                                Label("Matured", systemImage: "clock.arrow.circlepath")
-                            }
-                        }
+            }
+            // Apply toolbar to the split view itself
+            .toolbar {
+                // 1) Add-bond button
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingAddBondView = true
+                    } label: {
+                        Image(systemName: "plus")
                     }
+                }
+                // 2) Matured-bonds button
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingMaturedSheet = true
+                    } label: {
+                        Label("Matured", systemImage: "clock.arrow.circlepath")
+                    }
+                }
             }
             // Present modals for adding and matured bonds
             .sheet(isPresented: $showingAddBondView) {
-                AddBondViewAsync(viewModel: viewModel)
+                AddBondViewAsync()
             }
             .sheet(isPresented: $showingMaturedSheet) {
                 MaturedBondsView()
@@ -58,7 +59,6 @@ struct MainTabView: View {
             // Cash-Flow Tab
             // ──────────────────────────────────
             NavigationSplitView {
-                // Sidebar: ~1/3 width for the summary
                 PortfolioSummaryView()
                     .navigationSplitViewColumnWidth(min: 250, ideal: 350, max: 400)
             } detail: {
