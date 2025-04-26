@@ -17,33 +17,25 @@ struct MainTabView: View {
             // Portfolio Tab
             // ──────────────────────────────────
             NavigationSplitView {
-                // Sidebar: ~1/3 width for the summary
                 PortfolioSummaryView()
                     .navigationSplitViewColumnWidth(min: 250, ideal: 350, max: 400)
             } detail: {
-                // Detail: ~2/3 width for the table
                 BondTableView()
             }
-            // Apply toolbar to the split view itself
-            .toolbar {
+            .toolbar(content: {
                 // 1) Add-bond button
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingAddBondView = true
-                    } label: {
+                    Button(action: { showingAddBondView = true }) {
                         Image(systemName: "plus")
                     }
                 }
                 // 2) Matured-bonds button
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingMaturedSheet = true
-                    } label: {
+                    Button(action: { showingMaturedSheet = true }) {
                         Label("Matured", systemImage: "clock.arrow.circlepath")
                     }
                 }
-            }
-            // Present modals for adding and matured bonds
+            })
             .sheet(isPresented: $showingAddBondView) {
                 AddBondViewAsync()
             }
@@ -62,7 +54,7 @@ struct MainTabView: View {
                 PortfolioSummaryView()
                     .navigationSplitViewColumnWidth(min: 250, ideal: 350, max: 400)
             } detail: {
-                CashFlowView(viewModel: viewModel)
+                CashFlowView()
             }
             .tabItem {
                 Label("Cash Flow", systemImage: "dollarsign.circle")
