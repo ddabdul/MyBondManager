@@ -22,7 +22,7 @@ struct MainTabView: View {
                     .navigationSplitViewColumnWidth(min: 250, ideal: 350, max: 400)
             } detail: {
                 // Detail: ~2/3 width for the table
-                BondTableView(viewModel: viewModel)
+                BondTableView()
                     .toolbar {
                         // 1) Add-bond button
                         ToolbarItem(placement: .primaryAction) {

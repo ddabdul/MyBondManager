@@ -1,15 +1,16 @@
 //  BondTableView.swift
 //  MyBondManager
 //
-//  Created by Olivier on 19/04/2025.
+//  Created by Olivier on 19/04/2025. CoreData
 //
+
 import SwiftUI
+import CoreData
 
 // —————————————————————————————
-// MARK: – Bond + Formatters
+// MARK: – BondEntity + Formatters
 // —————————————————————————————
-extension Bond {
-    /// Re‑use global currency formatter
+extension BondEntity {
     var acquisitionPriceFormatted: String {
         Formatters.currency.string(from: NSNumber(value: initialPrice)) ?? "–"
     }
@@ -23,7 +24,7 @@ extension Bond {
     }
 
     var ytmFormatted: String {
-        String(format: "%.2f%%", yieldAtAcquisition * 100)
+        String(format: "%.2f%%", yieldToMaturity * 100)
     }
 }
 
@@ -31,25 +32,21 @@ extension Bond {
 // MARK: – BondSummary Model
 // —————————————————————————————
 struct BondSummary: Identifiable {
-    let id: String          // the ISIN
+    let id: String          // ISIN
     let name: String
     let issuer: String
     let couponRate: Double
     let maturityDate: Date
-    let records: [Bond]
+    let records: [BondEntity]
 
-    /// Number of underlying records
     var recordCount: Int { records.count }
 
-    /// Sum of all parValues
     var totalNominal: Double { records.reduce(0) { $0 + $1.parValue } }
 
-    /// Formatted total nominal using global formatter
     var formattedTotalParValue: String {
         Formatters.currency.string(from: NSNumber(value: totalNominal)) ?? "–"
     }
 
-    /// Coupon rate formatted
     var couponFormatted: String {
         String(format: "%.2f%%", couponRate)
     }
@@ -59,7 +56,11 @@ struct BondSummary: Identifiable {
 // MARK: – BondTableView
 // —————————————————————————————
 struct BondTableView: View {
-    @ObservedObject var viewModel: BondPortfolioViewModel
+    @Environment(\.managedObjectContext) private var moc
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.maturityDate, ascending: true)],
+        animation: .default
+    ) private var bondEntities: FetchedResults<BondEntity>
 
     @State private var sortOrder: [KeyPathComparator<BondSummary>] = [
         .init(\.maturityDate, order: .forward)
@@ -68,16 +69,16 @@ struct BondTableView: View {
 
     /// Group by ISIN
     private var summaries: [BondSummary] {
-        Dictionary(grouping: viewModel.bonds, by: \.isin)
-            .map { isin, bonds in
-                let first = bonds[0]
+        Dictionary(grouping: bondEntities, by: \.isin)
+            .map { isin, entities in
+                let first = entities[0]
                 return BondSummary(
                     id: isin,
                     name: first.name,
                     issuer: first.issuer,
                     couponRate: first.couponRate,
                     maturityDate: first.maturityDate,
-                    records: bonds
+                    records: entities
                 )
             }
     }
@@ -249,6 +250,7 @@ struct BondSummaryDetailView: View {
 // —————————————————————————————
 struct BondTableView_Previews: PreviewProvider {
     static var previews: some View {
-        BondTableView(viewModel: BondPortfolioViewModel())
+        BondTableView()
+            .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
     }
 }
