@@ -1,6 +1,9 @@
-// PortfolioSummary
-// Using CoreData
-
+//
+//  PortfolioSummaryView.swift
+//  MyBondManager
+//
+//  Created by Olivier on 26/04/2025.
+//
 
 import SwiftUI
 import CoreData
@@ -8,9 +11,22 @@ import CoreData
 struct PortfolioSummaryView: View {
     // MARK: – Core Data Fetch
     @Environment(\.managedObjectContext) private var moc
+
+    /// Midnight of the current day, so bonds maturing *today* are still included
+    private static var startOfToday: Date {
+        Calendar.current.startOfDay(for: Date())
+    }
+
     @FetchRequest(
         // adjust sort descriptors to your preference
-        sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.acquisitionDate, ascending: false)],
+        sortDescriptors: [
+            NSSortDescriptor(keyPath: \BondEntity.acquisitionDate, ascending: false)
+        ],
+        // only fetch bonds whose maturity date is today or in the future
+        predicate: NSPredicate(
+            format: "maturityDate >= %@",
+            Self.startOfToday as NSDate
+        ),
         animation: .default
     )
     private var bondEntities: FetchedResults<BondEntity>

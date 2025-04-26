@@ -1,7 +1,8 @@
+//
 //  BondTableView.swift
 //  MyBondManager
 //
-//  Created by Olivier on 19/04/2025. CoreData
+//  Created by Olivier on 19/04/2025.
 //
 
 import SwiftUI
@@ -41,7 +42,9 @@ struct BondSummary: Identifiable {
 
     var recordCount: Int { records.count }
 
-    var totalNominal: Double { records.reduce(0) { $0 + $1.parValue } }
+    var totalNominal: Double {
+        records.reduce(0) { $0 + $1.parValue }
+    }
 
     var formattedTotalParValue: String {
         Formatters.currency.string(from: NSNumber(value: totalNominal)) ?? "–"
@@ -57,17 +60,30 @@ struct BondSummary: Identifiable {
 // —————————————————————————————
 struct BondTableView: View {
     @Environment(\.managedObjectContext) private var moc
+
+    /// Midnight of the current day, so bonds maturing *today* are included
+    static private var startOfToday: Date {
+        Calendar.current.startOfDay(for: Date())
+    }
+
     @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.maturityDate, ascending: true)],
+        sortDescriptors: [
+            NSSortDescriptor(keyPath: \BondEntity.maturityDate, ascending: true)
+        ],
+        predicate: NSPredicate(
+            format: "maturityDate >= %@",
+            Self.startOfToday as NSDate
+        ),
         animation: .default
-    ) private var bondEntities: FetchedResults<BondEntity>
+    )
+    private var bondEntities: FetchedResults<BondEntity>
 
     @State private var sortOrder: [KeyPathComparator<BondSummary>] = [
         .init(\.maturityDate, order: .forward)
     ]
     @State private var selectedSummaryID: String?
 
-    /// Group by ISIN
+    /// Group by ISIN, using only unexpired bonds
     private var summaries: [BondSummary] {
         Dictionary(grouping: bondEntities, by: \.isin)
             .map { isin, entities in
@@ -83,7 +99,7 @@ struct BondTableView: View {
             }
     }
 
-    /// Apply sort
+    /// Apply sort descriptors
     private var sortedSummaries: [BondSummary] {
         summaries.sorted(using: sortOrder)
     }
@@ -123,7 +139,6 @@ struct BondTableView: View {
               selection: $selectedSummaryID,
               sortOrder: $sortOrder
         ) {
-
             // 1) Issuer
             TableColumn("Issuer", value: \.issuer) { s in
                 Text(s.issuer)
@@ -131,7 +146,7 @@ struct BondTableView: View {
             }
             .width(min: 120, ideal: 160, max: 240)
 
-            // 2) Nominal with “+” on the left
+            // 2) Nominal
             TableColumn("Nominal", value: \.totalNominal) { s in
                 HStack(spacing: 4) {
                     if s.recordCount > 1 {
