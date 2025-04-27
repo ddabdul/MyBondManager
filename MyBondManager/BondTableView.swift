@@ -54,7 +54,6 @@ struct BondSummary: Identifiable {
 struct BondTableView: View {
     @Environment(\.managedObjectContext) private var moc
 
-    /// Midnight of the current day
     static private var startOfToday: Date {
         Calendar.current.startOfDay(for: Date())
     }
@@ -121,8 +120,8 @@ struct BondTableView: View {
 
     private var bondTable: some View {
         Table(sortedSummaries,
-              selection: $selectedSummaryID,
-              sortOrder: $sortOrder
+              selection:  $selectedSummaryID,
+              sortOrder:  $sortOrder
         ) {
             TableColumn("Issuer", value: \.issuer) { s in
                 Text(s.issuer).multilineTextAlignment(.leading)
@@ -157,16 +156,16 @@ struct BondTableView: View {
 }
 
 // —————————————————————————————
-// MARK: – Detail View for Summarized Bond
+// MARK: – Detail View for Summarized Bond (with Popover)
 // —————————————————————————————
 struct BondSummaryDetailView: View {
     let summary: BondSummary
     @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
 
-    // states for inline editing/deletion
+    /// When set, popover(item:) will show EditBondView
     @State private var editingBond: BondEntity?
-    @State private var showEditSheet = false
+
     @State private var showDeleteAlert = false
     @State private var bondToDelete: BondEntity?
 
@@ -198,38 +197,36 @@ struct BondSummaryDetailView: View {
                 }
                 Divider()
 
-                // Detailed Records with Edit/Delete
+                // Detailed Records
                 Text("Details:")
                     .font(.headline)
 
                 ForEach(summary.records, id: \.self) { bond in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Nominal: \(bond.parValueFormatted)")
-                                Text("Price: \(bond.acquisitionPriceFormatted)")
-                                Text("Date:  \(Formatters.shortDate.string(from: bond.acquisitionDate))")
-                                Text("Bank:  \(bond.depotBank)")
-                                Text("YTM:   \(bond.ytmFormatted)")
-                            }
-                            Spacer()
-                            // Edit button
-                            Button("Edit") {
-                                editingBond = bond
-                                showEditSheet = true
-                            }
-                            .buttonStyle(BorderlessButtonStyle())
-                            .keyboardShortcut("e", modifiers: .command)
-
-                            // Delete button
-                            Button(role: .destructive) {
-                                bondToDelete = bond
-                                showDeleteAlert = true
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(BorderlessButtonStyle())
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Nominal: \(bond.parValueFormatted)")
+                            Text("Price:   \(bond.acquisitionPriceFormatted)")
+                            Text("Date:    \(Formatters.shortDate.string(from: bond.acquisitionDate))")
+                            Text("Bank:    \(bond.depotBank)")
+                            Text("YTM:     \(bond.ytmFormatted)")
                         }
+                        Spacer()
+
+                        Button("Edit") {
+                            // schedule on next runloop
+                            DispatchQueue.main.async {
+                                editingBond = bond
+                            }
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+
+                        Button(role: .destructive) {
+                            bondToDelete = bond
+                            showDeleteAlert = true
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
                     }
                     .padding(.vertical, 4)
                     Divider()
@@ -241,26 +238,24 @@ struct BondSummaryDetailView: View {
         }
         .frame(minWidth: 400, minHeight: 300)
 
-        // — Edit sheet —
-        .sheet(isPresented: $showEditSheet, onDismiss: {
-            editingBond = nil
-        }) {
-            if let bond = editingBond {
-                EditBondView(bond: bond)
-                    .environment(\.managedObjectContext, moc)
-            }
+        // popover(item:) will appear anchored to the Edit button
+        .popover(item: $editingBond, arrowEdge: .top) { bond in
+            EditBondView(bond: bond)
+                .environment(\.managedObjectContext, moc)
+                .frame(minWidth: 400, minHeight: 500)
+                .onDisappear { editingBond = nil }
         }
 
-        // — Delete confirmation —
+        // Delete confirmation
         .alert("Delete this record?", isPresented: $showDeleteAlert, presenting: bondToDelete) { bond in
             Button("Delete", role: .destructive) {
                 moc.delete(bond)
                 try? moc.save()
-                dismiss()  // close detail, since summary is now stale
+                DispatchQueue.main.async { dismiss() }
             }
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel", role: .cancel) {}
         } message: { bond in
-            Text("This will permanently remove the lot acquired on \(Formatters.shortDate.string(from: bond.acquisitionDate)).")
+            Text("This will permanently remove the bond acquired on \(Formatters.shortDate.string(from: bond.acquisitionDate)).")
         }
     }
 }

@@ -1,17 +1,3 @@
-//
-//  EditBondView.swift
-//  MyBondManager
-//
-//  Created by Olivier on 27/04/2025.
-//
-
-
-//  EditBondView.swift
-//  MyBondManager
-//
-//  Created by ChatGPT on 26/04/2025.
-//
-
 import SwiftUI
 import CoreData
 
@@ -35,6 +21,7 @@ struct EditBondView: View {
     @State private var maturityDate: Date
 
     init(bond: BondEntity) {
+        print("[EditBondView] init for bond ISIN: \(bond.isin)")
         self.bond = bond
         // initialize the states from the bond object
         _name            = State(initialValue: bond.name)
@@ -73,20 +60,35 @@ struct EditBondView: View {
             HStack {
                 Spacer()
                 Button("Cancel") {
-                    dismiss()
+                    print("[EditBondView] Cancel tapped")
+                    DispatchQueue.main.async {
+                        print("[EditBondView] dismissing from Cancel")
+                        dismiss()
+                    }
                 }
                 Button("Save") {
+                    print("[EditBondView] Save tapped")
                     saveChanges()
-                    dismiss()
+                    DispatchQueue.main.async {
+                        print("[EditBondView] dismissing from Save")
+                        dismiss()
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
             }
+        }
+        .onAppear {
+            print("[EditBondView] onAppear for bond ISIN: \(bond.isin)")
+        }
+        .onDisappear {
+            print("[EditBondView] onDisappear for bond ISIN: \(bond.isin)")
         }
         .padding()
         .frame(minWidth: 400, minHeight: 500)
     }
 
     private func saveChanges() {
+        print("[EditBondView] saveChanges() begin for bond ISIN: \(bond.isin)")
         bond.name            = name
         bond.issuer          = issuer
         bond.isin            = isin
@@ -99,6 +101,11 @@ struct EditBondView: View {
         bond.acquisitionDate = acquisitionDate
         bond.maturityDate    = maturityDate
 
-        try? moc.save()
+        do {
+            try moc.save()
+            print("[EditBondView] moc.save() succeeded for bond ISIN: \(bond.isin)")
+        } catch {
+            print("[EditBondView] moc.save() failed: \(error.localizedDescription)")
+        }
     }
 }
