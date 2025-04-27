@@ -3,7 +3,7 @@
 //  MyBondManager
 //
 //  Created by Olivier on 19/04/2025.
-//  Updated on 26/04/2025.
+//  Updated on 27/04/2025.
 //
 
 import SwiftUI
@@ -16,15 +16,12 @@ extension BondEntity {
     var acquisitionPriceFormatted: String {
         Formatters.currency.string(from: NSNumber(value: initialPrice)) ?? "–"
     }
-
     var parValueFormatted: String {
         Formatters.currency.string(from: NSNumber(value: parValue)) ?? "–"
     }
-
     var couponFormatted: String {
         String(format: "%.2f%%", couponRate)
     }
-
     var ytmFormatted: String {
         String(format: "%.2f%%", yieldToMaturity * 100)
     }
@@ -57,7 +54,7 @@ struct BondSummary: Identifiable {
 struct BondTableView: View {
     @Environment(\.managedObjectContext) private var moc
 
-    /// Midnight of the current day, so bonds maturing *today* are included
+    /// Midnight of the current day
     static private var startOfToday: Date {
         Calendar.current.startOfDay(for: Date())
     }
@@ -104,9 +101,7 @@ struct BondTableView: View {
                 guard let id = selectedSummaryID else { return nil }
                 return sortedSummaries.first { $0.id == id }
             },
-            set: { new in
-                selectedSummaryID = new?.id
-            }
+            set: { new in selectedSummaryID = new?.id }
         )) { summary in
             BondSummaryDetailView(summary: summary)
                 .environment(\.managedObjectContext, moc)
@@ -126,8 +121,8 @@ struct BondTableView: View {
 
     private var bondTable: some View {
         Table(sortedSummaries,
-              selection:  $selectedSummaryID,
-              sortOrder:  $sortOrder
+              selection: $selectedSummaryID,
+              sortOrder: $sortOrder
         ) {
             TableColumn("Issuer", value: \.issuer) { s in
                 Text(s.issuer).multilineTextAlignment(.leading)
@@ -137,9 +132,7 @@ struct BondTableView: View {
             TableColumn("Nominal", value: \.totalNominal) { s in
                 HStack(spacing: 4) {
                     if s.recordCount > 1 {
-                        Text("+")
-                            .font(.caption)
-                            .foregroundColor(.purple)
+                        Text("+").font(.caption).foregroundColor(.purple)
                     }
                     Text(s.formattedTotalParValue)
                         .multilineTextAlignment(.trailing)
@@ -149,8 +142,7 @@ struct BondTableView: View {
             .width(min: 80, ideal: 100)
 
             TableColumn("Coupon", value: \.couponRate) { s in
-                Text(s.couponFormatted)
-                    .multilineTextAlignment(.trailing)
+                Text(s.couponFormatted).multilineTextAlignment(.trailing)
             }
             .width(min: 60, ideal: 80)
 
@@ -170,32 +162,25 @@ struct BondTableView: View {
 struct BondSummaryDetailView: View {
     let summary: BondSummary
     @Environment(\.managedObjectContext) private var moc
-    @Environment(\.dismiss)            private var dismiss
+    @Environment(\.dismiss) private var dismiss
 
+    // states for inline editing/deletion
     @State private var editingBond: BondEntity?
     @State private var showEditSheet = false
+    @State private var showDeleteAlert = false
+    @State private var bondToDelete: BondEntity?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Header + Edit + Close
+                // Header + Close
                 HStack {
                     Text(summary.name)
                         .font(.title2)
                         .bold()
-
                     Spacer()
-
-                    Button("Edit") {
-                        editingBond = summary.records.first
-                        showEditSheet = true
-                    }
-                    .keyboardShortcut("e", modifiers: .command)
-
-                    Button("Close") {
-                        dismiss()
-                    }
-                    .keyboardShortcut(.cancelAction)
+                    Button("Close") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
                 }
                 Divider()
 
@@ -213,36 +198,37 @@ struct BondSummaryDetailView: View {
                 }
                 Divider()
 
-                // Detailed Records
+                // Detailed Records with Edit/Delete
                 Text("Details:")
                     .font(.headline)
 
-                ForEach(summary.records) { bond in
+                ForEach(summary.records, id: \.self) { bond in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text("Nominal:")
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Nominal: \(bond.parValueFormatted)")
+                                Text("Price: \(bond.acquisitionPriceFormatted)")
+                                Text("Date:  \(Formatters.shortDate.string(from: bond.acquisitionDate))")
+                                Text("Bank:  \(bond.depotBank)")
+                                Text("YTM:   \(bond.ytmFormatted)")
+                            }
                             Spacer()
-                            Text(bond.parValueFormatted)
-                        }
-                        HStack {
-                            Text("Acquisition Price:")
-                            Spacer()
-                            Text(bond.acquisitionPriceFormatted)
-                        }
-                        HStack {
-                            Text("Acquisition Date:")
-                            Spacer()
-                            Text(Formatters.shortDate.string(from: bond.acquisitionDate))
-                        }
-                        HStack {
-                            Text("Depot Bank:")
-                            Spacer()
-                            Text(bond.depotBank)
-                        }
-                        HStack {
-                            Text("YTM:")
-                            Spacer()
-                            Text(bond.ytmFormatted)
+                            // Edit button
+                            Button("Edit") {
+                                editingBond = bond
+                                showEditSheet = true
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .keyboardShortcut("e", modifiers: .command)
+
+                            // Delete button
+                            Button(role: .destructive) {
+                                bondToDelete = bond
+                                showDeleteAlert = true
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
                         }
                     }
                     .padding(.vertical, 4)
@@ -254,7 +240,8 @@ struct BondSummaryDetailView: View {
             .padding()
         }
         .frame(minWidth: 400, minHeight: 300)
-        // — Show EditBondView as a sheet —
+
+        // — Edit sheet —
         .sheet(isPresented: $showEditSheet, onDismiss: {
             editingBond = nil
         }) {
@@ -262,6 +249,18 @@ struct BondSummaryDetailView: View {
                 EditBondView(bond: bond)
                     .environment(\.managedObjectContext, moc)
             }
+        }
+
+        // — Delete confirmation —
+        .alert("Delete this record?", isPresented: $showDeleteAlert, presenting: bondToDelete) { bond in
+            Button("Delete", role: .destructive) {
+                moc.delete(bond)
+                try? moc.save()
+                dismiss()  // close detail, since summary is now stale
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { bond in
+            Text("This will permanently remove the lot acquired on \(Formatters.shortDate.string(from: bond.acquisitionDate)).")
         }
     }
 }
