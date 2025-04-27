@@ -4,6 +4,7 @@
 //
 //  Created by Olivier on 19/04/2025.
 //  Updated on 27/04/2025.
+//  Revised on 27/04/2025 to align with non-optional Core Data properties and fix delete crash
 //
 
 import SwiftUI
@@ -16,14 +17,22 @@ extension BondEntity {
     var acquisitionPriceFormatted: String {
         Formatters.currency.string(from: NSNumber(value: initialPrice)) ?? "–"
     }
+
     var parValueFormatted: String {
         Formatters.currency.string(from: NSNumber(value: parValue)) ?? "–"
     }
+
     var couponFormatted: String {
         String(format: "%.2f%%", couponRate)
     }
+
     var ytmFormatted: String {
         String(format: "%.2f%%", yieldToMaturity * 100)
+    }
+
+    /// Formatter for the non-optional acquisitionDate
+    var acquisitionDateFormatted: String {
+        Formatters.shortDate.string(from: acquisitionDate)
     }
 }
 
@@ -66,7 +75,7 @@ struct BondTableView: View {
     private var bondEntities: FetchedResults<BondEntity>
 
     @State private var sortOrder: [KeyPathComparator<BondSummary>] = [
-        .init(\.maturityDate, order: .forward)
+        .init(\BondSummary.maturityDate, order: .forward)
     ]
     @State private var selectedSummaryID: String?
 
@@ -96,11 +105,8 @@ struct BondTableView: View {
         }
         .frame(minWidth: 800, minHeight: 400)
         .sheet(item: Binding<BondSummary?>(
-            get: {
-                guard let id = selectedSummaryID else { return nil }
-                return sortedSummaries.first { $0.id == id }
-            },
-            set: { new in selectedSummaryID = new?.id }
+            get: { sortedSummaries.first { $0.id == selectedSummaryID } },
+            set: { selectedSummaryID = $0?.id }
         )) { summary in
             BondSummaryDetailView(summary: summary)
                 .environment(\.managedObjectContext, moc)
@@ -123,12 +129,12 @@ struct BondTableView: View {
               selection:  $selectedSummaryID,
               sortOrder:  $sortOrder
         ) {
-            TableColumn("Issuer", value: \.issuer) { s in
+            TableColumn("Issuer", value: \BondSummary.issuer) { s in
                 Text(s.issuer).multilineTextAlignment(.leading)
             }
             .width(min: 120, ideal: 160, max: 240)
 
-            TableColumn("Nominal", value: \.totalNominal) { s in
+            TableColumn("Nominal", value: \BondSummary.totalNominal) { s in
                 HStack(spacing: 4) {
                     if s.recordCount > 1 {
                         Text("+").font(.caption).foregroundColor(.purple)
@@ -140,12 +146,12 @@ struct BondTableView: View {
             }
             .width(min: 80, ideal: 100)
 
-            TableColumn("Coupon", value: \.couponRate) { s in
+            TableColumn("Coupon", value: \BondSummary.couponRate) { s in
                 Text(s.couponFormatted).multilineTextAlignment(.trailing)
             }
             .width(min: 60, ideal: 80)
 
-            TableColumn("Maturity Date", value: \.maturityDate) { s in
+            TableColumn("Maturity Date", value: \BondSummary.maturityDate) { s in
                 Text(Formatters.shortDate.string(from: s.maturityDate))
                     .multilineTextAlignment(.center)
             }
@@ -156,16 +162,14 @@ struct BondTableView: View {
 }
 
 // —————————————————————————————
-// MARK: – Detail View for Summarized Bond (with Popover)
+// MARK: – Detail View for Summarized Bond
 // —————————————————————————————
 struct BondSummaryDetailView: View {
     let summary: BondSummary
     @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
 
-    /// When set, popover(item:) will show EditBondView
     @State private var editingBond: BondEntity?
-
     @State private var showDeleteAlert = false
     @State private var bondToDelete: BondEntity?
 
@@ -201,19 +205,18 @@ struct BondSummaryDetailView: View {
                 Text("Details:")
                     .font(.headline)
 
-                ForEach(summary.records, id: \.self) { bond in
+                ForEach(summary.records.filter { !$0.isDeleted }, id: \.objectID) { bond in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Nominal: \(bond.parValueFormatted)")
                             Text("Price:   \(bond.acquisitionPriceFormatted)")
-                            Text("Date:    \(Formatters.shortDate.string(from: bond.acquisitionDate))")
+                            Text("Date:    \(bond.acquisitionDateFormatted)")
                             Text("Bank:    \(bond.depotBank)")
                             Text("YTM:     \(bond.ytmFormatted)")
                         }
                         Spacer()
 
                         Button("Edit") {
-                            // schedule on next runloop
                             DispatchQueue.main.async {
                                 editingBond = bond
                             }
@@ -238,7 +241,6 @@ struct BondSummaryDetailView: View {
         }
         .frame(minWidth: 400, minHeight: 300)
 
-        // popover(item:) will appear anchored to the Edit button
         .popover(item: $editingBond, arrowEdge: .top) { bond in
             EditBondView(bond: bond)
                 .environment(\.managedObjectContext, moc)
@@ -246,12 +248,15 @@ struct BondSummaryDetailView: View {
                 .onDisappear { editingBond = nil }
         }
 
-        // Delete confirmation
         .alert("Delete this record?", isPresented: $showDeleteAlert, presenting: bondToDelete) { bond in
             Button("Delete", role: .destructive) {
-                moc.delete(bond)
-                try? moc.save()
-                DispatchQueue.main.async { dismiss() }
+                // 1) dismiss immediately
+                dismiss()
+                // 2) then delete and save
+                DispatchQueue.main.async {
+                    moc.delete(bond)
+                    try? moc.save()
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: { bond in

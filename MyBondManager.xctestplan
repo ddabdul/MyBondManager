@@ -18,7 +18,7 @@
   "testTargets" : [
     {
       "enabled" : false,
-      "parallelizable" : true,
+      "parallelizable" : false,
       "target" : {
         "containerPath" : "container:MyBondManager.xcodeproj",
         "identifier" : "0936DA1B2DBE384C00EE350C",
