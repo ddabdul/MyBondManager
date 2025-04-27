@@ -11,30 +11,13 @@
 		09C400052DBB947B00E0E99C /* BondEntity+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C400022DBB947B00E0E99C /* BondEntity+CoreDataClass.swift */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		0936DA202DBE384C00EE350C /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 0966F60D2DB3FB2600DC7CC7 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 0966F6142DB3FB2600DC7CC7;
-			remoteInfo = MyBondManager;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
-		0936DA1C2DBE384C00EE350C /* MyBondManagerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyBondManagerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		0936DA282DBE3F9D00EE350C /* MyBondManager.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = MyBondManager.xctestplan; sourceTree = "<group>"; };
 		0966F6152DB3FB2600DC7CC7 /* MyBondManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MyBondManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		09C400022DBB947B00E0E99C /* BondEntity+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BondEntity+CoreDataClass.swift"; sourceTree = "<group>"; };
 		09C400032DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BondEntity+CoreDataProperties.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		0936DA1D2DBE384C00EE350C /* MyBondManagerTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = MyBondManagerTests;
-			sourceTree = "<group>";
-		};
 		0966F6172DB3FB2600DC7CC7 /* MyBondManager */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = MyBondManager;
@@ -43,13 +26,6 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		0936DA192DBE384C00EE350C /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		0966F6122DB3FB2600DC7CC7 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -63,11 +39,9 @@
 		0966F60C2DB3FB2600DC7CC7 = {
 			isa = PBXGroup;
 			children = (
-				0936DA282DBE3F9D00EE350C /* MyBondManager.xctestplan */,
 				09C400022DBB947B00E0E99C /* BondEntity+CoreDataClass.swift */,
 				09C400032DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift */,
 				0966F6172DB3FB2600DC7CC7 /* MyBondManager */,
-				0936DA1D2DBE384C00EE350C /* MyBondManagerTests */,
 				0966F6162DB3FB2600DC7CC7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -76,7 +50,6 @@
 			isa = PBXGroup;
 			children = (
 				0966F6152DB3FB2600DC7CC7 /* MyBondManager.app */,
-				0936DA1C2DBE384C00EE350C /* MyBondManagerTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -84,29 +57,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		0936DA1B2DBE384C00EE350C /* MyBondManagerTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 0936DA222DBE384C00EE350C /* Build configuration list for PBXNativeTarget "MyBondManagerTests" */;
-			buildPhases = (
-				0936DA182DBE384C00EE350C /* Sources */,
-				0936DA192DBE384C00EE350C /* Frameworks */,
-				0936DA1A2DBE384C00EE350C /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				0936DA212DBE384C00EE350C /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				0936DA1D2DBE384C00EE350C /* MyBondManagerTests */,
-			);
-			name = MyBondManagerTests;
-			packageProductDependencies = (
-			);
-			productName = MyBondManagerTests;
-			productReference = 0936DA1C2DBE384C00EE350C /* MyBondManagerTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
 		0966F6142DB3FB2600DC7CC7 /* MyBondManager */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0966F6262DB3FB3000DC7CC7 /* Build configuration list for PBXNativeTarget "MyBondManager" */;
@@ -139,10 +89,6 @@
 				LastSwiftUpdateCheck = 1630;
 				LastUpgradeCheck = 1630;
 				TargetAttributes = {
-					0936DA1B2DBE384C00EE350C = {
-						CreatedOnToolsVersion = 16.3;
-						TestTargetID = 0966F6142DB3FB2600DC7CC7;
-					};
 					0966F6142DB3FB2600DC7CC7 = {
 						CreatedOnToolsVersion = 16.3;
 					};
@@ -163,19 +109,11 @@
 			projectRoot = "";
 			targets = (
 				0966F6142DB3FB2600DC7CC7 /* MyBondManager */,
-				0936DA1B2DBE384C00EE350C /* MyBondManagerTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		0936DA1A2DBE384C00EE350C /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		0966F6132DB3FB2600DC7CC7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -186,13 +124,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		0936DA182DBE384C00EE350C /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		0966F6112DB3FB2600DC7CC7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -204,49 +135,7 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin PBXTargetDependency section */
-		0936DA212DBE384C00EE350C /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 0966F6142DB3FB2600DC7CC7 /* MyBondManager */;
-			targetProxy = 0936DA202DBE384C00EE350C /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin XCBuildConfiguration section */
-		0936DA232DBE384C00EE350C /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = A795JXJL3T;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ddabdul.MyBondManagerTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MyBondManager.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MyBondManager";
-			};
-			name = Debug;
-		};
-		0936DA242DBE384C00EE350C /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = A795JXJL3T;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ddabdul.MyBondManagerTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MyBondManager.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MyBondManager";
-			};
-			name = Release;
-		};
 		0966F6242DB3FB3000DC7CC7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -424,15 +313,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		0936DA222DBE384C00EE350C /* Build configuration list for PBXNativeTarget "MyBondManagerTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				0936DA232DBE384C00EE350C /* Debug */,
-				0936DA242DBE384C00EE350C /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		0966F6102DB3FB2600DC7CC7 /* Build configuration list for PBXProject "MyBondManager" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
