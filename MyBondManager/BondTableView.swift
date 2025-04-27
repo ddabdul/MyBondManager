@@ -3,6 +3,7 @@
 //  MyBondManager
 //
 //  Created by Olivier on 19/04/2025.
+//  Updated on 26/04/2025.
 //
 
 import SwiftUI
@@ -33,7 +34,7 @@ extension BondEntity {
 // MARK: – BondSummary Model
 // —————————————————————————————
 struct BondSummary: Identifiable {
-    let id: String          // ISIN
+    let id: String
     let name: String
     let issuer: String
     let couponRate: Double
@@ -41,15 +42,10 @@ struct BondSummary: Identifiable {
     let records: [BondEntity]
 
     var recordCount: Int { records.count }
-
-    var totalNominal: Double {
-        records.reduce(0) { $0 + $1.parValue }
-    }
-
+    var totalNominal: Double { records.reduce(0) { $0 + $1.parValue } }
     var formattedTotalParValue: String {
         Formatters.currency.string(from: NSNumber(value: totalNominal)) ?? "–"
     }
-
     var couponFormatted: String {
         String(format: "%.2f%%", couponRate)
     }
@@ -67,13 +63,8 @@ struct BondTableView: View {
     }
 
     @FetchRequest(
-        sortDescriptors: [
-            NSSortDescriptor(keyPath: \BondEntity.maturityDate, ascending: true)
-        ],
-        predicate: NSPredicate(
-            format: "maturityDate >= %@",
-            Self.startOfToday as NSDate
-        ),
+        sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.maturityDate, ascending: true)],
+        predicate: NSPredicate(format: "maturityDate >= %@", Self.startOfToday as NSDate),
         animation: .default
     )
     private var bondEntities: FetchedResults<BondEntity>
@@ -83,23 +74,21 @@ struct BondTableView: View {
     ]
     @State private var selectedSummaryID: String?
 
-    /// Group by ISIN, using only unexpired bonds
     private var summaries: [BondSummary] {
         Dictionary(grouping: bondEntities, by: \.isin)
             .map { isin, entities in
                 let first = entities[0]
                 return BondSummary(
-                    id: isin,
-                    name: first.name,
-                    issuer: first.issuer,
-                    couponRate: first.couponRate,
+                    id:           isin,
+                    name:         first.name,
+                    issuer:       first.issuer,
+                    couponRate:   first.couponRate,
                     maturityDate: first.maturityDate,
-                    records: entities
+                    records:      entities
                 )
             }
     }
 
-    /// Apply sort descriptors
     private var sortedSummaries: [BondSummary] {
         summaries.sorted(using: sortOrder)
     }
@@ -120,6 +109,7 @@ struct BondTableView: View {
             }
         )) { summary in
             BondSummaryDetailView(summary: summary)
+                .environment(\.managedObjectContext, moc)
         }
     }
 
@@ -136,17 +126,14 @@ struct BondTableView: View {
 
     private var bondTable: some View {
         Table(sortedSummaries,
-              selection: $selectedSummaryID,
-              sortOrder: $sortOrder
+              selection:  $selectedSummaryID,
+              sortOrder:  $sortOrder
         ) {
-            // 1) Issuer
             TableColumn("Issuer", value: \.issuer) { s in
-                Text(s.issuer)
-                    .multilineTextAlignment(.leading)
+                Text(s.issuer).multilineTextAlignment(.leading)
             }
             .width(min: 120, ideal: 160, max: 240)
 
-            // 2) Nominal
             TableColumn("Nominal", value: \.totalNominal) { s in
                 HStack(spacing: 4) {
                     if s.recordCount > 1 {
@@ -161,14 +148,12 @@ struct BondTableView: View {
             }
             .width(min: 80, ideal: 100)
 
-            // 3) Coupon
             TableColumn("Coupon", value: \.couponRate) { s in
                 Text(s.couponFormatted)
                     .multilineTextAlignment(.trailing)
             }
             .width(min: 60, ideal: 80)
 
-            // 4) Maturity Date
             TableColumn("Maturity Date", value: \.maturityDate) { s in
                 Text(Formatters.shortDate.string(from: s.maturityDate))
                     .multilineTextAlignment(.center)
@@ -184,17 +169,29 @@ struct BondTableView: View {
 // —————————————————————————————
 struct BondSummaryDetailView: View {
     let summary: BondSummary
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var moc
+    @Environment(\.dismiss)            private var dismiss
+
+    @State private var editingBond: BondEntity?
+    @State private var showEditSheet = false
 
     var body: some View {
-        ScrollView(.vertical) {
+        ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Header
+                // Header + Edit + Close
                 HStack {
                     Text(summary.name)
                         .font(.title2)
                         .bold()
+
                     Spacer()
+
+                    Button("Edit") {
+                        editingBond = summary.records.first
+                        showEditSheet = true
+                    }
+                    .keyboardShortcut("e", modifiers: .command)
+
                     Button("Close") {
                         dismiss()
                     }
@@ -257,6 +254,15 @@ struct BondSummaryDetailView: View {
             .padding()
         }
         .frame(minWidth: 400, minHeight: 300)
+        // — Show EditBondView as a sheet —
+        .sheet(isPresented: $showEditSheet, onDismiss: {
+            editingBond = nil
+        }) {
+            if let bond = editingBond {
+                EditBondView(bond: bond)
+                    .environment(\.managedObjectContext, moc)
+            }
+        }
     }
 }
 
