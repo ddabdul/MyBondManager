@@ -1,6 +1,6 @@
 // AddBondViewAsync.swift
 //  MyBondManager
-//
+//  Adjusted to CoreData
 //  Created by Olivier on 20/04/2025.
 //
 

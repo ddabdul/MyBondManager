@@ -1,7 +1,7 @@
 //
 //  PortfolioSummaryView.swift
 //  MyBondManager
-//
+//  Adjusted to CoreData
 //  Created by Olivier on 26/04/2025.
 //
 

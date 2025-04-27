@@ -1,6 +1,6 @@
 //  CashFlowView.swift
 //  MyBondManager
-//
+//  Adjusted to CoreData
 //  Updated by ChatGPT on 23/04/2025.
 //
 

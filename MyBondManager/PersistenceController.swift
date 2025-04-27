@@ -1,7 +1,7 @@
 //
 //  PersistenceController.swift
 //  MyBondManager
-//
+//  Adjusted to CoreData
 //  Created by Olivier on 25/04/2025.
 //
 

@@ -1,7 +1,7 @@
 
 //  MyBondManagerApp.swift
 //  MyBondManager
-//
+//  Adjusted to CoreData
 //  Created by Olivier on 11/04/2025.
 //
 

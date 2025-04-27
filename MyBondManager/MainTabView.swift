@@ -1,6 +1,7 @@
 //
 //  MainTabView.swift
 //  MyBondManager
+//  Adjusted to CoreData
 //
 //  Created by Olivier on 13/04/2025.
 //  Updated on 26/04/2025.

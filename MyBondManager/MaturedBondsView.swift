@@ -1,7 +1,7 @@
 //
 //  MaturedBondsView.swift
 //  MyBondManager
-//
+//  Adjusted to CoreData
 //  Created by Olivier on 17/04/2025.
 //  Updated on 26/04/2025.
 
