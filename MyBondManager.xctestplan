@@ -1,0 +1,30 @@
+{
+  "configurations" : [
+    {
+      "id" : "20B6C6DF-C9C8-45EA-8001-5CB64D382F91",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:MyBondManager.xcodeproj",
+      "identifier" : "0966F6142DB3FB2600DC7CC7",
+      "name" : "MyBondManager"
+    }
+  },
+  "testTargets" : [
+    {
+      "enabled" : false,
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:MyBondManager.xcodeproj",
+        "identifier" : "0936DA1B2DBE384C00EE350C",
+        "name" : "MyBondManagerTests"
+      }
+    }
+  ],
+  "version" : 1
+}

@@ -1,5 +1,11 @@
+//  MyBondManager
 // BondDataScraperAsync.swift
 // Converted to async/await (macOS 13+)
+//  Adjusted to CoreData
+//  Created by Olivier on 26/04/2025.
+//
+
+
 
 import Foundation
 
