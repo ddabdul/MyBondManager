@@ -10,7 +10,6 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @StateObject private var viewModel = BondPortfolioViewModel()
     @State private var showingMaturedSheet = false
     @State private var showingAddBondView = false
 
