@@ -11,8 +11,19 @@
 		09C400052DBB947B00E0E99C /* BondEntity+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C400022DBB947B00E0E99C /* BondEntity+CoreDataClass.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		098EB4FC2DBE982B008CB539 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0966F60D2DB3FB2600DC7CC7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0966F6142DB3FB2600DC7CC7;
+			remoteInfo = MyBondManager;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		0966F6152DB3FB2600DC7CC7 /* MyBondManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MyBondManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		098EB4F82DBE982A008CB539 /* MyBondManagerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyBondManagerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		09C400022DBB947B00E0E99C /* BondEntity+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BondEntity+CoreDataClass.swift"; sourceTree = "<group>"; };
 		09C400032DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BondEntity+CoreDataProperties.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -23,10 +34,22 @@
 			path = MyBondManager;
 			sourceTree = "<group>";
 		};
+		098EB4F92DBE982B008CB539 /* MyBondManagerTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MyBondManagerTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		0966F6122DB3FB2600DC7CC7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		098EB4F52DBE982A008CB539 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -42,6 +65,7 @@
 				09C400022DBB947B00E0E99C /* BondEntity+CoreDataClass.swift */,
 				09C400032DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift */,
 				0966F6172DB3FB2600DC7CC7 /* MyBondManager */,
+				098EB4F92DBE982B008CB539 /* MyBondManagerTests */,
 				0966F6162DB3FB2600DC7CC7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -50,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				0966F6152DB3FB2600DC7CC7 /* MyBondManager.app */,
+				098EB4F82DBE982A008CB539 /* MyBondManagerTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -79,6 +104,29 @@
 			productReference = 0966F6152DB3FB2600DC7CC7 /* MyBondManager.app */;
 			productType = "com.apple.product-type.application";
 		};
+		098EB4F72DBE982A008CB539 /* MyBondManagerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 098EB5002DBE982B008CB539 /* Build configuration list for PBXNativeTarget "MyBondManagerTests" */;
+			buildPhases = (
+				098EB4F42DBE982A008CB539 /* Sources */,
+				098EB4F52DBE982A008CB539 /* Frameworks */,
+				098EB4F62DBE982A008CB539 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				098EB4FD2DBE982B008CB539 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				098EB4F92DBE982B008CB539 /* MyBondManagerTests */,
+			);
+			name = MyBondManagerTests;
+			packageProductDependencies = (
+			);
+			productName = MyBondManagerTests;
+			productReference = 098EB4F82DBE982A008CB539 /* MyBondManagerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -91,6 +139,10 @@
 				TargetAttributes = {
 					0966F6142DB3FB2600DC7CC7 = {
 						CreatedOnToolsVersion = 16.3;
+					};
+					098EB4F72DBE982A008CB539 = {
+						CreatedOnToolsVersion = 16.3;
+						TestTargetID = 0966F6142DB3FB2600DC7CC7;
 					};
 				};
 			};
@@ -109,12 +161,20 @@
 			projectRoot = "";
 			targets = (
 				0966F6142DB3FB2600DC7CC7 /* MyBondManager */,
+				098EB4F72DBE982A008CB539 /* MyBondManagerTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		0966F6132DB3FB2600DC7CC7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		098EB4F62DBE982A008CB539 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -133,7 +193,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		098EB4F42DBE982A008CB539 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		098EB4FD2DBE982B008CB539 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0966F6142DB3FB2600DC7CC7 /* MyBondManager */;
+			targetProxy = 098EB4FC2DBE982B008CB539 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		0966F6242DB3FB3000DC7CC7 /* Debug */ = {
@@ -310,6 +385,40 @@
 			};
 			name = Release;
 		};
+		098EB4FE2DBE982B008CB539 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A795JXJL3T;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ddabdul.MyBondManagerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MyBondManager.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MyBondManager";
+			};
+			name = Debug;
+		};
+		098EB4FF2DBE982B008CB539 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = A795JXJL3T;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ddabdul.MyBondManagerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MyBondManager.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MyBondManager";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -327,6 +436,15 @@
 			buildConfigurations = (
 				0966F6272DB3FB3000DC7CC7 /* Debug */,
 				0966F6282DB3FB3000DC7CC7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		098EB5002DBE982B008CB539 /* Build configuration list for PBXNativeTarget "MyBondManagerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				098EB4FE2DBE982B008CB539 /* Debug */,
+				098EB4FF2DBE982B008CB539 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
