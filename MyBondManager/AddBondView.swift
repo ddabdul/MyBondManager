@@ -146,7 +146,7 @@ struct AddBondViewAsync: View {
             return
         }
 
-        // Calculate YTM
+        // Calculate YTM (unchanged)
         let par            = parValue
         let couponPayment  = par * couponRate / 100.0
         let years          = maturityDate.timeIntervalSince(acquisitionDate) / (365 * 24 * 3600)
@@ -159,6 +159,7 @@ struct AddBondViewAsync: View {
             ytmValue = 0
         }
 
+        // 1️⃣ Create the BondEntity
         let entity = BondEntity(context: moc)
         entity.id              = UUID()
         entity.name            = name
@@ -174,12 +175,21 @@ struct AddBondViewAsync: View {
         entity.yieldToMaturity = ytmValue
 
         do {
+            // 2️⃣ Generate all CashFlowEntity rows for this bond
+            let generator = CashFlowGenerator(context: moc)
+            try generator.regenerateCashFlows(for: entity)
+
+            // 3️⃣ Persist bond + its new cash flows
             try moc.save()
+
+            // 4️⃣ Dismiss on success
             dismiss()
         } catch {
-            errorMessage = "Failed to save bond: \(error.localizedDescription)"
+            // Surface any CoreData or generator error
+            errorMessage = "Failed to save bond or generate cash flows: \(error.localizedDescription)"
         }
     }
+
 }
 
 struct AddBondViewAsync_Previews: PreviewProvider {
