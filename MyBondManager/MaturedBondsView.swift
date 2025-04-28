@@ -1,10 +1,9 @@
 //
 //  MaturedBondsView.swift
 //  MyBondManager
-//  Adjusted to CoreData
-//  Created by Olivier on 17/04/2025.
-//  Updated on 30/04/2025: content-only TableColumns to fix generic overload and avoid layout recursion
 //
+//  Presents a list of matured bonds (maturityDate < today) with inline delete and confirmation.
+//  Uses Core Data FetchRequest and SwiftUI Table for efficient rendering.
 
 import SwiftUI
 import CoreData
@@ -13,7 +12,7 @@ struct MaturedBondsView: View {
     @Environment(\.managedObjectContext) private var moc
     @Environment(\.dismiss) private var dismiss
 
-    /// “Matured” means maturityDate < start of today
+    /// Bonds with maturityDate before the start of today
     private static var startOfToday: Date {
         Calendar.current.startOfDay(for: Date())
     }
@@ -22,15 +21,15 @@ struct MaturedBondsView: View {
         sortDescriptors: [
             NSSortDescriptor(keyPath: \BondEntity.maturityDate, ascending: true)
         ],
-        predicate: NSPredicate(format: "maturityDate < %@", Self.startOfToday as NSDate),
+        predicate: NSPredicate(
+            format: "maturityDate < %@",
+            Self.startOfToday as NSDate
+        ),
         animation: .default
     )
     private var bondEntities: FetchedResults<BondEntity>
 
-    /// Tracks which ISIN has been selected
-    @State private var selectedISIN: String?
-
-    /// Build summaries grouped by ISIN
+    /// Summaries grouped by ISIN
     private var summaries: [BondSummary] {
         Dictionary(grouping: bondEntities, by: \.isin)
             .map { isin, entities in
@@ -46,9 +45,12 @@ struct MaturedBondsView: View {
             }
     }
 
+    /// The summary currently pending deletion
+    @State private var summaryToDelete: BondSummary?
+
     var body: some View {
         VStack(spacing: 0) {
-            // Title Bar
+            // Header
             HStack {
                 Text("Matured Bonds")
                     .font(.largeTitle)
@@ -58,8 +60,8 @@ struct MaturedBondsView: View {
             .padding()
             .background(AppTheme.tileBackground)
 
-            // Table of summaries (unsorted)
-            Table(summaries, selection: $selectedISIN) {
+            // Table of summaries with inline delete
+            Table(summaries) {
                 TableColumn("Issuer") { summary in
                     Text(summary.issuer)
                         .multilineTextAlignment(.leading)
@@ -78,29 +80,43 @@ struct MaturedBondsView: View {
                 }
                 .width(min: 60, ideal: 80)
 
-                TableColumn("Maturity Date") { summary in
+                TableColumn("Maturity") { summary in
                     Text(Formatters.shortDate.string(from: summary.maturityDate))
                         .multilineTextAlignment(.center)
                 }
                 .width(min: 80)
+
+                TableColumn("Actions") { summary in
+                    Button(role: .destructive) {
+                        summaryToDelete = summary
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                }
+                .width(min: 60)
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
-            // Popover for details
-            .popover(item: Binding(
-    get: {
-        guard let isin = selectedISIN else { return nil }
-        return summaries.first { $0.id == isin }
-    },
-    set: { _, _ in selectedISIN = nil }
-), arrowEdge: .top) { (summary: BondSummary) in
-                BondSummaryDetailView(summary: summary)
-                    .environment(\.managedObjectContext, moc)
-                    .frame(minWidth: 400, minHeight: 300)
+            .alert(item: $summaryToDelete) { summary in
+                Alert(
+                    title: Text("Delete all entries for \(summary.issuer)?"),
+                    message: Text(
+                        "This will permanently remove all \(summary.recordCount) bond records " +
+                        "maturing on \(Formatters.shortDate.string(from: summary.maturityDate))."
+                    ),
+                    primaryButton: .destructive(Text("Delete")) {
+                        summary.records.forEach { bond in
+                            moc.delete(bond)
+                        }
+                        try? moc.save()
+                    },
+                    secondaryButton: .cancel()
+                )
             }
 
             Divider()
 
-            // Close Button
+            // Close button
             HStack {
                 Spacer()
                 Button("Close") { dismiss() }
