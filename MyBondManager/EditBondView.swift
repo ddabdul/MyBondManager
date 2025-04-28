@@ -1,3 +1,9 @@
+// EditBondView.swift
+// MyBondManager
+// Added the cashflow calculation
+// Updated on 28/04/2025.
+
+
 import SwiftUI
 import CoreData
 
@@ -23,7 +29,6 @@ struct EditBondView: View {
     init(bond: BondEntity) {
         print("[EditBondView] init for bond ISIN: \(bond.isin)")
         self.bond = bond
-        // initialize the states from the bond object
         _name            = State(initialValue: bond.name)
         _issuer          = State(initialValue: bond.issuer)
         _isin            = State(initialValue: bond.isin)
@@ -45,12 +50,14 @@ struct EditBondView: View {
                 TextField("ISIN", text: $isin)
                 TextField("WKN", text: $wkn)
             }
+
             Section("Financials") {
                 TextField("Par Value", text: $parValue)
                 TextField("Initial Price", text: $initialPrice)
                 TextField("Coupon Rate", text: $couponRate)
                 TextField("Yield to Maturity", text: $yieldToMaturity)
             }
+
             Section("Dates & Bank") {
                 DatePicker("Acquisition Date", selection: $acquisitionDate, displayedComponents: .date)
                 DatePicker("Maturity Date",    selection: $maturityDate,    displayedComponents: .date)
@@ -61,34 +68,30 @@ struct EditBondView: View {
                 Spacer()
                 Button("Cancel") {
                     print("[EditBondView] Cancel tapped")
-                    DispatchQueue.main.async {
-                        print("[EditBondView] dismissing from Cancel")
-                        dismiss()
-                    }
+                    dismiss()
                 }
                 Button("Save") {
                     print("[EditBondView] Save tapped")
                     saveChanges()
-                    DispatchQueue.main.async {
-                        print("[EditBondView] dismissing from Save")
-                        dismiss()
-                    }
+                    dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
             }
         }
+        .padding()
+        .frame(minWidth: 400, minHeight: 500)
         .onAppear {
             print("[EditBondView] onAppear for bond ISIN: \(bond.isin)")
         }
         .onDisappear {
             print("[EditBondView] onDisappear for bond ISIN: \(bond.isin)")
         }
-        .padding()
-        .frame(minWidth: 400, minHeight: 500)
     }
 
     private func saveChanges() {
         print("[EditBondView] saveChanges() begin for bond ISIN: \(bond.isin)")
+
+        // 1️⃣ Update the bond’s properties
         bond.name            = name
         bond.issuer          = issuer
         bond.isin            = isin
@@ -102,10 +105,15 @@ struct EditBondView: View {
         bond.maturityDate    = maturityDate
 
         do {
+            // 2️⃣ Regenerate all cash‐flow events for this bond
+            let generator = CashFlowGenerator(context: moc)
+            try generator.regenerateCashFlows(for: bond)
+
+            // 3️⃣ Save both the bond changes and its new cash flows
             try moc.save()
-            print("[EditBondView] moc.save() succeeded for bond ISIN: \(bond.isin)")
+            print("[EditBondView] Successfully saved bond and regenerated cash flows")
         } catch {
-            print("[EditBondView] moc.save() failed: \(error.localizedDescription)")
+            print("[EditBondView] Error saving or regenerating cash flows: \(error)")
         }
     }
 }

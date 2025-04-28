@@ -1,7 +1,7 @@
 // CashFlowView.swift
 // MyBondManager
 // Adjusted to CoreData and persisted CashFlowEntity
-// Updated by ChatGPT on 28/04/2025.
+// Updated on 28/04/2025.
 
 import SwiftUI
 import CoreData
