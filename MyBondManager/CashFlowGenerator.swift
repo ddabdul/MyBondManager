@@ -60,11 +60,14 @@ struct CashFlowGenerator {
 
         // 5) Capital gain at maturity
         let gain = nominal - bond.initialPrice
-        let gainCF = CashFlowEntity(context: context)
-        gainCF.date = maturity
-        gainCF.amount = gain
-        gainCF.setValue(CashFlowEntity.Nature.capitalGains.rawValue, forKey: "nature")
-        gainCF.bond = bond
+        // Only persist a capital-gains flow if the gain is positive
+        if gain > 0 {
+            let gainCF = CashFlowEntity(context: context)
+            gainCF.date = maturity
+            gainCF.amount = gain
+            gainCF.setValue(CashFlowEntity.Nature.capitalGains.rawValue, forKey: "nature")
+            gainCF.bond = bond
+        }
 
         // 6) Persist changes if any
         if context.hasChanges {
@@ -72,4 +75,3 @@ struct CashFlowGenerator {
         }
     }
 }
-

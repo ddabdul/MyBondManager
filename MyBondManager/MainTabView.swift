@@ -1,17 +1,14 @@
-//
-//  MainTabView.swift
-//  MyBondManager
-//  Adjusted to CoreData
-//
-//  Created by Olivier on 13/04/2025.
-//  Updated on 26/04/2025.
-//
+// MainTabView.swift
+// MyBondManager
+// Updated on 28/04/2025 to add manual cash‐flow recalculation
 
 import SwiftUI
+import CoreData
 
 struct MainTabView: View {
     @State private var showingMaturedSheet = false
     @State private var showingAddBondView = false
+    @State private var showingRecalcAlert = false   // ← new
 
     var body: some View {
         GeometryReader { geo in
@@ -21,7 +18,6 @@ struct MainTabView: View {
                 // ──────────────────────────────────
                 NavigationSplitView {
                     PortfolioSummaryView()
-                        // Force at least 1/3 of the window width
                         .frame(minWidth: geo.size.width / 3)
                 } detail: {
                     BondTableView()
@@ -70,6 +66,20 @@ struct MainTabView: View {
                     ideal: geo.size.width / 3,
                     max: geo.size.width * 0.5
                 )
+                // ← NEW TOOLBAR ITEM FOR MANUAL RECALC
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(action: {
+                            recalculateAllCashFlows()
+                        }) {
+                            Label("Recalculate", systemImage: "arrow.clockwise")
+                        }
+                    }
+                }
+                // CONFIRMATION ALERT
+                .alert("Cash flows recalculated", isPresented: $showingRecalcAlert) {
+                    Button("OK", role: .cancel) { }
+                }
                 .tabItem {
                     Label("Cash Flow", systemImage: "dollarsign.circle")
                 }
@@ -79,6 +89,37 @@ struct MainTabView: View {
                 \.managedObjectContext,
                 PersistenceController.shared.container.viewContext
             )
+        }
+    }
+
+    /// Manually regenerate cash flows for every bond,
+    /// ignoring the one-time migration flag.
+    private func recalculateAllCashFlows() {
+        let persistence = PersistenceController.shared
+        let context = persistence.backgroundContext
+
+        context.perform {
+            let request: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
+            do {
+                let bonds = try context.fetch(request)
+                let generator = CashFlowGenerator(context: context)
+
+                for bond in bonds {
+                    try generator.regenerateCashFlows(for: bond)
+                }
+
+                if context.hasChanges {
+                    try context.save()
+                }
+
+                // notify success on main thread
+                DispatchQueue.main.async {
+                    showingRecalcAlert = true
+                }
+            } catch {
+                // you might surface this more gracefully in UI
+                print("❗️ Error recalculating cash flows: \(error)")
+            }
         }
     }
 }
