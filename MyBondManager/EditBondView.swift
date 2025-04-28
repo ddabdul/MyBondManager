@@ -54,8 +54,9 @@ struct EditBondView: View {
             Section("Financials") {
                 TextField("Par Value", text: $parValue)
                 TextField("Initial Price", text: $initialPrice)
-                TextField("Coupon Rate", text: $couponRate)
-                TextField("Yield to Maturity", text: $yieldToMaturity)
+                TextField("Coupon Rate (%)", text: $couponRate)
+                TextField("Yield to Maturity (%)", text: $yieldToMaturity)
+                    .disabled(true) // we’ll recalc this
             }
 
             Section("Dates & Bank") {
@@ -67,11 +68,9 @@ struct EditBondView: View {
             HStack {
                 Spacer()
                 Button("Cancel") {
-                    print("[EditBondView] Cancel tapped")
                     dismiss()
                 }
                 Button("Save") {
-                    print("[EditBondView] Save tapped")
                     saveChanges()
                     dismiss()
                 }
@@ -80,40 +79,52 @@ struct EditBondView: View {
         }
         .padding()
         .frame(minWidth: 400, minHeight: 500)
-        .onAppear {
-            print("[EditBondView] onAppear for bond ISIN: \(bond.isin)")
-        }
-        .onDisappear {
-            print("[EditBondView] onDisappear for bond ISIN: \(bond.isin)")
-        }
     }
 
     private func saveChanges() {
-        print("[EditBondView] saveChanges() begin for bond ISIN: \(bond.isin)")
-
-        // 1️⃣ Update the bond’s properties
-        bond.name            = name
-        bond.issuer          = issuer
-        bond.isin            = isin
-        bond.wkn             = wkn
-        bond.parValue        = Double(parValue)       ?? bond.parValue
-        bond.initialPrice    = Double(initialPrice)   ?? bond.initialPrice
-        bond.couponRate      = Double(couponRate)     ?? bond.couponRate
-        bond.yieldToMaturity = Double(yieldToMaturity) ?? bond.yieldToMaturity
-        bond.depotBank       = depotBank
+        // 1️⃣ Update text fields
+        bond.name       = name
+        bond.issuer     = issuer
+        bond.isin       = isin
+        bond.wkn        = wkn
+        bond.depotBank  = depotBank
         bond.acquisitionDate = acquisitionDate
         bond.maturityDate    = maturityDate
 
+        // 2️⃣ Parse numeric inputs (fallback to existing if parsing fails)
+        let parVal      = Double(parValue)     ?? bond.parValue
+        let pricePaid   = Double(initialPrice) ?? bond.initialPrice
+        let couponPct   = Double(couponRate)   ?? bond.couponRate
+
+        bond.parValue     = parVal
+        bond.initialPrice = pricePaid
+        bond.couponRate   = couponPct
+
+        // 3️⃣ Recalculate YTM
+        let couponPayment = parVal * couponPct / 100.0
+        let secondsPerYear = 365 * 24 * 3600
+        let years = maturityDate.timeIntervalSince(acquisitionDate) / Double(secondsPerYear)
+
+        let newYTM: Double
+        if years > 0 {
+            let numerator   = couponPayment + (parVal - pricePaid) / years
+            let denominator = (parVal + pricePaid) / 2
+            newYTM = (numerator / denominator) * 100.0
+        } else {
+            newYTM = 0
+        }
+        bond.yieldToMaturity = newYTM
+
         do {
-            // 2️⃣ Regenerate all cash‐flow events for this bond
+            // 4️⃣ Regenerate cash flows with updated terms
             let generator = CashFlowGenerator(context: moc)
             try generator.regenerateCashFlows(for: bond)
 
-            // 3️⃣ Save both the bond changes and its new cash flows
+            // 5️⃣ Save everything in one shot
             try moc.save()
-            print("[EditBondView] Successfully saved bond and regenerated cash flows")
+            print("[EditBondView] Saved edits and recalculated YTM (\(String(format: "%.2f", newYTM))%) + cash flows")
         } catch {
-            print("[EditBondView] Error saving or regenerating cash flows: \(error)")
+            print("[EditBondView] Error saving bond or regenerating cash flows: \(error)")
         }
     }
 }
