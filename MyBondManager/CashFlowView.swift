@@ -10,13 +10,23 @@ import CoreData
 struct CashFlowView: View {
     @Environment(\.managedObjectContext) private var moc
 
-    // Fetch persisted cash-flow events
+    // Only load cash flows for bonds that haven't matured
+    // and whose event date is today or later
     @FetchRequest(
         entity: CashFlowEntity.entity(),
-        sortDescriptors: [NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)],
+        sortDescriptors: [
+            NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)
+        ],
+        predicate: NSPredicate(
+            format: "bond.maturityDate >= %@ AND date >= %@",
+            Date() as NSDate,
+            Date() as NSDate
+        ),
         animation: .default
     )
     private var cashFlowEntities: FetchedResults<CashFlowEntity>
+
+    // … rest of your CashFlowView unchanged …
 
     @State private var expandedYears: Set<Int> = []
     @State private var expandedMonths: Set<Date> = []
