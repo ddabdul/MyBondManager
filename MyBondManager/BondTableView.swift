@@ -27,7 +27,7 @@ extension BondEntity {
     }
 
     var ytmFormatted: String {
-        String(format: "%.2f%%", yieldToMaturity * 100)
+        String(format: "%.2f%%", yieldToMaturity)
     }
 
     /// Formatter for the non-optional acquisitionDate
