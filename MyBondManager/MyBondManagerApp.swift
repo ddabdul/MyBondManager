@@ -3,10 +3,10 @@
 //  MyBondManager
 //  Adjusted to CoreData
 //  Created by Olivier on 11/04/2025.
-//  Updated on 27/04/2025.
-//
+//  Updated on 28/04/2025.
 
 import SwiftUI
+import CoreData
 
 @main
 struct BondPortfolioManagerApp: App {
@@ -20,6 +20,9 @@ struct BondPortfolioManagerApp: App {
         // Initialize the notifier with your viewContext
         let context = persistenceController.container.viewContext
         _notifier = StateObject(wrappedValue: LaunchNotifier(context: context))
+
+        // 3) Run one-off CashFlow migration to seed existing bonds
+        CashFlowMigration.performIfNeeded()
     }
 
     var body: some Scene {
@@ -30,7 +33,7 @@ struct BondPortfolioManagerApp: App {
                     .ignoresSafeArea()
 
                 MainTabView()
-                    // 3) Inject both context and notifier
+                    // 4) Inject both context and notifier
                     .environment(\.managedObjectContext, persistenceController.container.viewContext)
                     .environmentObject(notifier)
                     // Force dark mode so system text is white-on-black
@@ -38,10 +41,8 @@ struct BondPortfolioManagerApp: App {
                     // Make buttons, toggles, etc. use white accent
                     .accentColor(.white)
             }
-            // 4) Observe the notifier and show the alert once
-            .onReceive(notifier.$alertMessage) { msg in
-                // nothing needed here—.alert below will react
-            }
+            // 5) Observe notifier and show alert once
+            .onReceive(notifier.$alertMessage) { _ in }
             .alert(
                 Text("Portfolio Update"),
                 isPresented: Binding<Bool>(
@@ -61,5 +62,3 @@ struct BondPortfolioManagerApp: App {
         }
     }
 }
-
-
