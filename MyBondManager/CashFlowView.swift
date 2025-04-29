@@ -1,6 +1,6 @@
 // CashFlowView.swift
 // MyBondManager (macOS only)
-// Updated 05/05/2025: remove iOS references, use NSColor exclusively
+// Updated 07/05/2025: bonds within each month now sorted chronologically
 
 import SwiftUI
 import CoreData
@@ -19,22 +19,21 @@ fileprivate struct CouponEvent: Identifiable {
 
 fileprivate struct MonthGroup: Identifiable {
     let id: Date
-    let label: String      // "MM/yy"
-    let total: Double      // excludes capitalLoss
+    let label: String    // "MM/yy"
+    let total: Double    // excludes capitalLoss
     let events: [CouponEvent]
 }
 
 fileprivate struct YearGroup: Identifiable {
     let id: Int
-    let label: String      // "YYYY"
-    let total: Double      // excludes capitalLoss
+    let label: String    // "YYYY"
+    let total: Double    // excludes capitalLoss
     let months: [MonthGroup]
 
     static func build(
         from cashFlows: FetchedResults<CashFlowEntity>,
         calendar: Calendar
     ) -> [YearGroup] {
-        // Map to CouponEvent and drop capitalLoss
         let events = cashFlows.compactMap { cf -> CouponEvent? in
             let nat = cf.natureEnum
             guard nat != .capitalLoss else { return nil }
@@ -47,16 +46,13 @@ fileprivate struct YearGroup: Identifiable {
             )
         }
 
-        // Group by year
         let byYear = Dictionary(grouping: events) {
             calendar.component(.year, from: $0.date)
         }
 
-        // Build YearGroup
         return byYear.map { year, evts in
             let totalYear = evts.reduce(0) { $0 + $1.amount }
 
-            // Group by month
             let byMonth = Dictionary(grouping: evts) { evt in
                 let comps = calendar.dateComponents([.year, .month], from: evt.date)
                 return calendar.date(from: comps)!
@@ -88,7 +84,6 @@ fileprivate struct YearGroup: Identifiable {
 struct CashFlowView: View {
     @Environment(\.managedObjectContext) private var moc
 
-    /// Fetch only future cash flows, excluding expectedProfit
     @FetchRequest(
         entity: CashFlowEntity.entity(),
         sortDescriptors: [ NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true) ],
@@ -127,7 +122,7 @@ struct CashFlowView: View {
     }
 }
 
-// MARK: – YearBlock
+// MARK: – YearBlock (3 stages)
 
 fileprivate struct YearBlock: View {
     let yearGroup: YearGroup
@@ -147,6 +142,7 @@ fileprivate struct YearBlock: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            // Header button
             Button {
                 stage = (stage + 1) % 3
             } label: {
@@ -172,8 +168,7 @@ fileprivate struct YearBlock: View {
                 .cornerRadius(12)
                 .shadow(
                     color: .black.opacity(isHovered ? 0.4 : 0.2),
-                    radius: isHovered ? 8 : 4,
-                    x: 0, y: 4
+                    radius: isHovered ? 8 : 4, x: 0, y: 4
                 )
                 .scaleEffect(isHovered ? 1.02 : 1.0)
             }
@@ -181,6 +176,7 @@ fileprivate struct YearBlock: View {
             .onHover { isHovered = $0 }
             .help("")
 
+            // Summary rows
             if stage >= 1 {
                 ForEach(sums, id: \.0) { nature, amt in
                     SummaryRow(nature: nature, amount: amt)
@@ -188,13 +184,14 @@ fileprivate struct YearBlock: View {
                 }
                 if stage == 1 {
                     HStack { Spacer()
-                        Text("Click again to view details »")
+                        Text("Click again to view months »")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
             }
 
+            // Drill into months
             if stage == 2 {
                 VStack(spacing: 12) {
                     ForEach(yearGroup.months) { mg in
@@ -208,11 +205,11 @@ fileprivate struct YearBlock: View {
     }
 }
 
-// MARK: – MonthBlock
+// MARK: – MonthBlock (3 stages)
 
 fileprivate struct MonthBlock: View {
     let monthGroup: MonthGroup
-    @State private var stage = 0
+    @State private var stage = 0    // 0=closed,1=summary,2=bonds
     @State private var isHovered = false
 
     private let order: [CashFlowEntity.Nature] = [.principal, .capitalGains, .interest]
@@ -227,6 +224,7 @@ fileprivate struct MonthBlock: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            // Header
             Button {
                 stage = (stage + 1) % 3
             } label: {
@@ -260,6 +258,7 @@ fileprivate struct MonthBlock: View {
             .onHover { isHovered = $0 }
             .help("")
 
+            // Summary rows
             if stage >= 1 {
                 ForEach(sums, id: \.0) { nature, amt in
                     SummaryRow(nature: nature, amount: amt)
@@ -267,18 +266,25 @@ fileprivate struct MonthBlock: View {
                 }
                 if stage == 1 {
                     HStack { Spacer()
-                        Text("Click again to view details »")
+                        Text("Click again to view bonds »")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
             }
 
+            // Drill into bonds—sorted by event date
             if stage == 2 {
+                let byBond = Dictionary(grouping: monthGroup.events) { $0.bondName }
+                let sortedBonds = byBond
+                    .map { (name: $0.key, events: $0.value) }
+                    .sorted { lhs, rhs in
+                        lhs.events.first!.date < rhs.events.first!.date
+                    }
+
                 VStack(spacing: 6) {
-                    let byBond = Dictionary(grouping: monthGroup.events) { $0.bondName }
-                    ForEach(byBond.keys.sorted(), id: \.self) { name in
-                        BondCardView(bondName: name, events: byBond[name]!)
+                    ForEach(sortedBonds, id: \.name) { entry in
+                        BondCardView(bondName: entry.name, events: entry.events)
                     }
                 }
                 .padding(.leading, 16)
@@ -288,31 +294,36 @@ fileprivate struct MonthBlock: View {
     }
 }
 
-// MARK: – BondCardView
+// MARK: – BondCardView (2 stages)
 
 fileprivate struct BondCardView: View {
     let bondName: String
     let events: [CouponEvent]
 
-    @State private var stage = 0
+    @State private var expanded = false
     @State private var isHovered = false
 
     private var total: Double { events.reduce(0) { $0 + $1.amount } }
     private var depotBank: String { events.first?.depotBank ?? "–" }
+    private var date: String {
+        Formatters.mediumDate.string(from: events.first?.date ?? Date())
+    }
 
     private let order: [CashFlowEntity.Nature] = [.principal, .capitalGains, .interest]
     private var sums: [(CashFlowEntity.Nature, Double)] {
         order.compactMap { n in
-            let total = events.filter { $0.nature == n }
-                              .reduce(0) { $0 + $1.amount }
-            return total != 0 ? (n, total) : nil
+            let sum = events
+                .filter { $0.nature == n }
+                .reduce(0) { $0 + $1.amount }
+            return sum != 0 ? (n, sum) : nil
         }
     }
 
     var body: some View {
         VStack(spacing: 8) {
+            // Header + date
             Button {
-                stage = (stage + 1) % 3
+                expanded.toggle()
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -327,9 +338,13 @@ fileprivate struct BondCardView: View {
                         .font(.system(.title3, design: .monospaced))
                         .foregroundColor(.white)
                     }
-                    Text(depotBank)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    HStack {
+                        Text(depotBank)
+                        Spacer()
+                        Text(date)
+                    }
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.8))
                 }
                 .padding()
                 .background(
@@ -349,45 +364,12 @@ fileprivate struct BondCardView: View {
             .onHover { isHovered = $0 }
             .help("")
 
-            if stage >= 1 {
+            // Only one level of summary
+            if expanded {
                 ForEach(sums, id: \.0) { nature, amt in
                     SummaryRow(nature: nature, amount: amt)
                         .padding(.leading, 12)
                 }
-                if stage == 1 {
-                    HStack { Spacer()
-                        Text("Click again to view details »")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-
-            if stage == 2 {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(
-                        Formatters.mediumDate
-                            .string(from: events.first?.date ?? Date())
-                    )
-                    .font(.system(.subheadline, design: .rounded))
-                    .foregroundColor(.secondary)
-
-                    ForEach(sums, id: \.0) { nature, amt in
-                        HStack {
-                            Image(systemName: nature.iconName)
-                            Text(nature.label + ":")
-                            Spacer()
-                            Text(
-                                Formatters.currency
-                                    .string(from: NSNumber(value: amt)) ?? "–"
-                            )
-                            .foregroundColor(nature.color)
-                        }
-                        .font(.system(.body, design: .rounded))
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
             }
         }
         .padding(.vertical, 4)
