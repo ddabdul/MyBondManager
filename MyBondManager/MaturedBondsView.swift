@@ -1,9 +1,6 @@
-//
 //  MaturedBondsView.swift
 //  MyBondManager
-//
-//  Presents a list of matured bonds (maturityDate < today) with inline delete and confirmation.
-//  Uses Core Data FetchRequest and SwiftUI Table for efficient rendering.
+//  Updated 06/05/2025 to use panelBackground and explicit column closures
 
 import SwiftUI
 import CoreData
@@ -45,7 +42,6 @@ struct MaturedBondsView: View {
             }
     }
 
-    /// The summary currently pending deletion
     @State private var summaryToDelete: BondSummary?
 
     var body: some View {
@@ -62,31 +58,31 @@ struct MaturedBondsView: View {
 
             // Table of summaries with inline delete
             Table(summaries) {
-                TableColumn("Issuer") { summary in
+                TableColumn("Issuer") { (summary: BondSummary) in
                     Text(summary.issuer)
                         .multilineTextAlignment(.leading)
                 }
                 .width(min: 120, ideal: 160, max: 240)
 
-                TableColumn("Nominal") { summary in
-                    Text(summary.formattedTotalParValue)
+                TableColumn("Nominal") { (summary: BondSummary) in
+                    Text(summary.formattedTotalNominal)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .width(min: 80, ideal: 100)
 
-                TableColumn("Coupon") { summary in
+                TableColumn("Coupon") { (summary: BondSummary) in
                     Text(summary.couponFormatted)
                         .multilineTextAlignment(.trailing)
                 }
                 .width(min: 60, ideal: 80)
 
-                TableColumn("Maturity") { summary in
+                TableColumn("Maturity Date") { (summary: BondSummary) in
                     Text(Formatters.shortDate.string(from: summary.maturityDate))
                         .multilineTextAlignment(.center)
                 }
                 .width(min: 80)
 
-                TableColumn("Actions") { summary in
+                TableColumn("Actions") { (summary: BondSummary) in
                     Button(role: .destructive) {
                         summaryToDelete = summary
                     } label: {
@@ -97,6 +93,8 @@ struct MaturedBondsView: View {
                 .width(min: 60)
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.panelBackground)
             .alert(item: $summaryToDelete) { summary in
                 Alert(
                     title: Text("Delete all entries for \(summary.issuer)?"),
@@ -125,6 +123,7 @@ struct MaturedBondsView: View {
             }
             .padding()
         }
+        .background(AppTheme.panelBackground)
         .frame(minWidth: 700, minHeight: 400)
     }
 }

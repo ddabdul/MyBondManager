@@ -1,6 +1,6 @@
 // MainTabView.swift
 // MyBondManager
-// Updated on 28/04/2025 to add manual cash‐flow recalculation
+// Updated on 01/05/2025 to apply consistent panel background
 
 import SwiftUI
 import CoreData
@@ -8,7 +8,7 @@ import CoreData
 struct MainTabView: View {
     @State private var showingMaturedSheet = false
     @State private var showingAddBondView = false
-    @State private var showingRecalcAlert = false   // ← new
+    @State private var showingRecalcAlert = false
 
     var body: some View {
         GeometryReader { geo in
@@ -16,11 +16,19 @@ struct MainTabView: View {
                 // ──────────────────────────────────
                 // Portfolio Tab
                 // ──────────────────────────────────
-                NavigationSplitView {
-                    PortfolioSummaryView()
-                        .frame(minWidth: geo.size.width / 3)
-                } detail: {
-                    BondTableView()
+                ZStack {
+                    // Underlay: same dark-grey panel background
+                    AppTheme.panelBackground
+                        .ignoresSafeArea()
+
+                    NavigationSplitView {
+                        PortfolioSummaryView()
+                            .frame(minWidth: geo.size.width / 3)
+                            .background(AppTheme.panelBackground)
+                    } detail: {
+                        BondTableView()
+                            .background(AppTheme.panelBackground)
+                    }
                 }
                 .navigationSplitViewColumnWidth(
                     min: geo.size.width / 3,
@@ -28,13 +36,11 @@ struct MainTabView: View {
                     max: geo.size.width * 0.5
                 )
                 .toolbar {
-                    // 1) Add-bond button
                     ToolbarItem(placement: .primaryAction) {
                         Button(action: { showingAddBondView = true }) {
                             Image(systemName: "plus")
                         }
                     }
-                    // 2) Matured-bonds button
                     ToolbarItem(placement: .primaryAction) {
                         Button(action: { showingMaturedSheet = true }) {
                             Label("Matured", systemImage: "clock.arrow.circlepath")
@@ -55,18 +61,24 @@ struct MainTabView: View {
                 // ──────────────────────────────────
                 // Cash-Flow Tab
                 // ──────────────────────────────────
-                NavigationSplitView {
-                    PortfolioSummaryView()
-                        .frame(minWidth: geo.size.width / 3)
-                } detail: {
-                    CashFlowView()
+                ZStack {
+                    AppTheme.panelBackground
+                        .ignoresSafeArea()
+
+                    NavigationSplitView {
+                        PortfolioSummaryView()
+                            .frame(minWidth: geo.size.width / 3)
+                            .background(AppTheme.panelBackground)
+                    } detail: {
+                        CashFlowView()
+                            .background(AppTheme.panelBackground)
+                    }
                 }
                 .navigationSplitViewColumnWidth(
                     min: geo.size.width / 3,
                     ideal: geo.size.width / 3,
                     max: geo.size.width * 0.5
                 )
-                // ← NEW TOOLBAR ITEM FOR MANUAL RECALC
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button(action: {
@@ -76,7 +88,6 @@ struct MainTabView: View {
                         }
                     }
                 }
-                // CONFIRMATION ALERT
                 .alert("Cash flows recalculated", isPresented: $showingRecalcAlert) {
                     Button("OK", role: .cancel) { }
                 }
@@ -84,7 +95,6 @@ struct MainTabView: View {
                     Label("Cash Flow", systemImage: "dollarsign.circle")
                 }
             }
-            // Inject the real viewContext for every child view
             .environment(
                 \.managedObjectContext,
                 PersistenceController.shared.container.viewContext
@@ -112,12 +122,10 @@ struct MainTabView: View {
                     try context.save()
                 }
 
-                // notify success on main thread
                 DispatchQueue.main.async {
                     showingRecalcAlert = true
                 }
             } catch {
-                // you might surface this more gracefully in UI
                 print("❗️ Error recalculating cash flows: \(error)")
             }
         }
