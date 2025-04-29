@@ -13,6 +13,13 @@
         <attribute name="parValue" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="wkn" attributeType="String"/>
         <attribute name="yieldToMaturity" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <relationship name="cashFlows" toMany="YES" deletionRule="Cascade" destinationEntity="CashFlowEntity" inverseName="bond" inverseEntity="CashFlowEntity"/>
+    </entity>
+    <entity name="CashFlowEntity" representedClassName="CashFlowEntity" syncable="YES">
+        <attribute name="amount" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="date" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="nature" attributeType="String"/>
+        <relationship name="bond" maxCount="1" deletionRule="Nullify" destinationEntity="BondEntity" inverseName="cashFlows" inverseEntity="BondEntity"/>
     </entity>
     <entity name="Item" representedClassName="Item" syncable="YES" codeGenerationType="class">
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>

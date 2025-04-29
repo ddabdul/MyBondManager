@@ -1,3 +1,9 @@
+// EditBondView.swift
+// MyBondManager
+// Added the cashflow calculation
+// Updated on 28/04/2025.
+
+
 import SwiftUI
 import CoreData
 
@@ -23,7 +29,6 @@ struct EditBondView: View {
     init(bond: BondEntity) {
         print("[EditBondView] init for bond ISIN: \(bond.isin)")
         self.bond = bond
-        // initialize the states from the bond object
         _name            = State(initialValue: bond.name)
         _issuer          = State(initialValue: bond.issuer)
         _isin            = State(initialValue: bond.isin)
@@ -45,12 +50,15 @@ struct EditBondView: View {
                 TextField("ISIN", text: $isin)
                 TextField("WKN", text: $wkn)
             }
+
             Section("Financials") {
                 TextField("Par Value", text: $parValue)
                 TextField("Initial Price", text: $initialPrice)
-                TextField("Coupon Rate", text: $couponRate)
-                TextField("Yield to Maturity", text: $yieldToMaturity)
+                TextField("Coupon Rate (%)", text: $couponRate)
+                TextField("Yield to Maturity (%)", text: $yieldToMaturity)
+                    .disabled(true) // we’ll recalc this
             }
+
             Section("Dates & Bank") {
                 DatePicker("Acquisition Date", selection: $acquisitionDate, displayedComponents: .date)
                 DatePicker("Maturity Date",    selection: $maturityDate,    displayedComponents: .date)
@@ -60,52 +68,63 @@ struct EditBondView: View {
             HStack {
                 Spacer()
                 Button("Cancel") {
-                    print("[EditBondView] Cancel tapped")
-                    DispatchQueue.main.async {
-                        print("[EditBondView] dismissing from Cancel")
-                        dismiss()
-                    }
+                    dismiss()
                 }
                 Button("Save") {
-                    print("[EditBondView] Save tapped")
                     saveChanges()
-                    DispatchQueue.main.async {
-                        print("[EditBondView] dismissing from Save")
-                        dismiss()
-                    }
+                    dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
             }
-        }
-        .onAppear {
-            print("[EditBondView] onAppear for bond ISIN: \(bond.isin)")
-        }
-        .onDisappear {
-            print("[EditBondView] onDisappear for bond ISIN: \(bond.isin)")
         }
         .padding()
         .frame(minWidth: 400, minHeight: 500)
     }
 
     private func saveChanges() {
-        print("[EditBondView] saveChanges() begin for bond ISIN: \(bond.isin)")
-        bond.name            = name
-        bond.issuer          = issuer
-        bond.isin            = isin
-        bond.wkn             = wkn
-        bond.parValue        = Double(parValue)       ?? bond.parValue
-        bond.initialPrice    = Double(initialPrice)   ?? bond.initialPrice
-        bond.couponRate      = Double(couponRate)     ?? bond.couponRate
-        bond.yieldToMaturity = Double(yieldToMaturity) ?? bond.yieldToMaturity
-        bond.depotBank       = depotBank
+        // 1️⃣ Update text fields
+        bond.name       = name
+        bond.issuer     = issuer
+        bond.isin       = isin
+        bond.wkn        = wkn
+        bond.depotBank  = depotBank
         bond.acquisitionDate = acquisitionDate
         bond.maturityDate    = maturityDate
 
+        // 2️⃣ Parse numeric inputs (fallback to existing if parsing fails)
+        let parVal      = Double(parValue)     ?? bond.parValue
+        let pricePaid   = Double(initialPrice) ?? bond.initialPrice
+        let couponPct   = Double(couponRate)   ?? bond.couponRate
+
+        bond.parValue     = parVal
+        bond.initialPrice = pricePaid
+        bond.couponRate   = couponPct
+
+        // 3️⃣ Recalculate YTM
+        let couponPayment = parVal * couponPct / 100.0
+        let secondsPerYear = 365 * 24 * 3600
+        let years = maturityDate.timeIntervalSince(acquisitionDate) / Double(secondsPerYear)
+
+        let newYTM: Double
+        if years > 0 {
+            let numerator   = couponPayment + (parVal - pricePaid) / years
+            let denominator = (parVal + pricePaid) / 2
+            newYTM = (numerator / denominator) * 100.0
+        } else {
+            newYTM = 0
+        }
+        bond.yieldToMaturity = newYTM
+
         do {
+            // 4️⃣ Regenerate cash flows with updated terms
+            let generator = CashFlowGenerator(context: moc)
+            try generator.regenerateCashFlows(for: bond)
+
+            // 5️⃣ Save everything in one shot
             try moc.save()
-            print("[EditBondView] moc.save() succeeded for bond ISIN: \(bond.isin)")
+            print("[EditBondView] Saved edits and recalculated YTM (\(String(format: "%.2f", newYTM))%) + cash flows")
         } catch {
-            print("[EditBondView] moc.save() failed: \(error.localizedDescription)")
+            print("[EditBondView] Error saving bond or regenerating cash flows: \(error)")
         }
     }
 }
