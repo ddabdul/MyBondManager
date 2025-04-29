@@ -12,19 +12,21 @@ struct CashFlowView: View {
 
     // Only load cash flows for bonds that haven't matured
     // and whose event date is today or later
-    @FetchRequest(
-        entity: CashFlowEntity.entity(),
-        sortDescriptors: [
-            NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)
-        ],
-        predicate: NSPredicate(
-            format: "bond.maturityDate >= %@ AND date >= %@",
-            Date() as NSDate,
-            Date() as NSDate
-        ),
-        animation: .default
-    )
-    private var cashFlowEntities: FetchedResults<CashFlowEntity>
+    // Only future flows for non-matured bonds, excluding expectedProfit entries
+        @FetchRequest(
+            entity: CashFlowEntity.entity(),
+            sortDescriptors: [
+                NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)
+            ],
+            predicate: NSPredicate(
+                format: "bond.maturityDate >= %@ AND date >= %@ AND nature != %@",
+                Date() as NSDate,
+                Date() as NSDate,
+                CashFlowEntity.Nature.expectedProfit.rawValue
+            ),
+            animation: .default
+        )
+        private var cashFlowEntities: FetchedResults<CashFlowEntity>
 
     // … rest of your CashFlowView unchanged …
 
