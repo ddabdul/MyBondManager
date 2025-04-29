@@ -1,8 +1,6 @@
-//  CashFlowEntity+CoreDataProperties.swift
-//  MyBondManager
-//
-//  Created by Olivier on 28/04/2025.
-//
+// CashFlowEntity+CoreDataProperties.swift
+// MyBondManager
+// Updated on 29/04/2025 to match Core Data model
 
 import Foundation
 import CoreData
@@ -10,16 +8,19 @@ import CoreData
 extension CashFlowEntity {
 
     @nonobjc public class func fetchRequest() -> NSFetchRequest<CashFlowEntity> {
-        return NSFetchRequest<CashFlowEntity>(entityName: "CashFlowEntity")
+        NSFetchRequest<CashFlowEntity>(entityName: "CashFlowEntity")
     }
 
-    // MARK: - Stored Properties (must match your .xcdatamodeld exactly)
+    // MARK: – Stored Properties (must match your .xcdatamodeld exactly)
     @NSManaged public var date: Date
     @NSManaged public var amount: Double
-    @NSManaged public var natureRaw: String
+
+    // Rename to match your attribute; if your model’s attribute is “nature”:
+    @NSManaged public var nature: String
+
     @NSManaged public var bond: BondEntity?
 
-    // MARK: - Typed Nature Enum
+    // MARK: – Typed Nature Enum
     public enum Nature: String, CaseIterable {
         case interest
         case principal
@@ -28,12 +29,11 @@ extension CashFlowEntity {
         case expectedProfit
     }
 
-    /// A Swift-native wrapper around the raw string.
-    public var nature: Nature {
-        get { Nature(rawValue: natureRaw) ?? .interest }
-        set { natureRaw = newValue.rawValue }
+    /// Type-safe wrapper around the raw string
+    public var natureEnum: Nature {
+        get { Nature(rawValue: nature) ?? .interest }
+        set { nature = newValue.rawValue }
     }
 }
 
 extension CashFlowEntity: Identifiable {}
-
