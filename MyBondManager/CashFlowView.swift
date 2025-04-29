@@ -1,9 +1,10 @@
 // CashFlowView.swift
-// MyBondManager
-// Redesigned on 02/05/2025: clickable headers, no disclosure arrows, no hover tooltips
+// MyBondManager (macOS only)
+// Updated 05/05/2025: remove iOS references, use NSColor exclusively
 
 import SwiftUI
 import CoreData
+import AppKit
 
 // MARK: – Model types & builder
 
@@ -18,54 +19,67 @@ fileprivate struct CouponEvent: Identifiable {
 
 fileprivate struct MonthGroup: Identifiable {
     let id: Date
-    let label: String     // "MM/yy"
-    let total: Double
+    let label: String      // "MM/yy"
+    let total: Double      // excludes capitalLoss
     let events: [CouponEvent]
 }
 
 fileprivate struct YearGroup: Identifiable {
     let id: Int
-    let label: String     // "YYYY"
-    let total: Double
+    let label: String      // "YYYY"
+    let total: Double      // excludes capitalLoss
     let months: [MonthGroup]
 
-    static func build(from cashFlows: FetchedResults<CashFlowEntity>,
-                      calendar: Calendar) -> [YearGroup] {
-        let events = cashFlows.map { cf in
-            CouponEvent(
+    static func build(
+        from cashFlows: FetchedResults<CashFlowEntity>,
+        calendar: Calendar
+    ) -> [YearGroup] {
+        // Map to CouponEvent and drop capitalLoss
+        let events = cashFlows.compactMap { cf -> CouponEvent? in
+            let nat = cf.natureEnum
+            guard nat != .capitalLoss else { return nil }
+            return CouponEvent(
                 bondName: cf.bond?.name ?? "–",
                 depotBank: cf.bond?.depotBank ?? "–",
                 date: cf.date,
                 amount: cf.amount,
-                nature: cf.natureEnum
+                nature: nat
             )
         }
+
+        // Group by year
         let byYear = Dictionary(grouping: events) {
             calendar.component(.year, from: $0.date)
         }
+
+        // Build YearGroup
         return byYear.map { year, evts in
             let totalYear = evts.reduce(0) { $0 + $1.amount }
+
+            // Group by month
             let byMonth = Dictionary(grouping: evts) { evt in
                 let comps = calendar.dateComponents([.year, .month], from: evt.date)
                 return calendar.date(from: comps)!
             }
             let monthGroups = byMonth.map { period, mes in
                 let totalMonth = mes.reduce(0) { $0 + $1.amount }
-                let sorted = mes.sorted { $0.date < $1.date }
                 return MonthGroup(
                     id: period,
                     label: Formatters.monthYear.string(from: period),
                     total: totalMonth,
-                    events: sorted
+                    events: mes.sorted { $0.date < $1.date }
                 )
-            }.sorted { $0.id < $1.id }
+            }
+            .sorted { $0.id < $1.id }
+
             return YearGroup(
                 id: year,
                 label: String(year),
                 total: totalYear,
                 months: monthGroups
             )
-        }.sorted { $0.id < $1.id }
+        }
+        .sorted { $0.id < $1.id }
     }
 }
 
@@ -74,7 +88,7 @@ fileprivate struct YearGroup: Identifiable {
 struct CashFlowView: View {
     @Environment(\.managedObjectContext) private var moc
 
-    // Only future cash flows (excluding expectedProfit)
+    /// Fetch only future cash flows, excluding expectedProfit
     @FetchRequest(
         entity: CashFlowEntity.entity(),
         sortDescriptors: [ NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true) ],
@@ -88,117 +102,103 @@ struct CashFlowView: View {
     )
     private var cashFlows: FetchedResults<CashFlowEntity>
 
-    @State private var expandedYears: Set<Int> = []
-    @State private var expandedMonths: Set<Date> = []
-
     private var yearGroups: [YearGroup] {
         YearGroup.build(from: cashFlows, calendar: .current)
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
+            VStack(spacing: 16) {
+                Text("Cash Flows")
+                    .font(.system(.largeTitle, design: .rounded))
+                    .foregroundColor(.primary)
+                    .padding(.top)
+
                 ForEach(yearGroups) { yg in
-                    YearBlock(
-                        yearGroup: yg,
-                        expandedYears: $expandedYears,
-                        expandedMonths: $expandedMonths
-                    )
+                    YearBlock(yearGroup: yg)
                 }
             }
-            .padding()
-            .background(Color(hex: 0x1C1C1E)) // deep charcoal background
+            .padding(.horizontal)
         }
-    }
-
-    private var header: some View {
-        HStack {
-            Text("Cash Flows")
-                .font(.system(.largeTitle, design: .rounded))
-                .foregroundColor(.white)
-            Spacer()
-            HStack(spacing: 8) {
-                Button("Expand All") {
-                    withAnimation(.spring()) {
-                        expandedYears = Set(yearGroups.map(\.id))
-                        expandedMonths = Set(yearGroups.flatMap { $0.months.map(\.id) })
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .help("") // disable tooltip
-
-                Button("Collapse All") {
-                    withAnimation(.spring()) {
-                        expandedYears.removeAll()
-                        expandedMonths.removeAll()
-                    }
-                }
-                .buttonStyle(.bordered)
-                .help("")
-            }
-        }
-        .padding(.horizontal)
+        .background(
+            Color(nsColor: .windowBackgroundColor)
+                .edgesIgnoringSafeArea(.all)
+        )
     }
 }
 
-// MARK: – YearBlock (clickable, no arrow)
+// MARK: – YearBlock
 
 fileprivate struct YearBlock: View {
     let yearGroup: YearGroup
-    @Binding var expandedYears: Set<Int>
-    @Binding var expandedMonths: Set<Date>
-
+    @State private var stage = 0    // 0=closed,1=summary,2=months
     @State private var isHovered = false
 
-    private var isExpanded: Bool {
-        expandedYears.contains(yearGroup.id)
+    private let order: [CashFlowEntity.Nature] = [.principal, .capitalGains, .interest]
+    private var sums: [(CashFlowEntity.Nature, Double)] {
+        order.compactMap { n in
+            let total = yearGroup.months
+                .flatMap { $0.events }
+                .filter { $0.nature == n }
+                .reduce(0) { $0 + $1.amount }
+            return total != 0 ? (n, total) : nil
+        }
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             Button {
-                withAnimation(.spring()) {
-                    if isExpanded { expandedYears.remove(yearGroup.id) }
-                    else          { expandedYears.insert(yearGroup.id) }
-                }
+                stage = (stage + 1) % 3
             } label: {
                 HStack {
                     Text(yearGroup.label)
                         .font(.system(.title2, design: .rounded))
                         .foregroundColor(.white)
                     Spacer()
-                    Text(Formatters.currency.string(from: NSNumber(value: yearGroup.total)) ?? "–")
-                        .font(.system(.title2, design: .monospaced))
-                        .foregroundColor(.white)
+                    Text(
+                        Formatters.currency
+                            .string(from: NSNumber(value: yearGroup.total)) ?? "–"
+                    )
+                    .font(.system(.title2, design: .monospaced))
+                    .foregroundColor(.white)
                 }
                 .padding()
                 .background(
                     LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(hex: 0x6B5BFF),
-                            Color(hex: 0x4A90E2)
-                        ]),
-                        startPoint: .leading,
-                        endPoint: .trailing
+                        gradient: Gradient(colors: [Color.indigo, Color.blue]),
+                        startPoint: .leading, endPoint: .trailing
                     )
                 )
-                .cornerRadius(16)
-                .shadow(color: Color.black.opacity(isHovered ? 0.4 : 0.2),
-                        radius: isHovered ? 8 : 4, x: 0, y: 4)
+                .cornerRadius(12)
+                .shadow(
+                    color: .black.opacity(isHovered ? 0.4 : 0.2),
+                    radius: isHovered ? 8 : 4,
+                    x: 0, y: 4
+                )
                 .scaleEffect(isHovered ? 1.02 : 1.0)
             }
             .buttonStyle(.plain)
             .onHover { isHovered = $0 }
             .help("")
 
-            if isExpanded {
+            if stage >= 1 {
+                ForEach(sums, id: \.0) { nature, amt in
+                    SummaryRow(nature: nature, amount: amt)
+                        .padding(.leading, 12)
+                }
+                if stage == 1 {
+                    HStack { Spacer()
+                        Text("Click again to view details »")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            if stage == 2 {
                 VStack(spacing: 12) {
                     ForEach(yearGroup.months) { mg in
-                        MonthBlock(
-                            monthGroup: mg,
-                            expandedMonths: $expandedMonths
-                        )
+                        MonthBlock(monthGroup: mg)
                     }
                 }
                 .padding(.leading, 16)
@@ -212,53 +212,70 @@ fileprivate struct YearBlock: View {
 
 fileprivate struct MonthBlock: View {
     let monthGroup: MonthGroup
-    @Binding var expandedMonths: Set<Date>
-
+    @State private var stage = 0
     @State private var isHovered = false
 
-    private var isExpanded: Bool {
-        expandedMonths.contains(monthGroup.id)
+    private let order: [CashFlowEntity.Nature] = [.principal, .capitalGains, .interest]
+    private var sums: [(CashFlowEntity.Nature, Double)] {
+        order.compactMap { n in
+            let total = monthGroup.events
+                .filter { $0.nature == n }
+                .reduce(0) { $0 + $1.amount }
+            return total != 0 ? (n, total) : nil
+        }
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             Button {
-                withAnimation(.spring()) {
-                    if isExpanded { expandedMonths.remove(monthGroup.id) }
-                    else          { expandedMonths.insert(monthGroup.id) }
-                }
+                stage = (stage + 1) % 3
             } label: {
                 HStack {
                     Text(monthGroup.label)
                         .font(.system(.headline, design: .rounded))
                         .foregroundColor(.white)
                     Spacer()
-                    Text(Formatters.currency.string(from: NSNumber(value: monthGroup.total)) ?? "–")
-                        .font(.system(.headline, design: .monospaced))
-                        .foregroundColor(.white)
+                    Text(
+                        Formatters.currency
+                            .string(from: NSNumber(value: monthGroup.total)) ?? "–"
+                    )
+                    .font(.system(.headline, design: .monospaced))
+                    .foregroundColor(.white)
                 }
                 .padding()
                 .background(
                     LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(hex: 0x2C2C2E),
-                            Color(hex: 0x3D3D47)
-                        ]),
-                        startPoint: .leading,
-                        endPoint: .trailing
+                        gradient: Gradient(colors: [Color.teal, Color.green]),
+                        startPoint: .leading, endPoint: .trailing
                     )
                 )
-                .cornerRadius(16)
-                .shadow(color: Color.black.opacity(isHovered ? 0.3 : 0.15),
-                        radius: isHovered ? 6 : 3, x: 0, y: 3)
+                .cornerRadius(12)
+                .shadow(
+                    color: .black.opacity(isHovered ? 0.3 : 0.15),
+                    radius: isHovered ? 6 : 3, x: 0, y: 3
+                )
                 .scaleEffect(isHovered ? 1.015 : 1.0)
             }
             .buttonStyle(.plain)
             .onHover { isHovered = $0 }
             .help("")
 
-            if isExpanded {
-                VStack(spacing: 12) {
+            if stage >= 1 {
+                ForEach(sums, id: \.0) { nature, amt in
+                    SummaryRow(nature: nature, amount: amt)
+                        .padding(.leading, 12)
+                }
+                if stage == 1 {
+                    HStack { Spacer()
+                        Text("Click again to view details »")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            if stage == 2 {
+                VStack(spacing: 6) {
                     let byBond = Dictionary(grouping: monthGroup.events) { $0.bondName }
                     ForEach(byBond.keys.sorted(), id: \.self) { name in
                         BondCardView(bondName: name, events: byBond[name]!)
@@ -277,17 +294,25 @@ fileprivate struct BondCardView: View {
     let bondName: String
     let events: [CouponEvent]
 
-    @State private var expanded = false
+    @State private var stage = 0
     @State private var isHovered = false
 
     private var total: Double { events.reduce(0) { $0 + $1.amount } }
     private var depotBank: String { events.first?.depotBank ?? "–" }
-    private var date: Date { events.first?.date ?? Date() }
+
+    private let order: [CashFlowEntity.Nature] = [.principal, .capitalGains, .interest]
+    private var sums: [(CashFlowEntity.Nature, Double)] {
+        order.compactMap { n in
+            let total = events.filter { $0.nature == n }
+                              .reduce(0) { $0 + $1.amount }
+            return total != 0 ? (n, total) : nil
+        }
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             Button {
-                withAnimation(.easeInOut) { expanded.toggle() }
+                stage = (stage + 1) % 3
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -295,9 +320,12 @@ fileprivate struct BondCardView: View {
                             .font(.system(.headline, design: .rounded))
                             .foregroundColor(.white)
                         Spacer()
-                        Text(Formatters.currency.string(from: NSNumber(value: total)) ?? "–")
-                            .font(.system(.title3, design: .monospaced))
-                            .foregroundColor(.white)
+                        Text(
+                            Formatters.currency
+                                .string(from: NSNumber(value: total)) ?? "–"
+                        )
+                        .font(.system(.title3, design: .monospaced))
+                        .foregroundColor(.white)
                     }
                     Text(depotBank)
                         .font(.caption)
@@ -306,36 +334,54 @@ fileprivate struct BondCardView: View {
                 .padding()
                 .background(
                     LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(hex: 0x2A2A2E),
-                            Color(hex: 0x414149)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+                        gradient: Gradient(colors: [Color.orange, Color.red]),
+                        startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                 )
-                .cornerRadius(16)
-                .shadow(color: Color.black.opacity(isHovered ? 0.25 : 0.1),
-                        radius: isHovered ? 4 : 2, x: 0, y: 2)
+                .cornerRadius(12)
+                .shadow(
+                    color: .black.opacity(isHovered ? 0.25 : 0.1),
+                    radius: isHovered ? 4 : 2, x: 0, y: 2
+                )
                 .scaleEffect(isHovered ? 1.01 : 1.0)
             }
             .buttonStyle(.plain)
             .onHover { isHovered = $0 }
             .help("")
 
-            if expanded {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(Formatters.mediumDate.string(from: date))
-                        .font(.system(.subheadline, design: .rounded))
-                        .foregroundColor(.secondary)
+            if stage >= 1 {
+                ForEach(sums, id: \.0) { nature, amt in
+                    SummaryRow(nature: nature, amount: amt)
+                        .padding(.leading, 12)
+                }
+                if stage == 1 {
+                    HStack { Spacer()
+                        Text("Click again to view details »")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
 
-                    ForEach(events.sorted(by: { $0.nature.rawValue < $1.nature.rawValue })) { e in
+            if stage == 2 {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(
+                        Formatters.mediumDate
+                            .string(from: events.first?.date ?? Date())
+                    )
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundColor(.secondary)
+
+                    ForEach(sums, id: \.0) { nature, amt in
                         HStack {
-                            Image(systemName: e.nature.iconName)
-                            Text(e.nature.label + ":")
+                            Image(systemName: nature.iconName)
+                            Text(nature.label + ":")
                             Spacer()
-                            Text(Formatters.currency.string(from: NSNumber(value: e.amount)) ?? "–")
-                                .foregroundColor(e.nature.color)
+                            Text(
+                                Formatters.currency
+                                    .string(from: NSNumber(value: amt)) ?? "–"
+                            )
+                            .foregroundColor(nature.color)
                         }
                         .font(.system(.body, design: .rounded))
                     }
@@ -348,7 +394,30 @@ fileprivate struct BondCardView: View {
     }
 }
 
-// MARK: – Helpers
+// MARK: – SummaryRow
+
+fileprivate struct SummaryRow: View {
+    let nature: CashFlowEntity.Nature
+    let amount: Double
+
+    var body: some View {
+        HStack {
+            Image(systemName: nature.iconName)
+                .foregroundColor(nature.color)
+            Text(nature.label + ":")
+            Spacer()
+            Text(
+                Formatters.currency
+                    .string(from: NSNumber(value: amount)) ?? "–"
+            )
+            .foregroundColor(nature.color)
+            .font(.system(.body, design: .monospaced))
+        }
+        .font(.system(.caption, design: .rounded))
+    }
+}
+
+// MARK: – Nature helpers
 
 private extension CashFlowEntity.Nature {
     var iconName: String {
@@ -356,7 +425,6 @@ private extension CashFlowEntity.Nature {
         case .interest:     return "arrow.down.circle"
         case .principal:    return "banknote"
         case .capitalGains: return "arrow.up.circle"
-        case .capitalLoss:  return "arrow.down.circle.fill"
         default:            return "questionmark"
         }
     }
@@ -365,37 +433,15 @@ private extension CashFlowEntity.Nature {
         case .interest:     return "Interest"
         case .principal:    return "Principal"
         case .capitalGains: return "Capital gain"
-        case .capitalLoss:  return "Capital loss"
         default:            return rawValue.capitalized
         }
     }
     var color: Color {
         switch self {
-        case .interest:     return Color(hex: 0x34C759)
-        case .principal:    return Color(hex: 0x5E5CE6)
-        case .capitalGains: return Color(hex: 0xFFD60A)
-        case .capitalLoss:  return Color(hex: 0xFF453A)
+        case .interest:     return .green
+        case .principal:    return .primary
+        case .capitalGains: return .yellow
         default:            return .secondary
         }
-    }
-}
-
-extension Color {
-    /// Initialize with 0xRRGGBB hex value
-    init(hex: UInt, alpha: Double = 1) {
-        let r = Double((hex >> 16) & 0xFF) / 255
-        let g = Double((hex >>  8) & 0xFF) / 255
-        let b = Double( hex        & 0xFF) / 255
-        self.init(.sRGB, red: r, green: g, blue: b, opacity: alpha)
-    }
-}
-
-// MARK: – Preview
-
-struct CashFlowView_Previews: PreviewProvider {
-    static var previews: some View {
-        CashFlowView()
-            .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
-            .frame(minWidth: 800, minHeight: 600)
     }
 }
