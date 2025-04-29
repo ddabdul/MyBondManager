@@ -24,6 +24,8 @@ extension CashFlowEntity {
         case interest
         case principal
         case capitalGains
+        case capitalLoss
+        case expectedProfit
     }
 
     /// A Swift-native wrapper around the raw string.

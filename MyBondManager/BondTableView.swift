@@ -210,7 +210,7 @@ struct BondSummaryDetailView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Nominal: \(bond.parValueFormatted)")
                             Text("Price:   \(bond.acquisitionPriceFormatted)")
-                            Text("Date:    \(bond.acquisitionDateFormatted)")
+                            Text("Acquisition:    \(bond.acquisitionDateFormatted)")
                             Text("Bank:    \(bond.depotBank)")
                             Text("YTM:     \(bond.ytmFormatted)")
                         }

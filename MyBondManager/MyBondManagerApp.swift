@@ -22,7 +22,7 @@ struct BondPortfolioManagerApp: App {
         _notifier = StateObject(wrappedValue: LaunchNotifier(context: context))
 
         // 3) Run one-off CashFlow migration to seed existing bonds
-        CashFlowMigration.performIfNeeded()
+        //       CashFlowMigration.performIfNeeded()
     }
 
     var body: some Scene {
