@@ -1,6 +1,6 @@
 // CashFlowView.swift
 // MyBondManager
-// Redesigned on 02/05/2025 with upgraded colors, fonts, layout & hover effects
+// Redesigned on 02/05/2025: clickable headers, no disclosure arrows, no hover tooltips
 
 import SwiftUI
 import CoreData
@@ -31,7 +31,6 @@ fileprivate struct YearGroup: Identifiable {
 
     static func build(from cashFlows: FetchedResults<CashFlowEntity>,
                       calendar: Calendar) -> [YearGroup] {
-        // Map to CouponEvent
         let events = cashFlows.map { cf in
             CouponEvent(
                 bondName: cf.bond?.name ?? "–",
@@ -41,14 +40,11 @@ fileprivate struct YearGroup: Identifiable {
                 nature: cf.natureEnum
             )
         }
-        // Group by year
         let byYear = Dictionary(grouping: events) {
             calendar.component(.year, from: $0.date)
         }
-        // Build YearGroups
         return byYear.map { year, evts in
             let totalYear = evts.reduce(0) { $0 + $1.amount }
-            // Group by month
             let byMonth = Dictionary(grouping: evts) { evt in
                 let comps = calendar.dateComponents([.year, .month], from: evt.date)
                 return calendar.date(from: comps)!
@@ -78,7 +74,7 @@ fileprivate struct YearGroup: Identifiable {
 struct CashFlowView: View {
     @Environment(\.managedObjectContext) private var moc
 
-    // Exclude expectedProfit events
+    // Only future cash flows (excluding expectedProfit)
     @FetchRequest(
         entity: CashFlowEntity.entity(),
         sortDescriptors: [ NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true) ],
@@ -112,7 +108,7 @@ struct CashFlowView: View {
                 }
             }
             .padding()
-            .background(Color(hex: 0x1C1C1E)) // deep charcoal bg
+            .background(Color(hex: 0x1C1C1E)) // deep charcoal background
         }
     }
 
@@ -130,6 +126,8 @@ struct CashFlowView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .help("") // disable tooltip
+
                 Button("Collapse All") {
                     withAnimation(.spring()) {
                         expandedYears.removeAll()
@@ -137,69 +135,74 @@ struct CashFlowView: View {
                     }
                 }
                 .buttonStyle(.bordered)
+                .help("")
             }
         }
         .padding(.horizontal)
     }
 }
 
-// MARK: – YearBlock
+// MARK: – YearBlock (clickable, no arrow)
 
 fileprivate struct YearBlock: View {
     let yearGroup: YearGroup
     @Binding var expandedYears: Set<Int>
     @Binding var expandedMonths: Set<Date>
 
-    // gradient: purple→blue
-    private let gradient = LinearGradient(
-        gradient: Gradient(colors: [
-            Color(hex: 0x6B5BFF),
-            Color(hex: 0x4A90E2)
-        ]),
-        startPoint: .leading,
-        endPoint: .trailing
-    )
     @State private var isHovered = false
 
+    private var isExpanded: Bool {
+        expandedYears.contains(yearGroup.id)
+    }
+
     var body: some View {
-        DisclosureGroup(
-            isExpanded: Binding(
-                get: { expandedYears.contains(yearGroup.id) },
-                set: { open in
-                    withAnimation(.spring()) {
-                        if open { expandedYears.insert(yearGroup.id) }
-                        else     { expandedYears.remove(yearGroup.id) }
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.spring()) {
+                    if isExpanded { expandedYears.remove(yearGroup.id) }
+                    else          { expandedYears.insert(yearGroup.id) }
+                }
+            } label: {
+                HStack {
+                    Text(yearGroup.label)
+                        .font(.system(.title2, design: .rounded))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Text(Formatters.currency.string(from: NSNumber(value: yearGroup.total)) ?? "–")
+                        .font(.system(.title2, design: .monospaced))
+                        .foregroundColor(.white)
+                }
+                .padding()
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color(hex: 0x6B5BFF),
+                            Color(hex: 0x4A90E2)
+                        ]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(16)
+                .shadow(color: Color.black.opacity(isHovered ? 0.4 : 0.2),
+                        radius: isHovered ? 8 : 4, x: 0, y: 4)
+                .scaleEffect(isHovered ? 1.02 : 1.0)
+            }
+            .buttonStyle(.plain)
+            .onHover { isHovered = $0 }
+            .help("")
+
+            if isExpanded {
+                VStack(spacing: 12) {
+                    ForEach(yearGroup.months) { mg in
+                        MonthBlock(
+                            monthGroup: mg,
+                            expandedMonths: $expandedMonths
+                        )
                     }
                 }
-            )
-        ) {
-            VStack(spacing: 12) {
-                ForEach(yearGroup.months) { mg in
-                    MonthBlock(
-                        monthGroup: mg,
-                        expandedMonths: $expandedMonths
-                    )
-                }
+                .padding(.leading, 16)
             }
-            .padding(.leading, 16)
-        } label: {
-            HStack {
-                Text(yearGroup.label)
-                    .font(.system(.title2, design: .rounded))
-                    .foregroundColor(.white)
-                Spacer()
-                Text(Formatters.currency.string(from: NSNumber(value: yearGroup.total)) ?? "–")
-                    .font(.system(.title2, design: .monospaced))
-                    .foregroundColor(.white)
-            }
-            .padding()
-            .background(gradient)
-            .cornerRadius(16)
-            .shadow(color: Color.black.opacity(isHovered ? 0.4 : 0.2),
-                    radius: isHovered ? 8 : 4,
-                    x: 0, y: 4)
-            .scaleEffect(isHovered ? 1.02 : 1.0)
-            .onHover { isHovered = $0 }
         }
         .padding(.horizontal)
     }
@@ -211,57 +214,58 @@ fileprivate struct MonthBlock: View {
     let monthGroup: MonthGroup
     @Binding var expandedMonths: Set<Date>
 
-    // gradient: gray→indigo
-    private let gradient = LinearGradient(
-        gradient: Gradient(colors: [
-            Color(hex: 0x2C2C2E),
-            Color(hex: 0x3D3D47)
-        ]),
-        startPoint: .leading,
-        endPoint: .trailing
-    )
     @State private var isHovered = false
 
+    private var isExpanded: Bool {
+        expandedMonths.contains(monthGroup.id)
+    }
+
     var body: some View {
-        DisclosureGroup(
-            isExpanded: Binding(
-                get: { expandedMonths.contains(monthGroup.id) },
-                set: { open in
-                    withAnimation(.spring()) {
-                        if open { expandedMonths.insert(monthGroup.id) }
-                        else     { expandedMonths.remove(monthGroup.id) }
-                    }
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.spring()) {
+                    if isExpanded { expandedMonths.remove(monthGroup.id) }
+                    else          { expandedMonths.insert(monthGroup.id) }
                 }
-            )
-        ) {
-            VStack(spacing: 12) {
-                // group by bond
-                let byBond = Dictionary(grouping: monthGroup.events) { $0.bondName }
-                ForEach(byBond.keys.sorted(), id: \.self) { name in
-                    if let evts = byBond[name] {
-                        BondCardView(bondName: name, events: evts)
-                    }
+            } label: {
+                HStack {
+                    Text(monthGroup.label)
+                        .font(.system(.headline, design: .rounded))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Text(Formatters.currency.string(from: NSNumber(value: monthGroup.total)) ?? "–")
+                        .font(.system(.headline, design: .monospaced))
+                        .foregroundColor(.white)
                 }
+                .padding()
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color(hex: 0x2C2C2E),
+                            Color(hex: 0x3D3D47)
+                        ]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(16)
+                .shadow(color: Color.black.opacity(isHovered ? 0.3 : 0.15),
+                        radius: isHovered ? 6 : 3, x: 0, y: 3)
+                .scaleEffect(isHovered ? 1.015 : 1.0)
             }
-            .padding(.leading, 16)
-        } label: {
-            HStack {
-                Text(monthGroup.label)
-                    .font(.system(.headline, design: .rounded))
-                    .foregroundColor(.white)
-                Spacer()
-                Text(Formatters.currency.string(from: NSNumber(value: monthGroup.total)) ?? "–")
-                    .font(.system(.headline, design: .monospaced))
-                    .foregroundColor(.white)
-            }
-            .padding()
-            .background(gradient)
-            .cornerRadius(16)
-            .shadow(color: Color.black.opacity(isHovered ? 0.3 : 0.15),
-                    radius: isHovered ? 6 : 3,
-                    x: 0, y: 3)
-            .scaleEffect(isHovered ? 1.015 : 1.0)
+            .buttonStyle(.plain)
             .onHover { isHovered = $0 }
+            .help("")
+
+            if isExpanded {
+                VStack(spacing: 12) {
+                    let byBond = Dictionary(grouping: monthGroup.events) { $0.bondName }
+                    ForEach(byBond.keys.sorted(), id: \.self) { name in
+                        BondCardView(bondName: name, events: byBond[name]!)
+                    }
+                }
+                .padding(.leading, 16)
+            }
         }
         .padding(.horizontal, 24)
     }
@@ -280,64 +284,75 @@ fileprivate struct BondCardView: View {
     private var depotBank: String { events.first?.depotBank ?? "–" }
     private var date: Date { events.first?.date ?? Date() }
 
-    // gradient: dark slate
-    private let gradient = LinearGradient(
-        gradient: Gradient(colors: [
-            Color(hex: 0x2A2A2E),
-            Color(hex: 0x414149)
-        ]),
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-
     var body: some View {
-        DisclosureGroup(isExpanded: $expanded) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(Formatters.mediumDate.string(from: date))
-                    .font(.system(.subheadline, design: .rounded))
-                    .foregroundColor(.secondary)
-
-                ForEach(events.sorted(by: { $0.nature.rawValue < $1.nature.rawValue })) { e in
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut) { expanded.toggle() }
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Image(systemName: iconName(for: e.nature))
-                        Text(label(for: e.nature) + ":")
+                        Text(bondName)
+                            .font(.system(.headline, design: .rounded))
+                            .foregroundColor(.white)
                         Spacer()
-                        Text(Formatters.currency.string(from: NSNumber(value: e.amount)) ?? "–")
+                        Text(Formatters.currency.string(from: NSNumber(value: total)) ?? "–")
+                            .font(.system(.title3, design: .monospaced))
+                            .foregroundColor(.white)
                     }
-                    .font(.system(.body, design: .rounded))
-                    .foregroundColor(color(for: e.nature))
+                    Text(depotBank)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
+                .padding()
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color(hex: 0x2A2A2E),
+                            Color(hex: 0x414149)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .cornerRadius(16)
+                .shadow(color: Color.black.opacity(isHovered ? 0.25 : 0.1),
+                        radius: isHovered ? 4 : 2, x: 0, y: 2)
+                .scaleEffect(isHovered ? 1.01 : 1.0)
             }
-            .padding(.top, 8)
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(bondName)
-                        .font(.system(.headline, design: .rounded))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Text(Formatters.currency.string(from: NSNumber(value: total)) ?? "–")
-                        .font(.system(.title3, design: .monospaced))
-                        .foregroundColor(.white)
-                }
-                Text(depotBank)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding()
-            .background(gradient)
-            .cornerRadius(16)
-            .shadow(color: Color.black.opacity(isHovered ? 0.25 : 0.1),
-                    radius: isHovered ? 4 : 2,
-                    x: 0, y: 2)
-            .scaleEffect(isHovered ? 1.01 : 1.0)
+            .buttonStyle(.plain)
             .onHover { isHovered = $0 }
+            .help("")
+
+            if expanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(Formatters.mediumDate.string(from: date))
+                        .font(.system(.subheadline, design: .rounded))
+                        .foregroundColor(.secondary)
+
+                    ForEach(events.sorted(by: { $0.nature.rawValue < $1.nature.rawValue })) { e in
+                        HStack {
+                            Image(systemName: e.nature.iconName)
+                            Text(e.nature.label + ":")
+                            Spacer()
+                            Text(Formatters.currency.string(from: NSNumber(value: e.amount)) ?? "–")
+                                .foregroundColor(e.nature.color)
+                        }
+                        .font(.system(.body, design: .rounded))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
         }
         .padding(.vertical, 4)
     }
+}
 
-    private func iconName(for nature: CashFlowEntity.Nature) -> String {
-        switch nature {
+// MARK: – Helpers
+
+private extension CashFlowEntity.Nature {
+    var iconName: String {
+        switch self {
         case .interest:     return "arrow.down.circle"
         case .principal:    return "banknote"
         case .capitalGains: return "arrow.up.circle"
@@ -345,9 +360,17 @@ fileprivate struct BondCardView: View {
         default:            return "questionmark"
         }
     }
-
-    private func color(for nature: CashFlowEntity.Nature) -> Color {
-        switch nature {
+    var label: String {
+        switch self {
+        case .interest:     return "Interest"
+        case .principal:    return "Principal"
+        case .capitalGains: return "Capital gain"
+        case .capitalLoss:  return "Capital loss"
+        default:            return rawValue.capitalized
+        }
+    }
+    var color: Color {
+        switch self {
         case .interest:     return Color(hex: 0x34C759)
         case .principal:    return Color(hex: 0x5E5CE6)
         case .capitalGains: return Color(hex: 0xFFD60A)
@@ -355,26 +378,14 @@ fileprivate struct BondCardView: View {
         default:            return .secondary
         }
     }
-
-    private func label(for nature: CashFlowEntity.Nature) -> String {
-        switch nature {
-        case .interest:     return "Interest"
-        case .principal:    return "Principal"
-        case .capitalGains: return "Capital gain"
-        case .capitalLoss:  return "Capital loss"
-        default:            return nature.rawValue.capitalized
-        }
-    }
 }
 
-// MARK: – Color helper
-
 extension Color {
-    /// Create from hex 0xRRGGBB
+    /// Initialize with 0xRRGGBB hex value
     init(hex: UInt, alpha: Double = 1) {
         let r = Double((hex >> 16) & 0xFF) / 255
-        let g = Double((hex >> 8)  & 0xFF) / 255
-        let b = Double(hex         & 0xFF) / 255
+        let g = Double((hex >>  8) & 0xFF) / 255
+        let b = Double( hex        & 0xFF) / 255
         self.init(.sRGB, red: r, green: g, blue: b, opacity: alpha)
     }
 }
