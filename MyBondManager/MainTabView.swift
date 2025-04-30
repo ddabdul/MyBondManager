@@ -95,7 +95,7 @@ struct MainTabView: View {
                             .frame(minWidth: geo.size.width / 3)
                             .background(AppTheme.panelBackground)
                     } detail: {
-                        ETFTestView()  // or whatever detail you need
+                        AddHoldingView()  // or whatever detail you need
                             .background(AppTheme.panelBackground)
                     }
                     .navigationSplitViewColumnWidth(
