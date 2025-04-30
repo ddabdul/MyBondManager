@@ -16,10 +16,10 @@ extension ETFHoldings {
         return NSFetchRequest<ETFHoldings>(entityName: "ETFHoldings")
     }
 
-    @NSManaged public var acquisitionDate: Date?
+    @NSManaged public var acquisitionDate: Date
     @NSManaged public var acquisitionPrice: Double
     @NSManaged public var numberOfShares: Int32
-    @NSManaged public var holdingtoetf: ETFEntity?
+    @NSManaged public var holdingtoetf: ETFEntity
 
 }
 

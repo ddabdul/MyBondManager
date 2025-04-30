@@ -16,14 +16,14 @@ extension ETFEntity {
         return NSFetchRequest<ETFEntity>(entityName: "ETFEntity")
     }
 
-    @NSManaged public var etfName: String?
-    @NSManaged public var isin: String?
-    @NSManaged public var id: UUID?
-    @NSManaged public var wkn: String?
+    @NSManaged public var etfName: String
+    @NSManaged public var isin: String
+    @NSManaged public var id: UUID
+    @NSManaged public var wkn: String
     @NSManaged public var lastPrice: Double
-    @NSManaged public var issuer: String?
-    @NSManaged public var etftoholding: NSSet?
-    @NSManaged public var etfPriceMany: NSSet?
+    @NSManaged public var issuer: String
+    @NSManaged public var etftoholding: NSSet
+    @NSManaged public var etfPriceMany: NSSet
 
 }
 

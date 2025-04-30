@@ -16,9 +16,9 @@ extension ETFPrice {
         return NSFetchRequest<ETFPrice>(entityName: "ETFPrice")
     }
 
-    @NSManaged public var datePrice: Date?
+    @NSManaged public var datePrice: Date
     @NSManaged public var price: Double
-    @NSManaged public var etfPriceHistory: ETFEntity?
+    @NSManaged public var etfPriceHistory: ETFEntity
 
 }
 
