@@ -1,11 +1,12 @@
-// CashFlowView.swift
-// MyBondManager (macOS only)
-// Updated 07/05/2025: bonds within each month now sorted chronologically
-// End date initialized one year from today; date‐pickers clamped accordingly
+//
+//  CashFlowView.swift
+//  MyBondManager (macOS only)
+//  Updated 07/05/2025: bonds within each month now sorted chronologically
+//  Updated 10/05/2025: use AppTheme.panelBackground everywhere
+//
 
 import SwiftUI
 import CoreData
-import AppKit
 
 // MARK: – Model types & builder
 
@@ -118,19 +119,16 @@ struct CashFlowView: View {
         .onChange(of: searchText)    { fetchCashFlows() }
         .onChange(of: selectedNature) { fetchCashFlows() }
         .onChange(of: startDate)     {
-            if startDate > endDate {
-                endDate = startDate
-            }
+            if startDate > endDate { endDate = startDate }
             fetchCashFlows()
         }
         .onChange(of: endDate)       {
-            if endDate < startDate {
-                startDate = endDate
-            }
+            if endDate < startDate { startDate = endDate }
             fetchCashFlows()
         }
+        // <<< REPLACED windowBackgroundColor with panelBackground >>>
         .background(
-            Color(nsColor: .windowBackgroundColor)
+            AppTheme.panelBackground
                 .edgesIgnoringSafeArea(.all)
         )
     }
