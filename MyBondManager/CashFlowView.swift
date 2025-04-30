@@ -20,15 +20,15 @@ fileprivate struct CouponEvent: Identifiable {
 
 fileprivate struct MonthGroup: Identifiable {
     let id: Date
-    let label: String    // "MM/yy"
-    let total: Double    // excludes capitalLoss
+    let label: String      // "MM/yy"
+    let total: Double      // excludes capitalLoss
     let events: [CouponEvent]
 }
 
 fileprivate struct YearGroup: Identifiable {
     let id: Int
-    let label: String    // "YYYY"
-    let total: Double    // excludes capitalLoss
+    let label: String      // "YYYY"
+    let total: Double      // excludes capitalLoss
     let months: [MonthGroup]
 
     static func build(
@@ -89,10 +89,10 @@ struct CashFlowView: View {
     @Environment(\.managedObjectContext) private var moc
 
     // — Filter state
-    @State private var searchText      = ""
+    @State private var searchText        = ""
     @State private var selectedNature: CashFlowEntity.Nature? = nil
 
-    // start date is today; end date is one year from today
+    // start date is today; end date is one year from today (initial values)
     @State private var startDate       = Date()
     @State private var endDate         = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
 
@@ -114,11 +114,21 @@ struct CashFlowView: View {
             filterBar
             cashFlowList
         }
-        .onAppear          { fetchCashFlows() }
-        .onChange(of: searchText)      { fetchCashFlows() }
-        .onChange(of: selectedNature)  { fetchCashFlows() }
-        .onChange(of: startDate)       { fetchCashFlows() }
-        .onChange(of: endDate)         { fetchCashFlows() }
+        .onAppear         { fetchCashFlows() }
+        .onChange(of: searchText)    { fetchCashFlows() }
+        .onChange(of: selectedNature) { fetchCashFlows() }
+        .onChange(of: startDate)     {
+            if startDate > endDate {
+                endDate = startDate
+            }
+            fetchCashFlows()
+        }
+        .onChange(of: endDate)       {
+            if endDate < startDate {
+                startDate = endDate
+            }
+            fetchCashFlows()
+        }
         .background(
             Color(nsColor: .windowBackgroundColor)
                 .edgesIgnoringSafeArea(.all)
@@ -128,10 +138,7 @@ struct CashFlowView: View {
     // MARK: – Sub-view #1: Filter bar
 
     private var filterBar: some View {
-        // compute maximum selectable date (one year from today)
-        let maxDate = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
-
-        return HStack {
+        HStack {
             TextField("Search bond…", text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 200)
@@ -149,18 +156,14 @@ struct CashFlowView: View {
             }
             .pickerStyle(.menu)
 
-            // clamp both pickers so you can't pick before today
-            // and no later than one year from today
             DatePicker(
                 "From",
                 selection: $startDate,
-                in: Date()...maxDate,
                 displayedComponents: .date
             )
             DatePicker(
                 "To",
                 selection: $endDate,
-                in: Date()...maxDate,
                 displayedComponents: .date
             )
         }
@@ -192,7 +195,7 @@ struct CashFlowView: View {
         var predicates: [NSPredicate] = [
             NSPredicate(format: "bond.maturityDate >= %@", Date() as NSDate),
             NSPredicate(format: "date >= %@", startDate as NSDate),
-            NSPredicate(format: "date <= %@", endDate   as NSDate),
+            NSPredicate(format: "date <= %@", endDate  as NSDate),
             NSPredicate(format: "nature != %@", CashFlowEntity.Nature.expectedProfit.rawValue)
         ]
 
@@ -207,7 +210,7 @@ struct CashFlowView: View {
             )
         }
 
-        req.predicate       = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+        req.predicate     = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         req.sortDescriptors = [NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)]
 
         do {
@@ -218,6 +221,7 @@ struct CashFlowView: View {
         }
     }
 }
+
 
 // MARK: – YearBlock
 
@@ -504,6 +508,7 @@ private extension CashFlowEntity.Nature {
         default:            return rawValue.capitalized
         }
     }
+
     var color: Color {
         switch self {
         case .interest:     return .green
