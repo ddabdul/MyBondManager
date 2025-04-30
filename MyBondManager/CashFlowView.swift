@@ -1,6 +1,7 @@
 // CashFlowView.swift
 // MyBondManager (macOS only)
 // Updated 07/05/2025: bonds within each month now sorted chronologically
+// End date initialized one year from today; date‐pickers clamped accordingly
 
 import SwiftUI
 import CoreData
@@ -31,7 +32,7 @@ fileprivate struct YearGroup: Identifiable {
     let months: [MonthGroup]
 
     static func build(
-        from cashFlows: FetchedResults<CashFlowEntity>,
+        from cashFlows: [CashFlowEntity],
         calendar: Calendar
     ) -> [YearGroup] {
         let events = cashFlows.compactMap { cf -> CouponEvent? in
@@ -50,32 +51,35 @@ fileprivate struct YearGroup: Identifiable {
             calendar.component(.year, from: $0.date)
         }
 
-        return byYear.map { year, evts in
-            let totalYear = evts.reduce(0) { $0 + $1.amount }
+        return byYear
+            .map { year, evts in
+                let totalYear = evts.reduce(0) { $0 + $1.amount }
 
-            let byMonth = Dictionary(grouping: evts) { evt in
-                let comps = calendar.dateComponents([.year, .month], from: evt.date)
-                return calendar.date(from: comps)!
-            }
-            let monthGroups = byMonth.map { period, mes in
-                let totalMonth = mes.reduce(0) { $0 + $1.amount }
-                return MonthGroup(
-                    id: period,
-                    label: Formatters.monthYear.string(from: period),
-                    total: totalMonth,
-                    events: mes.sorted { $0.date < $1.date }
+                let byMonth = Dictionary(grouping: evts) { evt in
+                    let comps = calendar.dateComponents([.year, .month], from: evt.date)
+                    return calendar.date(from: comps)!
+                }
+
+                let monthGroups = byMonth
+                    .map { period, mes in
+                        let totalMonth = mes.reduce(0) { $0 + $1.amount }
+                        return MonthGroup(
+                            id: period,
+                            label: Formatters.monthYear.string(from: period),
+                            total: totalMonth,
+                            events: mes.sorted { $0.date < $1.date }
+                        )
+                    }
+                    .sorted { $0.id < $1.id }
+
+                return YearGroup(
+                    id: year,
+                    label: String(year),
+                    total: totalYear,
+                    months: monthGroups
                 )
             }
             .sorted { $0.id < $1.id }
-
-            return YearGroup(
-                id: year,
-                label: String(year),
-                total: totalYear,
-                months: monthGroups
-            )
-        }
-        .sorted { $0.id < $1.id }
     }
 }
 
@@ -84,24 +88,88 @@ fileprivate struct YearGroup: Identifiable {
 struct CashFlowView: View {
     @Environment(\.managedObjectContext) private var moc
 
-    @FetchRequest(
-        entity: CashFlowEntity.entity(),
-        sortDescriptors: [ NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true) ],
-        predicate: NSPredicate(
-            format: "bond.maturityDate >= %@ AND date >= %@ AND nature != %@",
-            Date() as NSDate,
-            Date() as NSDate,
-            CashFlowEntity.Nature.expectedProfit.rawValue
-        ),
-        animation: .default
-    )
-    private var cashFlows: FetchedResults<CashFlowEntity>
+    // — Filter state
+    @State private var searchText      = ""
+    @State private var selectedNature: CashFlowEntity.Nature? = nil
 
+    // start date is today; end date is one year from today
+    @State private var startDate       = Date()
+    @State private var endDate         = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
+
+    // — Fetched array
+    @State private var cashFlowsArray: [CashFlowEntity] = []
+
+    // — Our 3 pickable natures
+    private let natures: [CashFlowEntity.Nature] = [
+        .principal, .capitalGains, .interest
+    ]
+
+    // — Build the year/month groups
     private var yearGroups: [YearGroup] {
-        YearGroup.build(from: cashFlows, calendar: .current)
+        YearGroup.build(from: cashFlowsArray, calendar: .current)
     }
 
     var body: some View {
+        VStack(spacing: 12) {
+            filterBar
+            cashFlowList
+        }
+        .onAppear          { fetchCashFlows() }
+        .onChange(of: searchText)      { fetchCashFlows() }
+        .onChange(of: selectedNature)  { fetchCashFlows() }
+        .onChange(of: startDate)       { fetchCashFlows() }
+        .onChange(of: endDate)         { fetchCashFlows() }
+        .background(
+            Color(nsColor: .windowBackgroundColor)
+                .edgesIgnoringSafeArea(.all)
+        )
+    }
+
+    // MARK: – Sub-view #1: Filter bar
+
+    private var filterBar: some View {
+        // compute maximum selectable date (one year from today)
+        let maxDate = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
+
+        return HStack {
+            TextField("Search bond…", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: 200)
+
+            Picker("Nature", selection: Binding(
+                get:  { selectedNature },
+                set:  { selectedNature = $0 }
+            )) {
+                Text("All")
+                    .tag(CashFlowEntity.Nature?.none)
+                ForEach(natures, id: \.self) { nat in
+                    Text(nat.label)
+                        .tag(CashFlowEntity.Nature?.some(nat))
+                }
+            }
+            .pickerStyle(.menu)
+
+            // clamp both pickers so you can't pick before today
+            // and no later than one year from today
+            DatePicker(
+                "From",
+                selection: $startDate,
+                in: Date()...maxDate,
+                displayedComponents: .date
+            )
+            DatePicker(
+                "To",
+                selection: $endDate,
+                in: Date()...maxDate,
+                displayedComponents: .date
+            )
+        }
+        .padding(.horizontal)
+    }
+
+    // MARK: – Sub-view #2: Cash-flow list
+
+    private var cashFlowList: some View {
         ScrollView {
             VStack(spacing: 16) {
                 Text("Cash Flows")
@@ -115,14 +183,43 @@ struct CashFlowView: View {
             }
             .padding(.horizontal)
         }
-        .background(
-            Color(nsColor: .windowBackgroundColor)
-                .edgesIgnoringSafeArea(.all)
-        )
+    }
+
+    // MARK: – Fetch logic
+
+    private func fetchCashFlows() {
+        let req: NSFetchRequest<CashFlowEntity> = CashFlowEntity.fetchRequest()
+        var predicates: [NSPredicate] = [
+            NSPredicate(format: "bond.maturityDate >= %@", Date() as NSDate),
+            NSPredicate(format: "date >= %@", startDate as NSDate),
+            NSPredicate(format: "date <= %@", endDate   as NSDate),
+            NSPredicate(format: "nature != %@", CashFlowEntity.Nature.expectedProfit.rawValue)
+        ]
+
+        if !searchText.isEmpty {
+            predicates.append(
+                NSPredicate(format: "bond.name CONTAINS[cd] %@", searchText)
+            )
+        }
+        if let nat = selectedNature {
+            predicates.append(
+                NSPredicate(format: "nature == %@", nat.rawValue)
+            )
+        }
+
+        req.predicate       = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+        req.sortDescriptors = [NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)]
+
+        do {
+            cashFlowsArray = try moc.fetch(req)
+        } catch {
+            print("Failed to fetch filtered cash-flows:", error)
+            cashFlowsArray = []
+        }
     }
 }
 
-// MARK: – YearBlock (3 stages)
+// MARK: – YearBlock
 
 fileprivate struct YearBlock: View {
     let yearGroup: YearGroup
@@ -142,10 +239,8 @@ fileprivate struct YearBlock: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // Header button
-            Button {
-                stage = (stage + 1) % 3
-            } label: {
+            Button { stage = (stage + 1) % 3 }
+            label: {
                 HStack {
                     Text(yearGroup.label)
                         .font(.system(.title2, design: .rounded))
@@ -176,7 +271,6 @@ fileprivate struct YearBlock: View {
             .onHover { isHovered = $0 }
             .help("")
 
-            // Summary rows
             if stage >= 1 {
                 ForEach(sums, id: \.0) { nature, amt in
                     SummaryRow(nature: nature, amount: amt)
@@ -191,7 +285,6 @@ fileprivate struct YearBlock: View {
                 }
             }
 
-            // Drill into months
             if stage == 2 {
                 VStack(spacing: 12) {
                     ForEach(yearGroup.months) { mg in
@@ -205,7 +298,7 @@ fileprivate struct YearBlock: View {
     }
 }
 
-// MARK: – MonthBlock (3 stages)
+// MARK: – MonthBlock
 
 fileprivate struct MonthBlock: View {
     let monthGroup: MonthGroup
@@ -224,10 +317,8 @@ fileprivate struct MonthBlock: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // Header
-            Button {
-                stage = (stage + 1) % 3
-            } label: {
+            Button { stage = (stage + 1) % 3 }
+            label: {
                 HStack {
                     Text(monthGroup.label)
                         .font(.system(.headline, design: .rounded))
@@ -258,7 +349,6 @@ fileprivate struct MonthBlock: View {
             .onHover { isHovered = $0 }
             .help("")
 
-            // Summary rows
             if stage >= 1 {
                 ForEach(sums, id: \.0) { nature, amt in
                     SummaryRow(nature: nature, amount: amt)
@@ -273,7 +363,6 @@ fileprivate struct MonthBlock: View {
                 }
             }
 
-            // Drill into bonds—sorted by event date
             if stage == 2 {
                 let byBond = Dictionary(grouping: monthGroup.events) { $0.bondName }
                 let sortedBonds = byBond
@@ -294,7 +383,7 @@ fileprivate struct MonthBlock: View {
     }
 }
 
-// MARK: – BondCardView (2 stages)
+// MARK: – BondCardView
 
 fileprivate struct BondCardView: View {
     let bondName: String
@@ -321,10 +410,8 @@ fileprivate struct BondCardView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // Header + date
-            Button {
-                expanded.toggle()
-            } label: {
+            Button { expanded.toggle() }
+            label: {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(bondName)
@@ -364,7 +451,6 @@ fileprivate struct BondCardView: View {
             .onHover { isHovered = $0 }
             .help("")
 
-            // Only one level of summary
             if expanded {
                 ForEach(sums, id: \.0) { nature, amt in
                     SummaryRow(nature: nature, amount: amt)
