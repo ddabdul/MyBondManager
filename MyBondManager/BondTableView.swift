@@ -133,7 +133,7 @@ struct BondTableView: View {
     private var titleBar: some View {
         HStack {
             Text("My Bond Portfolio")
-                .font(.largeTitle)
+                .font(.system(.largeTitle, design: .rounded))
                 .foregroundColor(.white)
             Spacer()
         }

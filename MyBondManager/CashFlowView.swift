@@ -173,11 +173,13 @@ struct CashFlowView: View {
     private var cashFlowList: some View {
         ScrollView {
             VStack(spacing: 16) {
-                Text("Cash Flows")
+                Text("My Cash Flows")
                     .font(.system(.largeTitle, design: .rounded))
                     .foregroundColor(.primary)
                     .padding(.top)
-
+                    .background(AppTheme.tileBackground)
+                
+                
                 ForEach(yearGroups) { yg in
                     YearBlock(yearGroup: yg)
                 }

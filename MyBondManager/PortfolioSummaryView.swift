@@ -3,6 +3,7 @@
 //  MyBondManager
 //  Adjusted to CoreData
 //  Created by Olivier on 26/04/2025.
+//  Updated 08/05/2025 – add capital-loss & expected-profit tiles
 //
 
 import SwiftUI
@@ -18,11 +19,9 @@ struct PortfolioSummaryView: View {
     }
 
     @FetchRequest(
-        // adjust sort descriptors to your preference
         sortDescriptors: [
             NSSortDescriptor(keyPath: \BondEntity.acquisitionDate, ascending: false)
         ],
-        // only fetch bonds whose maturity date is today or in the future
         predicate: NSPredicate(
             format: "maturityDate >= %@",
             Self.startOfToday as NSDate
@@ -32,11 +31,11 @@ struct PortfolioSummaryView: View {
     private var bondEntities: FetchedResults<BondEntity>
 
     // MARK: – UI State
-    @State private var selectedDepotBank: String = "All"
-    @State private var potentialPrice: String = ""
+    @State private var selectedDepotBank: String   = "All"
+    @State private var potentialPrice: String      = ""
     @State private var potentialCouponRate: String = ""
     @State private var potentialMaturityDate: Date = Date()
-    @State private var calculatedYTM: Double? = nil
+    @State private var calculatedYTM: Double?      = nil
 
     // MARK: – Helpers
 
@@ -48,8 +47,23 @@ struct PortfolioSummaryView: View {
 
     /// Apply the “All” filter
     private var filteredBonds: [BondEntity] {
-        guard selectedDepotBank != "All" else { return Array(bondEntities) }
+        guard selectedDepotBank != "All" else {
+            return Array(bondEntities)
+        }
         return bondEntities.filter { $0.depotBank == selectedDepotBank }
+    }
+
+    /// Flatten all cash-flow events across filtered bonds
+    private var allCashFlows: [CashFlowEntity] {
+        filteredBonds.flatMap { bond in
+            bond.cashFlows ?? []
+        }
+    }
+
+    /// Only cash-flow events dated today or in the future
+    private var futureCashFlows: [CashFlowEntity] {
+        let now = Date()
+        return allCashFlows.filter { $0.date >= now }
     }
 
     // MARK: – Summary Metrics
@@ -73,83 +87,114 @@ struct PortfolioSummaryView: View {
         return totalYears / Double(filteredBonds.count)
     }
 
+    // MARK: – Expected-Interest, Gain, Loss & Profit
+
+    /// Sum of all *future* interest cash-flows
+    private var totalInterestExpected: Double {
+        futureCashFlows
+            .filter { $0.natureEnum == .interest }
+            .reduce(0) { $0 + $1.amount }
+    }
+
+    /// Sum of all *future* capital-gains cash-flows
+    private var totalCapitalGainExpected: Double {
+        futureCashFlows
+            .filter { $0.natureEnum == .capitalGains }
+            .reduce(0) { $0 + $1.amount }
+    }
+
+    /// Sum of all *future* capital-loss cash-flows
+    private var totalCapitalLossExpected: Double {
+        futureCashFlows
+            .filter { $0.natureEnum == .capitalLoss }
+            .reduce(0) { $0 + $1.amount }
+    }
+
+    /// Sum of all *future* interest + capital-gains cash-flows
+    private var totalProfitExpected: Double {
+        futureCashFlows
+            .filter {
+                let n = $0.natureEnum
+                return n == .interest || n == .capitalGains
+            }
+            .reduce(0) { $0 + $1.amount }
+    }
+
+    /// Sum of all *future* one-off “expectedProfit” cash-flows
+    private var totalExpectedProfitCF: Double {
+        futureCashFlows
+            .filter { $0.natureEnum == .expectedProfit }
+            .reduce(0) { $0 + $1.amount }
+    }
+
     // MARK: – Next Maturity
 
     private var nextMaturingBond: BondEntity? {
         filteredBonds.min { $0.maturityDate < $1.maturityDate }
     }
 
-    // MARK: – Next Coupon Date
+    // MARK: – Next Coupon Info
 
     private func nextCouponDate(for bond: BondEntity) -> Date? {
-        let calendar = Calendar.current
+        let cal = Calendar.current
         let md = bond.maturityDate
-        let mdComponents = calendar.dateComponents([.month, .day], from: md)
-        var next = calendar.dateComponents([.year], from: Date())
-        next.month = mdComponents.month
-        next.day   = mdComponents.day
-
-        guard let thisYear = calendar.date(from: next) else { return nil }
-        if thisYear < Date() {
-            next.year! += 1
-        }
-        return calendar.date(from: next)
-    }
-
-    private var nextCouponDateOverall: Date? {
-        filteredBonds
-            .compactMap(nextCouponDate(for:))
-            .min()
-    }
-
-    private var bondsWithNextCoupon: [BondEntity] {
-        guard let date = nextCouponDateOverall else { return [] }
-        return filteredBonds.filter { nextCouponDate(for: $0) == date }
-    }
-
-    private var nextCouponPayer: String {
-        switch bondsWithNextCoupon.count {
-        case 0:    return "–"
-        case 1:    return bondsWithNextCoupon.first!.name
-        default:   return "Multiple"
-        }
-    }
-
-    private var nextCouponTotal: String {
-        let total = bondsWithNextCoupon.reduce(0) { sum, bond in
-            sum + bond.parValue * (bond.couponRate / 100)
-        }
-        return Formatters.currency.string(from: NSNumber(value: total)) ?? "–"
+        let comps = cal.dateComponents([.month, .day], from: md)
+        let candidate = DateComponents(
+            year:  cal.component(.year, from: Date()),
+            month: comps.month,
+            day:   comps.day
+        )
+        guard let thisYear = cal.date(from: candidate) else { return nil }
+        return thisYear < Date()
+            ? cal.date(byAdding: .year, value: 1, to: thisYear)
+            : thisYear
     }
 
     private var nextCouponInfo: String {
-        guard let date = nextCouponDateOverall else { return "–" }
+        guard
+            let date = filteredBonds
+                .compactMap(nextCouponDate(for:))
+                .min()
+        else { return "–" }
+
+        let bonds = filteredBonds.filter { nextCouponDate(for: $0) == date }
+        let payer = bonds.count == 1
+            ? bonds.first!.name
+            : (bonds.isEmpty ? "–" : "Multiple")
+        let totalAmt = bonds.reduce(0) { sum, b in
+            sum + b.parValue * (b.couponRate / 100)
+        }
+        let totalStr = Formatters.currency
+            .string(from: NSNumber(value: totalAmt)) ?? "–"
+
         return """
-        Payer: \(nextCouponPayer)
+        Payer: \(payer)
         Date:  \(Formatters.mediumDate.string(from: date))
-        Total: \(nextCouponTotal)
+        Total: \(totalStr)
         """
     }
 
     // MARK: – YTM Estimate
 
     private func calculateYTM() {
-        let parValue = 100.0
-        guard let price = Double(potentialPrice),
-              let couponRate = Double(potentialCouponRate) else {
+        let par = 100.0
+        guard
+            let price = Double(potentialPrice),
+            let rate  = Double(potentialCouponRate)
+        else {
             calculatedYTM = nil
             return
         }
-        let coupon = parValue * couponRate / 100.0
-        let interval = potentialMaturityDate.timeIntervalSince(Date())
-        let years = interval / (365 * 24 * 3600)
-        guard years > 0 else {
+        let couponAmt = par * rate / 100
+        let yrs = potentialMaturityDate
+            .timeIntervalSince(Date()) / (365 * 24 * 3600)
+        guard yrs > 0 else {
             calculatedYTM = nil
             return
         }
-        let numerator   = coupon + (parValue - price) / years
-        let denominator = (parValue + price) / 2
-        calculatedYTM = (numerator / denominator) * 100.0
+        let numerator   = couponAmt + (par - price) / yrs
+        let denominator = (par + price) / 2
+        calculatedYTM = (numerator / denominator) * 100
     }
 
     // MARK: – View Body
@@ -172,12 +217,47 @@ struct PortfolioSummaryView: View {
                 }
                 .padding(.bottom, 8)
 
-                // Metrics Grid
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    MetricView(icon: "doc.plaintext",     title: "Bonds",        value: "\(numberOfBonds)")
-                    MetricView(icon: "dollarsign.circle", title: "Acquisition",  value: Formatters.currency.string(from: NSNumber(value: totalAcquisitionCost)) ?? "–")
-                    MetricView(icon: "banknote",          title: "Principal",    value: Formatters.currency.string(from: NSNumber(value: totalPrincipal)) ?? "–")
-                    MetricView(icon: "clock.arrow.circlepath", title: "Maturity (yrs)", value: String(format: "%.1f", averageMaturityYears))
+                // Metrics Grid — now 8 tiles
+                LazyVGrid(
+                    columns: [GridItem(.flexible()), GridItem(.flexible())],
+                    spacing: 12
+                ) {
+                    MetricView(icon: "doc.plaintext",
+                               title: "Bonds",
+                               value: "\(numberOfBonds)")
+                    MetricView(icon: "dollarsign.circle",
+                               title: "Acquisition",
+                               value: Formatters.currency
+                                        .string(from: NSNumber(value: totalAcquisitionCost))
+                                        ?? "–")
+                    MetricView(icon: "banknote",
+                               title: "Principal",
+                               value: Formatters.currency
+                                        .string(from: NSNumber(value: totalPrincipal))
+                                        ?? "–")
+                    MetricView(icon: "clock.arrow.circlepath",
+                               title: "Maturity (yrs)",
+                               value: String(format: "%.1f", averageMaturityYears))
+                    MetricView(icon: "arrow.down.circle",
+                               title: "Exp. Interest",
+                               value: Formatters.currency
+                                        .string(from: NSNumber(value: totalInterestExpected))
+                                        ?? "–")
+                    MetricView(icon: "arrow.up.circle",
+                               title: "Exp. Gain",
+                               value: Formatters.currency
+                                        .string(from: NSNumber(value: totalCapitalGainExpected))
+                                        ?? "–")
+                    MetricView(icon: "arrow.down.circle.fill",
+                               title: "Exp. Loss",
+                               value: Formatters.currency
+                                        .string(from: NSNumber(value: totalCapitalLossExpected))
+                                        ?? "–")
+                    MetricView(icon: "star.circle",
+                               title: "Exp. Profit CF",
+                               value: Formatters.currency
+                                        .string(from: NSNumber(value: totalExpectedProfitCF))
+                                        ?? "–")
                 }
 
                 // Next Maturity Tile
@@ -210,7 +290,9 @@ struct PortfolioSummaryView: View {
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                     }
 
-                    DatePicker("Maturity Date", selection: $potentialMaturityDate, displayedComponents: .date)
+                    DatePicker("Maturity Date",
+                               selection: $potentialMaturityDate,
+                               displayedComponents: .date)
                         .datePickerStyle(.compact)
 
                     Button("Calculate YTM", action: calculateYTM)
@@ -225,7 +307,8 @@ struct PortfolioSummaryView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 12)
                         .fill(.ultraThinMaterial)
-                        .shadow(color: Color.primary.opacity(0.1), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.primary.opacity(0.1),
+                                radius: 4, x: 0, y: 2)
                 )
                 .frame(maxWidth: .infinity)
                 .padding(.bottom)
@@ -234,7 +317,8 @@ struct PortfolioSummaryView: View {
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(.ultraThinMaterial)
-                    .shadow(color: Color.primary.opacity(0.1), radius: 4, x: 0, y: 2)
+                    .shadow(color: Color.primary.opacity(0.1),
+                            radius: 4, x: 0, y: 2)
             )
             .padding([.horizontal, .top])
         }
@@ -268,3 +352,4 @@ struct MetricView: View {
         .cornerRadius(8)
     }
 }
+
