@@ -1,26 +1,27 @@
-// MainTabView.swift
-// MyBondManager
-// Updated on 01/05/2025 to apply consistent panel background
+//
+//  MainTabView.swift
+//  MyBondManager
+//  Updated 01/05/2025 – apply panelBackground to macOS toolbar
+//
 
 import SwiftUI
 import CoreData
 
 struct MainTabView: View {
     @State private var showingMaturedSheet = false
-    @State private var showingAddBondView = false
-    @State private var showingRecalcAlert = false
+    @State private var showingAddBondView  = false
+    @State private var showingRecalcAlert  = false
 
     var body: some View {
         GeometryReader { geo in
-            TabView {
-                // ──────────────────────────────────
-                // Portfolio Tab
-                // ──────────────────────────────────
-                ZStack {
-                    // Underlay: same dark-grey panel background
-                    AppTheme.panelBackground
-                        .ignoresSafeArea()
+            ZStack {
+                // 1) Underlay everything with your dark-grey
+                AppTheme.panelBackground
+                    .ignoresSafeArea()
 
+                // 2) TabView on top, transparent so grey shows through
+                TabView {
+                    // — Portfolio Tab —
                     NavigationSplitView {
                         PortfolioSummaryView()
                             .frame(minWidth: geo.size.width / 3)
@@ -29,42 +30,35 @@ struct MainTabView: View {
                         BondTableView()
                             .background(AppTheme.panelBackground)
                     }
-                }
-                .navigationSplitViewColumnWidth(
-                    min: geo.size.width / 3,
-                    ideal: geo.size.width / 3,
-                    max: geo.size.width * 0.5
-                )
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button(action: { showingAddBondView = true }) {
-                            Image(systemName: "plus")
+                    .navigationSplitViewColumnWidth(
+                        min: geo.size.width / 3,
+                        ideal: geo.size.width / 3,
+                        max: geo.size.width * 0.5
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button { showingAddBondView = true } label: {
+                                Image(systemName: "plus")
+                            }
+                        }
+                        ToolbarItem(placement: .primaryAction) {
+                            Button { showingMaturedSheet = true } label: {
+                                Label("Matured", systemImage: "clock.arrow.circlepath")
+                            }
                         }
                     }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button(action: { showingMaturedSheet = true }) {
-                            Label("Matured", systemImage: "clock.arrow.circlepath")
-                        }
+                    .sheet(isPresented: $showingAddBondView) {
+                        AddBondViewAsync()
                     }
-                }
-                .sheet(isPresented: $showingAddBondView) {
-                    AddBondViewAsync()
-                }
-                .sheet(isPresented: $showingMaturedSheet) {
-                    MaturedBondsView()
-                        .frame(minWidth: 700, minHeight: 400)
-                }
-                .tabItem {
-                    Label("Portfolio", systemImage: "list.bullet")
-                }
+                    .sheet(isPresented: $showingMaturedSheet) {
+                        MaturedBondsView()
+                            .frame(minWidth: 700, minHeight: 400)
+                    }
+                    .tabItem {
+                        Label("Portfolio", systemImage: "list.bullet")
+                    }
 
-                // ──────────────────────────────────
-                // Cash-Flow Tab
-                // ──────────────────────────────────
-                ZStack {
-                    AppTheme.panelBackground
-                        .ignoresSafeArea()
-
+                    // — Cash-Flow Tab —
                     NavigationSplitView {
                         PortfolioSummaryView()
                             .frame(minWidth: geo.size.width / 3)
@@ -73,37 +67,38 @@ struct MainTabView: View {
                         CashFlowView()
                             .background(AppTheme.panelBackground)
                     }
-                }
-                .navigationSplitViewColumnWidth(
-                    min: geo.size.width / 3,
-                    ideal: geo.size.width / 3,
-                    max: geo.size.width * 0.5
-                )
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button(action: {
-                            recalculateAllCashFlows()
-                        }) {
-                            Label("Recalculate", systemImage: "arrow.clockwise")
+                    .navigationSplitViewColumnWidth(
+                        min: geo.size.width / 3,
+                        ideal: geo.size.width / 3,
+                        max: geo.size.width * 0.5
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button {
+                                recalculateAllCashFlows()
+                            } label: {
+                                Label("Recalculate", systemImage: "arrow.clockwise")
+                            }
                         }
                     }
+                    .alert("Cash flows recalculated", isPresented: $showingRecalcAlert) {
+                        Button("OK", role: .cancel) { }
+                    }
+                    .tabItem {
+                        Label("Cash Flow", systemImage: "dollarsign.circle")
+                    }
                 }
-                .alert("Cash flows recalculated", isPresented: $showingRecalcAlert) {
-                    Button("OK", role: .cancel) { }
-                }
-                .tabItem {
-                    Label("Cash Flow", systemImage: "dollarsign.circle")
-                }
+                // ─── paint the macOS window toolbar / tab strip grey ───
+                .toolbarBackground(AppTheme.panelBackground)
+                .background(Color.clear)
+                .environment(
+                    \.managedObjectContext,
+                    PersistenceController.shared.container.viewContext
+                )
             }
-            .environment(
-                \.managedObjectContext,
-                PersistenceController.shared.container.viewContext
-            )
         }
     }
 
-    /// Manually regenerate cash flows for every bond,
-    /// ignoring the one-time migration flag.
     private func recalculateAllCashFlows() {
         let persistence = PersistenceController.shared
         let context = persistence.backgroundContext
@@ -113,15 +108,12 @@ struct MainTabView: View {
             do {
                 let bonds = try context.fetch(request)
                 let generator = CashFlowGenerator(context: context)
-
                 for bond in bonds {
                     try generator.regenerateCashFlows(for: bond)
                 }
-
                 if context.hasChanges {
                     try context.save()
                 }
-
                 DispatchQueue.main.async {
                     showingRecalcAlert = true
                 }
