@@ -3,6 +3,9 @@
 //  MyBondManager (macOS only)
 //  Updated 07/05/2025: bonds within each month now sorted chronologically
 //  Updated 10/05/2025: use AppTheme.panelBackground everywhere
+//  Updated 12/05/2025: separate title bar from scroll content
+//  Updated 13/05/2025: added spacing between title, filter & list
+//  Updated 14/05/2025: replaced deprecated onChange(of:perform:)
 //
 
 import SwiftUI
@@ -37,14 +40,13 @@ fileprivate struct YearGroup: Identifiable {
         calendar: Calendar
     ) -> [YearGroup] {
         let events = cashFlows.compactMap { cf -> CouponEvent? in
-            let nat = cf.natureEnum
-            guard nat != .capitalLoss else { return nil }
+            guard cf.natureEnum != .capitalLoss else { return nil }
             return CouponEvent(
-                bondName: cf.bond?.name ?? "–",
+                bondName:  cf.bond?.name      ?? "–",
                 depotBank: cf.bond?.depotBank ?? "–",
-                date: cf.date,
-                amount: cf.amount,
-                nature: nat
+                date:      cf.date,
+                amount:    cf.amount,
+                nature:    cf.natureEnum
             )
         }
 
@@ -65,18 +67,18 @@ fileprivate struct YearGroup: Identifiable {
                     .map { period, mes in
                         let totalMonth = mes.reduce(0) { $0 + $1.amount }
                         return MonthGroup(
-                            id: period,
-                            label: Formatters.monthYear.string(from: period),
-                            total: totalMonth,
+                            id:     period,
+                            label:  Formatters.monthYear.string(from: period),
+                            total:  totalMonth,
                             events: mes.sorted { $0.date < $1.date }
                         )
                     }
                     .sorted { $0.id < $1.id }
 
                 return YearGroup(
-                    id: year,
-                    label: String(year),
-                    total: totalYear,
+                    id:     year,
+                    label:  String(year),
+                    total:  totalYear,
                     months: monthGroups
                 )
             }
@@ -93,47 +95,66 @@ struct CashFlowView: View {
     @State private var searchText        = ""
     @State private var selectedNature: CashFlowEntity.Nature? = nil
 
-    // start date is today; end date is one year from today (initial values)
-    @State private var startDate       = Date()
-    @State private var endDate         = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
+    // — Date range (today → one year ahead)
+    @State private var startDate = Date()
+    @State private var endDate   = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
 
-    // — Fetched array
+    // — Core Data fetched array
     @State private var cashFlowsArray: [CashFlowEntity] = []
 
-    // — Our 3 pickable natures
+    // — Pickable natures
     private let natures: [CashFlowEntity.Nature] = [
         .principal, .capitalGains, .interest
     ]
 
-    // — Build the year/month groups
+    // — Build year/month groups
     private var yearGroups: [YearGroup] {
         YearGroup.build(from: cashFlowsArray, calendar: .current)
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
+            // 1) Title Bar
+            HStack {
+                Text("My Cash Flows")
+                    .font(.system(.largeTitle, design: .rounded))
+                    .foregroundColor(.white)
+                Spacer()
+            }
+            .padding()
+            .background(AppTheme.tileBackground)
+
+            // 2) Filter Bar
             filterBar
+
+            // 3) Scrollable List
             cashFlowList
         }
-        .onAppear         { fetchCashFlows() }
-        .onChange(of: searchText)    { fetchCashFlows() }
-        .onChange(of: selectedNature) { fetchCashFlows() }
-        .onChange(of: startDate)     {
+        .onAppear {
+            fetchCashFlows()
+        }
+        // zero-parameter onChange
+        .onChange(of: searchText) {
+            fetchCashFlows()
+        }
+        .onChange(of: selectedNature) {
+            fetchCashFlows()
+        }
+        .onChange(of: startDate) {
             if startDate > endDate { endDate = startDate }
             fetchCashFlows()
         }
-        .onChange(of: endDate)       {
+        .onChange(of: endDate) {
             if endDate < startDate { startDate = endDate }
             fetchCashFlows()
         }
-        // <<< REPLACED windowBackgroundColor with panelBackground >>>
         .background(
             AppTheme.panelBackground
                 .edgesIgnoringSafeArea(.all)
         )
     }
 
-    // MARK: – Sub-view #1: Filter bar
+    // MARK: – Sub-view #1: Filter Bar
 
     private var filterBar: some View {
         HStack {
@@ -145,41 +166,25 @@ struct CashFlowView: View {
                 get:  { selectedNature },
                 set:  { selectedNature = $0 }
             )) {
-                Text("All")
-                    .tag(CashFlowEntity.Nature?.none)
+                Text("All").tag(CashFlowEntity.Nature?.none)
                 ForEach(natures, id: \.self) { nat in
-                    Text(nat.label)
-                        .tag(CashFlowEntity.Nature?.some(nat))
+                    Text(nat.label).tag(CashFlowEntity.Nature?.some(nat))
                 }
             }
             .pickerStyle(.menu)
 
-            DatePicker(
-                "From",
-                selection: $startDate,
-                displayedComponents: .date
-            )
-            DatePicker(
-                "To",
-                selection: $endDate,
-                displayedComponents: .date
-            )
+            DatePicker("From", selection: $startDate, displayedComponents: .date)
+            DatePicker("To",   selection: $endDate,   displayedComponents: .date)
         }
         .padding(.horizontal)
+        .background(AppTheme.panelBackground)
     }
 
-    // MARK: – Sub-view #2: Cash-flow list
+    // MARK: – Sub-view #2: Cash‐flow List
 
     private var cashFlowList: some View {
         ScrollView {
             VStack(spacing: 16) {
-                Text("My Cash Flows")
-                    .font(.system(.largeTitle, design: .rounded))
-                    .foregroundColor(.primary)
-                    .padding(.top)
-                    .background(AppTheme.tileBackground)
-                
-                
                 ForEach(yearGroups) { yg in
                     YearBlock(yearGroup: yg)
                 }
@@ -188,15 +193,15 @@ struct CashFlowView: View {
         }
     }
 
-    // MARK: – Fetch logic
+    // MARK: – Fetch Logic
 
     private func fetchCashFlows() {
         let req: NSFetchRequest<CashFlowEntity> = CashFlowEntity.fetchRequest()
         var predicates: [NSPredicate] = [
             NSPredicate(format: "bond.maturityDate >= %@", Date() as NSDate),
-            NSPredicate(format: "date >= %@", startDate as NSDate),
-            NSPredicate(format: "date <= %@", endDate  as NSDate),
-            NSPredicate(format: "nature != %@", CashFlowEntity.Nature.expectedProfit.rawValue)
+            NSPredicate(format: "date >= %@",              startDate as NSDate),
+            NSPredicate(format: "date <= %@",              endDate   as NSDate),
+            NSPredicate(format: "nature != %@",             CashFlowEntity.Nature.expectedProfit.rawValue)
         ]
 
         if !searchText.isEmpty {
@@ -210,24 +215,23 @@ struct CashFlowView: View {
             )
         }
 
-        req.predicate     = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+        req.predicate       = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         req.sortDescriptors = [NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)]
 
         do {
             cashFlowsArray = try moc.fetch(req)
         } catch {
-            print("Failed to fetch filtered cash-flows:", error)
+            print("❗️ Failed to fetch filtered cash-flows:", error)
             cashFlowsArray = []
         }
     }
 }
 
-
 // MARK: – YearBlock
 
 fileprivate struct YearBlock: View {
     let yearGroup: YearGroup
-    @State private var stage = 0    // 0=closed,1=summary,2=months
+    @State private var stage     = 0    // 0=closed,1=summary,2=months
     @State private var isHovered = false
 
     private let order: [CashFlowEntity.Nature] = [.principal, .capitalGains, .interest]
@@ -243,8 +247,7 @@ fileprivate struct YearBlock: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Button { stage = (stage + 1) % 3 }
-            label: {
+            Button { stage = (stage + 1) % 3 } label: {
                 HStack {
                     Text(yearGroup.label)
                         .font(.system(.title2, design: .rounded))
@@ -261,7 +264,8 @@ fileprivate struct YearBlock: View {
                 .background(
                     LinearGradient(
                         gradient: Gradient(colors: [Color.indigo, Color.blue]),
-                        startPoint: .leading, endPoint: .trailing
+                        startPoint: .leading,
+                        endPoint: .trailing
                     )
                 )
                 .cornerRadius(12)
@@ -273,7 +277,6 @@ fileprivate struct YearBlock: View {
             }
             .buttonStyle(.plain)
             .onHover { isHovered = $0 }
-            .help("")
 
             if stage >= 1 {
                 ForEach(sums, id: \.0) { nature, amt in
@@ -306,7 +309,7 @@ fileprivate struct YearBlock: View {
 
 fileprivate struct MonthBlock: View {
     let monthGroup: MonthGroup
-    @State private var stage = 0    // 0=closed,1=summary,2=bonds
+    @State private var stage     = 0
     @State private var isHovered = false
 
     private let order: [CashFlowEntity.Nature] = [.principal, .capitalGains, .interest]
@@ -321,8 +324,7 @@ fileprivate struct MonthBlock: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Button { stage = (stage + 1) % 3 }
-            label: {
+            Button { stage = (stage + 1) % 3 } label: {
                 HStack {
                     Text(monthGroup.label)
                         .font(.system(.headline, design: .rounded))
@@ -339,7 +341,8 @@ fileprivate struct MonthBlock: View {
                 .background(
                     LinearGradient(
                         gradient: Gradient(colors: [Color.teal, Color.green]),
-                        startPoint: .leading, endPoint: .trailing
+                        startPoint: .leading,
+                        endPoint: .trailing
                     )
                 )
                 .cornerRadius(12)
@@ -351,7 +354,6 @@ fileprivate struct MonthBlock: View {
             }
             .buttonStyle(.plain)
             .onHover { isHovered = $0 }
-            .help("")
 
             if stage >= 1 {
                 ForEach(sums, id: \.0) { nature, amt in
@@ -393,7 +395,7 @@ fileprivate struct BondCardView: View {
     let bondName: String
     let events: [CouponEvent]
 
-    @State private var expanded = false
+    @State private var expanded  = false
     @State private var isHovered = false
 
     private var total: Double { events.reduce(0) { $0 + $1.amount } }
@@ -405,17 +407,15 @@ fileprivate struct BondCardView: View {
     private let order: [CashFlowEntity.Nature] = [.principal, .capitalGains, .interest]
     private var sums: [(CashFlowEntity.Nature, Double)] {
         order.compactMap { n in
-            let sum = events
-                .filter { $0.nature == n }
-                .reduce(0) { $0 + $1.amount }
-            return sum != 0 ? (n, sum) : nil
+            let amt = events.filter { $0.nature == n }
+                            .reduce(0) { $0 + $1.amount }
+            return amt != 0 ? (n, amt) : nil
         }
     }
 
     var body: some View {
         VStack(spacing: 8) {
-            Button { expanded.toggle() }
-            label: {
+            Button { expanded.toggle() } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(bondName)
@@ -441,7 +441,8 @@ fileprivate struct BondCardView: View {
                 .background(
                     LinearGradient(
                         gradient: Gradient(colors: [Color.orange, Color.red]),
-                        startPoint: .topLeading, endPoint: .bottomTrailing
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
                 )
                 .cornerRadius(12)
@@ -453,7 +454,6 @@ fileprivate struct BondCardView: View {
             }
             .buttonStyle(.plain)
             .onHover { isHovered = $0 }
-            .help("")
 
             if expanded {
                 ForEach(sums, id: \.0) { nature, amt in
