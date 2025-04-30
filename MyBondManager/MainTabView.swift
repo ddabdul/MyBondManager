@@ -1,21 +1,21 @@
 //
 //  MainTabView.swift
 //  MyBondManager
-//  Updated 01/05/2025 – apply panelBackground to macOS toolbar
+//  Updated 15/05/2025 – add ETF tab
 //
 
 import SwiftUI
 import CoreData
 
 struct MainTabView: View {
-    @State private var showingMaturedSheet = false
-    @State private var showingAddBondView  = false
-    @State private var showingRecalcAlert  = false
+    @State private var showingMaturedSheet  = false
+    @State private var showingAddBondView   = false
+    @State private var showingRecalcAlert   = false
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // 1) Underlay everything with your dark-grey
+                // 1) Underlay everything with your dark-grey panel background
                 AppTheme.panelBackground
                     .ignoresSafeArea()
 
@@ -31,9 +31,9 @@ struct MainTabView: View {
                             .background(AppTheme.panelBackground)
                     }
                     .navigationSplitViewColumnWidth(
-                        min: geo.size.width / 3,
+                        min:   geo.size.width / 3,
                         ideal: geo.size.width / 3,
-                        max: geo.size.width * 0.5
+                        max:   geo.size.width * 0.5
                     )
                     .toolbar {
                         ToolbarItem(placement: .primaryAction) {
@@ -68,9 +68,9 @@ struct MainTabView: View {
                             .background(AppTheme.panelBackground)
                     }
                     .navigationSplitViewColumnWidth(
-                        min: geo.size.width / 3,
+                        min:   geo.size.width / 3,
                         ideal: geo.size.width / 3,
-                        max: geo.size.width * 0.5
+                        max:   geo.size.width * 0.5
                     )
                     .toolbar {
                         ToolbarItem(placement: .primaryAction) {
@@ -87,8 +87,30 @@ struct MainTabView: View {
                     .tabItem {
                         Label("Cash Flow", systemImage: "dollarsign.circle")
                     }
+
+                    // — ETF Tab —
+                    // Replace `ETFView()` with your actual ETF view.
+                    NavigationSplitView {
+                        PortfolioSummaryView()
+                            .frame(minWidth: geo.size.width / 3)
+                            .background(AppTheme.panelBackground)
+                    } detail: {
+                        ETFTestView()  // or whatever detail you need
+                            .background(AppTheme.panelBackground)
+                    }
+                    .navigationSplitViewColumnWidth(
+                        min:   geo.size.width / 3,
+                        ideal: geo.size.width / 3,
+                        max:   geo.size.width * 0.5
+                    )
+                    .toolbar {
+                        // Add any ETF‐specific toolbar items here
+                    }
+                    .tabItem {
+                        Label("ETF", systemImage: "chart.bar")
+                    }
                 }
-                // ─── paint the macOS window toolbar / tab strip grey ───
+                // paint the macOS window toolbar / tab strip grey
                 .toolbarBackground(AppTheme.panelBackground)
                 .background(Color.clear)
                 .environment(
@@ -99,6 +121,8 @@ struct MainTabView: View {
         }
     }
 
+    /// Manually regenerate cash flows for every bond,
+    /// ignoring the one-time migration flag.
     private func recalculateAllCashFlows() {
         let persistence = PersistenceController.shared
         let context = persistence.backgroundContext
