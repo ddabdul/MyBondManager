@@ -11,6 +11,8 @@
 		092730B42DC25AAA00FD7B65 /* ETFEntity+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092730B22DC25AAA00FD7B65 /* ETFEntity+CoreDataProperties.swift */; };
 		092730B72DC25F5B00FD7B65 /* ETFHoldings+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092730B62DC25F5B00FD7B65 /* ETFHoldings+CoreDataProperties.swift */; };
 		092730B82DC25F5B00FD7B65 /* ETFHoldings+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092730B52DC25F5B00FD7B65 /* ETFHoldings+CoreDataClass.swift */; };
+		092730BB2DC279EE00FD7B65 /* ETFPrice+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092730BA2DC279EE00FD7B65 /* ETFPrice+CoreDataProperties.swift */; };
+		092730BC2DC279EE00FD7B65 /* ETFPrice+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092730B92DC279EE00FD7B65 /* ETFPrice+CoreDataClass.swift */; };
 		097331BF2DBF79D30066B4F6 /* CashFlowEntity+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 097331BE2DBF79D30066B4F6 /* CashFlowEntity+CoreDataProperties.swift */; };
 		097331C02DBF79D30066B4F6 /* CashFlowEntity+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 097331BD2DBF79D30066B4F6 /* CashFlowEntity+CoreDataClass.swift */; };
 		09C400042DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C400032DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift */; };
@@ -32,6 +34,8 @@
 		092730B22DC25AAA00FD7B65 /* ETFEntity+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ETFEntity+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		092730B52DC25F5B00FD7B65 /* ETFHoldings+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ETFHoldings+CoreDataClass.swift"; sourceTree = "<group>"; };
 		092730B62DC25F5B00FD7B65 /* ETFHoldings+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ETFHoldings+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		092730B92DC279EE00FD7B65 /* ETFPrice+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ETFPrice+CoreDataClass.swift"; sourceTree = "<group>"; };
+		092730BA2DC279EE00FD7B65 /* ETFPrice+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ETFPrice+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		0966F6152DB3FB2600DC7CC7 /* MyBondManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MyBondManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		097331BD2DBF79D30066B4F6 /* CashFlowEntity+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CashFlowEntity+CoreDataClass.swift"; sourceTree = "<group>"; };
 		097331BE2DBF79D30066B4F6 /* CashFlowEntity+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CashFlowEntity+CoreDataProperties.swift"; sourceTree = "<group>"; };
@@ -74,6 +78,8 @@
 		0966F60C2DB3FB2600DC7CC7 = {
 			isa = PBXGroup;
 			children = (
+				092730B92DC279EE00FD7B65 /* ETFPrice+CoreDataClass.swift */,
+				092730BA2DC279EE00FD7B65 /* ETFPrice+CoreDataProperties.swift */,
 				092730B52DC25F5B00FD7B65 /* ETFHoldings+CoreDataClass.swift */,
 				092730B62DC25F5B00FD7B65 /* ETFHoldings+CoreDataProperties.swift */,
 				092730B12DC25AAA00FD7B65 /* ETFEntity+CoreDataClass.swift */,
@@ -210,6 +216,8 @@
 				09C400052DBB947B00E0E99C /* BondEntity+CoreDataClass.swift in Sources */,
 				092730B72DC25F5B00FD7B65 /* ETFHoldings+CoreDataProperties.swift in Sources */,
 				092730B82DC25F5B00FD7B65 /* ETFHoldings+CoreDataClass.swift in Sources */,
+				092730BB2DC279EE00FD7B65 /* ETFPrice+CoreDataProperties.swift in Sources */,
+				092730BC2DC279EE00FD7B65 /* ETFPrice+CoreDataClass.swift in Sources */,
 				092730B32DC25AAA00FD7B65 /* ETFEntity+CoreDataClass.swift in Sources */,
 				092730B42DC25AAA00FD7B65 /* ETFEntity+CoreDataProperties.swift in Sources */,
 				097331BF2DBF79D30066B4F6 /* CashFlowEntity+CoreDataProperties.swift in Sources */,

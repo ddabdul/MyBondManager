@@ -23,6 +23,7 @@ extension ETFEntity {
     @NSManaged public var lastPrice: Double
     @NSManaged public var issuer: String?
     @NSManaged public var etftoholding: NSSet?
+    @NSManaged public var etfPriceMany: NSSet?
 
 }
 
@@ -40,6 +41,23 @@ extension ETFEntity {
 
     @objc(removeEtftoholding:)
     @NSManaged public func removeFromEtftoholding(_ values: NSSet)
+
+}
+
+// MARK: Generated accessors for etfPriceMany
+extension ETFEntity {
+
+    @objc(addEtfPriceManyObject:)
+    @NSManaged public func addToEtfPriceMany(_ value: ETFPrice)
+
+    @objc(removeEtfPriceManyObject:)
+    @NSManaged public func removeFromEtfPriceMany(_ value: ETFPrice)
+
+    @objc(addEtfPriceMany:)
+    @NSManaged public func addToEtfPriceMany(_ values: NSSet)
+
+    @objc(removeEtfPriceMany:)
+    @NSManaged public func removeFromEtfPriceMany(_ values: NSSet)
 
 }
 

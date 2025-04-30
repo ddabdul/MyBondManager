@@ -26,8 +26,9 @@
         <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="isin" attributeType="String"/>
         <attribute name="issuer" attributeType="String"/>
-        <attribute name="lastPrice" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="lastPrice" attributeType="Double" usesScalarValueType="YES"/>
         <attribute name="wkn" attributeType="String"/>
+        <relationship name="etfPriceMany" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ETFPrice" inverseName="etfPriceHistory" inverseEntity="ETFPrice"/>
         <relationship name="etftoholding" toMany="YES" deletionRule="Cascade" destinationEntity="ETFHoldings" inverseName="holdingtoetf" inverseEntity="ETFHoldings"/>
     </entity>
     <entity name="ETFHoldings" representedClassName="ETFHoldings" syncable="YES">
@@ -35,6 +36,11 @@
         <attribute name="acquisitionPrice" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <attribute name="numberOfShares" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <relationship name="holdingtoetf" maxCount="1" deletionRule="Nullify" destinationEntity="ETFEntity" inverseName="etftoholding" inverseEntity="ETFEntity"/>
+    </entity>
+    <entity name="ETFPrice" representedClassName="ETFPrice" syncable="YES">
+        <attribute name="datePrice" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="price" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <relationship name="etfPriceHistory" maxCount="1" deletionRule="Nullify" destinationEntity="ETFEntity" inverseName="etfPriceMany" inverseEntity="ETFEntity"/>
     </entity>
     <entity name="Item" representedClassName="Item" syncable="YES" codeGenerationType="class">
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
