@@ -21,6 +21,14 @@
         <attribute name="nature" attributeType="String"/>
         <relationship name="bond" maxCount="1" deletionRule="Nullify" destinationEntity="BondEntity" inverseName="cashFlows" inverseEntity="BondEntity"/>
     </entity>
+    <entity name="ETFEntity" representedClassName="ETFEntity" syncable="YES">
+        <attribute name="etfName" attributeType="String"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isin" attributeType="String"/>
+        <attribute name="issuer" attributeType="String"/>
+        <attribute name="lastPrice" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="wkn" attributeType="String"/>
+    </entity>
     <entity name="Item" representedClassName="Item" syncable="YES" codeGenerationType="class">
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
     </entity>
