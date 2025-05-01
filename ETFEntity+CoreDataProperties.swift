@@ -61,6 +61,28 @@ extension ETFEntity {
 
 }
 
+extension ETFEntity {
+    /// A Swift‐typed Set of this ETF’s holdings
+    private var holdingsSet: Set<ETFHoldings> {
+        (self.etftoholding as? Set<ETFHoldings>) ?? []
+    }
+
+    /// How many individual acquisitions (holdings) this ETF has
+    var numberOfHoldings: Int {
+        holdingsSet.count
+    }
+
+    /// Sum of all shares across every acquisition
+    var totalShares: Int {
+        holdingsSet.reduce(0) { $0 + Int($1.numberOfShares) }
+    }
+
+    /// Current market value = lastPrice × totalShares
+    var totalValue: Double {
+        lastPrice * Double(totalShares)
+    }
+}
+
 extension ETFEntity : Identifiable {
 
 }

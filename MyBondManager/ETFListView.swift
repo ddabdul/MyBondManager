@@ -12,61 +12,49 @@ import CoreData
 @available(macOS 13.0, *)
 struct ETFListView: View {
     @Environment(\.managedObjectContext) private var viewContext
+
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \ETFEntity.etfName, ascending: true)],
         animation: .default)
     private var etfs: FetchedResults<ETFEntity>
-    
+
+    // drive selection off the ETF’s UUID
+    @State private var selectedID: UUID?
+    @State private var popoverETF: ETFEntity?
+
     var body: some View {
-        Table(etfs) {
-            // 1) ETF Name
-            TableColumn("ETF Name", value: \.etfName)
-            
-            // 2) Number of Holdings
-            TableColumn("Holdings") { etf in
+        Table(etfs, selection: $selectedID) {
+            TableColumn("ETF Name") { (etf: ETFEntity) in
+                Text(etf.etfName)
+            }
+            TableColumn("Holdings") { (etf: ETFEntity) in
                 Text("\(etf.numberOfHoldings)")
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            
-            // 3) Total Shares
-            TableColumn("Total Shares") { etf in
+            TableColumn("Total Shares") { (etf: ETFEntity) in
                 Text("\(etf.totalShares)")
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            
-            // 4) Last Price
-            TableColumn("Last Price") { etf in
-                // you can hook up NumberFormatter or use `.format(...)` if you like
+            TableColumn("Last Price") { (etf: ETFEntity) in
                 Text(String(format: "%.2f", etf.lastPrice))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            
-            // 5) Total Value = lastPrice * totalShares
-            TableColumn("Total Value") { etf in
+            TableColumn("Total Value") { (etf: ETFEntity) in
                 Text(String(format: "%.2f", etf.totalValue))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
+        .onChange(of: selectedID) { _old, newID in
+            guard let id = newID,
+                  let etf = etfs.first(where: { $0.id == id })
+            else { return }
+            popoverETF = etf
+            selectedID = nil
+        }
+        .popover(item: $popoverETF, arrowEdge: .bottom) { etf in
+            ETFHoldingsPopoverView(etf: etf)
+                .frame(minWidth: 600, minHeight: 400)
+        }
         .frame(minWidth: 700, minHeight: 400)
-    }
-}
-
-// MARK: – Convenience computed properties on ETFEntity
-
-extension ETFEntity {
-    /// Turn the NSSet into a Swift Set
-    private var holdingsSet: Set<ETFHoldings> {
-        (etftoholding as? Set<ETFHoldings>) ?? []
-    }
-
-    /// How many distinct holdings (by acquisition date) this ETF has
-    var numberOfHoldings: Int {
-        holdingsSet.count
-    }
-    
-    /// Sum of shares across all holdings
-    var totalShares: Int {
-        holdingsSet.reduce(0) { $0 + Int($1.numberOfShares) }
-    }
-    
-    /// Market value of all shares at the lastPrice
-    var totalValue: Double {
-        lastPrice * Double(totalShares)
     }
 }
