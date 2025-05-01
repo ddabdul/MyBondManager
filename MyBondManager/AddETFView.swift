@@ -10,7 +10,7 @@ import CoreData
 struct AddHoldingView: View {
     // MARK: – Core Data
     @Environment(\.managedObjectContext) private var viewContext
-    @Environment(\.dismiss) private var dismiss         // ← for closing the popover
+    @Environment(\.dismiss)        private var dismiss
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \ETFEntity.etfName, ascending: true)],
@@ -50,7 +50,7 @@ struct AddHoldingView: View {
             .pickerStyle(.segmented)
             .padding(.bottom)
             
-            // Existing ETF path
+            // Existing ETF selection
             if mode == .existing {
                 Section(header: Text("Select ETF")) {
                     Picker("ETF", selection: $selectedETF) {
@@ -62,7 +62,7 @@ struct AddHoldingView: View {
                 }
             }
             
-            // New ETF path
+            // New ETF fetch
             if mode == .new {
                 Section(header: Text("Fetch ETF Header")) {
                     HStack {
@@ -95,7 +95,7 @@ struct AddHoldingView: View {
                 }
             }
             
-            // Holding inputs (shown when we have an ETF)
+            // Holding inputs
             if (mode == .existing && selectedETF != nil)
                 || (mode == .new && fetchedHeader != nil)
             {
@@ -109,25 +109,32 @@ struct AddHoldingView: View {
                     TextField("Number of Shares", text: $numberOfShares)
                 }
                 
-                Button("Save Holding") {
-                    saveHolding()
-                }
-                .disabled(!canSave)
-                
-                Button("Close") {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-            }
-            
-            // Success message 
-            if showSuccess {
+                // Button bar: Close + Save
                 Section {
                     HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                        Text("Holding created successfully!")
-                            .fontWeight(.semibold)
+                        Button("Close") {
+                            dismiss()
+                        }
+                        .keyboardShortcut(.cancelAction)
+                        
+                        Spacer()
+                        
+                        Button("Save Holding") {
+                            saveHolding()
+                        }
+                        .disabled(!canSave)
+                    }
+                }
+                
+                // Success message
+                if showSuccess {
+                    Section {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("Holding created successfully!")
+                                .fontWeight(.semibold)
+                        }
                     }
                 }
             }
@@ -184,14 +191,13 @@ struct AddHoldingView: View {
         
         do {
             try viewContext.save()
-            // Clear input fields
+            // Clear inputs
             acquisitionPrice = ""
             numberOfShares = ""
             if mode == .new {
                 newISIN = ""
                 fetchedHeader = nil
             }
-            // Show success message
             showSuccess = true
         } catch {
             print("Core Data save error:", error)
