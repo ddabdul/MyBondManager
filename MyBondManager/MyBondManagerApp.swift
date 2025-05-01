@@ -37,7 +37,7 @@ struct BondPortfolioManagerApp: App {
                     try await updater.refreshAllPrices()
                     // no alert on success
                 } catch {
-                    notifier.alertMessage = "❗️Failed refreshing ETF prices:\n\(error.localizedDescription)"
+          //          notifier.alertMessage = "❗️Failed refreshing ETF prices:\n\(error.localizedDescription)"
                 }
             }
             .onReceive(notifier.$alertMessage) { _ in }
