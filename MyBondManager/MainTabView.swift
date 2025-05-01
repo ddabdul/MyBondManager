@@ -1,16 +1,16 @@
-//
 //  MainTabView.swift
 //  MyBondManager
-//  Updated 15/05/2025 – add ETF tab
+//  Updated 15/05/2025 – add ETF tab with “+” button
 //
 
 import SwiftUI
 import CoreData
 
 struct MainTabView: View {
-    @State private var showingMaturedSheet  = false
-    @State private var showingAddBondView   = false
-    @State private var showingRecalcAlert   = false
+    @State private var showingMaturedSheet   = false
+    @State private var showingAddBondView    = false
+    @State private var showingRecalcAlert    = false
+    @State private var showingAddETFView     = false    // ← new
 
     var body: some View {
         GeometryReader { geo in
@@ -89,13 +89,12 @@ struct MainTabView: View {
                     }
 
                     // — ETF Tab —
-                    // Replace `ETFView()` with your actual ETF view.
                     NavigationSplitView {
                         PortfolioSummaryView()
                             .frame(minWidth: geo.size.width / 3)
                             .background(AppTheme.panelBackground)
                     } detail: {
-                        ETFListView()  // or whatever detail you need
+                        ETFListView()
                             .background(AppTheme.panelBackground)
                     }
                     .navigationSplitViewColumnWidth(
@@ -104,7 +103,18 @@ struct MainTabView: View {
                         max:   geo.size.width * 0.5
                     )
                     .toolbar {
-                        // Add any ETF‐specific toolbar items here
+                        // + Add ETF button
+                        ToolbarItem(placement: .primaryAction) {
+                            Button {
+                                showingAddETFView = true
+                            } label: {
+                                Image(systemName: "plus")
+                            }
+                        }
+                    }
+                    .sheet(isPresented: $showingAddETFView) {
+                        AddHoldingView()
+                            .frame(minWidth: 500, minHeight: 400)
                     }
                     .tabItem {
                         Label("ETF", systemImage: "chart.bar")

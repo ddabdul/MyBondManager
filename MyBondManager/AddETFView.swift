@@ -10,6 +10,8 @@ import CoreData
 struct AddHoldingView: View {
     // MARK: – Core Data
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.dismiss) private var dismiss         // ← for closing the popover
+
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \ETFEntity.etfName, ascending: true)],
         animation: .default)
@@ -33,6 +35,9 @@ struct AddHoldingView: View {
     @State private var acquisitionPrice: String = ""
     @State private var numberOfShares: String = ""
     
+    // success state
+    @State private var showSuccess = false
+
     private let scraper = InstrumentHeaderScraper()
     
     var body: some View {
@@ -108,6 +113,23 @@ struct AddHoldingView: View {
                     saveHolding()
                 }
                 .disabled(!canSave)
+                
+                Button("Close") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+            
+            // Success message 
+            if showSuccess {
+                Section {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("Holding created successfully!")
+                            .fontWeight(.semibold)
+                    }
+                }
             }
         }
         .padding()
@@ -120,7 +142,7 @@ struct AddHoldingView: View {
          (mode == .new && fetchedHeader != nil))
     }
     
-    /// Fetch ETF header for new ETF
+    // MARK: – Fetch header
     private func fetchHeader() async {
         fetchError = nil
         fetchedHeader = nil
@@ -135,47 +157,43 @@ struct AddHoldingView: View {
         }
     }
     
-    /// Create Core Data objects and save
+    // MARK: – Save holding
     private func saveHolding() {
-        // Determine ETFEntity
         let etf: ETFEntity
         if mode == .existing {
             etf = selectedETF!
         } else {
-            // create new ETFEntity
             etf = ETFEntity(context: viewContext)
             etf.id = UUID()
             etf.etfName = fetchedHeader!.name
             etf.isin = newISIN
             etf.wkn = fetchedHeader!.wkn
             etf.lastPrice = fetchedHeader!.price
-            etf.issuer = "" // fill if you have data
+            etf.issuer = ""
         }
         
-        // Create holding
         let holding = ETFHoldings(context: viewContext)
         holding.acquisitionDate = acquisitionDate
         holding.acquisitionPrice = Double(acquisitionPrice)!
         holding.numberOfShares = Int32(Int(numberOfShares)!)
         holding.holdingtoetf = etf
         
-        // Update ETF's lastPrice
         if let latest = fetchedHeader?.price {
             etf.lastPrice = latest
         }
         
-        // Save
         do {
             try viewContext.save()
-            // reset form
+            // Clear input fields
             acquisitionPrice = ""
             numberOfShares = ""
             if mode == .new {
                 newISIN = ""
                 fetchedHeader = nil
             }
+            // Show success message
+            showSuccess = true
         } catch {
-            // handle error (e.g. show an alert)
             print("Core Data save error:", error)
         }
     }
