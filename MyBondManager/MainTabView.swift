@@ -5,122 +5,28 @@
 
 import SwiftUI
 import CoreData
+import AppKit
 
+@available(macOS 13.0, *)
 struct MainTabView: View {
     @State private var showingMaturedSheet   = false
     @State private var showingAddBondView    = false
     @State private var showingRecalcAlert    = false
-    @State private var showingAddETFView     = false    // ← new
+    @State private var showingAddETFView     = false
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // 1) Underlay everything with your dark-grey panel background
+                // Dark-grey panel background
                 AppTheme.panelBackground
                     .ignoresSafeArea()
 
-                // 2) TabView on top, transparent so grey shows through
+                // Our three-tab TabView
                 TabView {
-                    // — Portfolio Tab —
-                    NavigationSplitView {
-                        PortfolioSummaryView()
-                            .frame(minWidth: geo.size.width / 3)
-                            .background(AppTheme.panelBackground)
-                    } detail: {
-                        BondTableView()
-                            .background(AppTheme.panelBackground)
-                    }
-                    .navigationSplitViewColumnWidth(
-                        min:   geo.size.width / 3,
-                        ideal: geo.size.width / 3,
-                        max:   geo.size.width * 0.5
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button { showingAddBondView = true } label: {
-                                Image(systemName: "plus")
-                            }
-                        }
-                        ToolbarItem(placement: .primaryAction) {
-                            Button { showingMaturedSheet = true } label: {
-                                Label("Matured", systemImage: "clock.arrow.circlepath")
-                            }
-                        }
-                    }
-                    .sheet(isPresented: $showingAddBondView) {
-                        AddBondViewAsync()
-                    }
-                    .sheet(isPresented: $showingMaturedSheet) {
-                        MaturedBondsView()
-                            .frame(minWidth: 700, minHeight: 400)
-                    }
-                    .tabItem {
-                        Label("Portfolio", systemImage: "list.bullet")
-                    }
-
-                    // — Cash-Flow Tab —
-                    NavigationSplitView {
-                        PortfolioSummaryView()
-                            .frame(minWidth: geo.size.width / 3)
-                            .background(AppTheme.panelBackground)
-                    } detail: {
-                        CashFlowView()
-                            .background(AppTheme.panelBackground)
-                    }
-                    .navigationSplitViewColumnWidth(
-                        min:   geo.size.width / 3,
-                        ideal: geo.size.width / 3,
-                        max:   geo.size.width * 0.5
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button {
-                                recalculateAllCashFlows()
-                            } label: {
-                                Label("Recalculate", systemImage: "arrow.clockwise")
-                            }
-                        }
-                    }
-                    .alert("Cash flows recalculated", isPresented: $showingRecalcAlert) {
-                        Button("OK", role: .cancel) { }
-                    }
-                    .tabItem {
-                        Label("Cash Flow", systemImage: "dollarsign.circle")
-                    }
-
-                    // — ETF Tab —
-                    NavigationSplitView {
-                        PortfolioSummaryView()
-                            .frame(minWidth: geo.size.width / 3)
-                            .background(AppTheme.panelBackground)
-                    } detail: {
-                        ETFListView()
-                            .background(AppTheme.panelBackground)
-                    }
-                    .navigationSplitViewColumnWidth(
-                        min:   geo.size.width / 3,
-                        ideal: geo.size.width / 3,
-                        max:   geo.size.width * 0.5
-                    )
-                    .toolbar {
-                        // + Add ETF button
-                        ToolbarItem(placement: .primaryAction) {
-                            Button {
-                                showingAddETFView = true
-                            } label: {
-                                Image(systemName: "plus")
-                            }
-                        }
-                    }
-                    .sheet(isPresented: $showingAddETFView) {
-                        AddHoldingView()
-                            .frame(minWidth: 500, minHeight: 400)
-                    }
-                    .tabItem {
-                        Label("ETF", systemImage: "chart.bar")
-                    }
+                    portfolioTab(geo: geo)
+                    cashFlowTab(geo: geo)
+                    etfTab(geo: geo)
                 }
-                // paint the macOS window toolbar / tab strip grey
                 .toolbarBackground(AppTheme.panelBackground)
                 .background(Color.clear)
                 .environment(
@@ -131,8 +37,146 @@ struct MainTabView: View {
         }
     }
 
-    /// Manually regenerate cash flows for every bond,
-    /// ignoring the one-time migration flag.
+    /// Sends the AppKit action to toggle the split-view sidebar
+    private func toggleSidebar() {
+        NSApp.keyWindow?.firstResponder?
+            .tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
+    }
+
+    // MARK: — Portfolio Tab
+
+    @ViewBuilder
+    private func portfolioTab(geo: GeometryProxy) -> some View {
+        NavigationSplitView {
+            PortfolioSummaryView()
+                .frame(minWidth: geo.size.width / 3)
+                .background(AppTheme.panelBackground)
+        } detail: {
+            BondTableView()
+                .background(AppTheme.panelBackground)
+        }
+        .navigationSplitViewColumnWidth(
+            min:   geo.size.width / 3,
+            ideal: geo.size.width / 3,
+            max:   geo.size.width * 0.5
+        )
+        .toolbar {
+            // Sidebar toggle
+            ToolbarItem(placement: .navigation) {
+                Button(action: toggleSidebar) {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help("Toggle Sidebar")
+            }
+            // Add Bond
+            ToolbarItem(placement: .primaryAction) {
+                Button { showingAddBondView = true } label: {
+                    Image(systemName: "plus")
+                }
+            }
+            // Matured Bonds
+            ToolbarItem(placement: .primaryAction) {
+                Button { showingMaturedSheet = true } label: {
+                    Label("Matured", systemImage: "clock.arrow.circlepath")
+                }
+            }
+        }
+        .sheet(isPresented: $showingAddBondView) {
+            AddBondViewAsync()
+        }
+        .sheet(isPresented: $showingMaturedSheet) {
+            MaturedBondsView()
+                .frame(minWidth: 700, minHeight: 400)
+        }
+        .tabItem {
+            Label("Portfolio", systemImage: "list.bullet")
+        }
+    }
+
+    // MARK: — Cash Flow Tab
+
+    @ViewBuilder
+    private func cashFlowTab(geo: GeometryProxy) -> some View {
+        NavigationSplitView {
+            PortfolioSummaryView()
+                .frame(minWidth: geo.size.width / 3)
+                .background(AppTheme.panelBackground)
+        } detail: {
+            CashFlowView()
+                .background(AppTheme.panelBackground)
+        }
+        .navigationSplitViewColumnWidth(
+            min:   geo.size.width / 3,
+            ideal: geo.size.width / 3,
+            max:   geo.size.width * 0.5
+        )
+        .toolbar {
+            // Sidebar toggle
+            ToolbarItem(placement: .navigation) {
+                Button(action: toggleSidebar) {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help("Toggle Sidebar")
+            }
+            // Recalculate Cash Flows
+            ToolbarItem(placement: .primaryAction) {
+                Button { recalculateAllCashFlows() } label: {
+                    Label("Recalculate", systemImage: "arrow.clockwise")
+                }
+            }
+        }
+        .alert("Cash flows recalculated", isPresented: $showingRecalcAlert) {
+            Button("OK", role: .cancel) { }
+        }
+        .tabItem {
+            Label("Cash Flow", systemImage: "dollarsign.circle")
+        }
+    }
+
+    // MARK: — ETF Tab
+
+    @ViewBuilder
+    private func etfTab(geo: GeometryProxy) -> some View {
+        NavigationSplitView {
+            PortfolioSummaryView()
+                .frame(minWidth: geo.size.width / 3)
+                .background(AppTheme.panelBackground)
+        } detail: {
+            ETFListView()
+                .background(AppTheme.panelBackground)
+        }
+        .navigationSplitViewColumnWidth(
+            min:   geo.size.width / 3,
+            ideal: geo.size.width / 3,
+            max:   geo.size.width * 0.5
+        )
+        .toolbar {
+            // Sidebar toggle
+            ToolbarItem(placement: .navigation) {
+                Button(action: toggleSidebar) {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help("Toggle Sidebar")
+            }
+            // Add ETF
+            ToolbarItem(placement: .primaryAction) {
+                Button { showingAddETFView = true } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showingAddETFView) {
+            AddHoldingView()
+                .frame(minWidth: 500, minHeight: 400)
+        }
+        .tabItem {
+            Label("ETF", systemImage: "chart.bar")
+        }
+    }
+
+    // MARK: — Helper
+
+    /// Regenerate cash‐flows on a background context, then flip the alert on main
     private func recalculateAllCashFlows() {
         let persistence = PersistenceController.shared
         let context = persistence.backgroundContext

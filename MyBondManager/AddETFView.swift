@@ -103,6 +103,7 @@ struct AddHoldingView: View {
                     DatePicker(
                         "Acquisition Date",
                         selection: $acquisitionDate,
+                        in: ...Date(),                  // limit to today or earlier
                         displayedComponents: .date
                     )
                     TextField("Acquisition Price", text: $acquisitionPrice)
