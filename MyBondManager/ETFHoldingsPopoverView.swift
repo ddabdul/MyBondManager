@@ -1,6 +1,6 @@
-//  ETFHoldingsPopoverView.swift
-//  MyBondManager
-//  Shows per‐acquisition ETF holdings in a table.
+//  ETFHoldingsPopoverView.swift
+//  MyBondManager
+//  Shows per‐acquisition ETF holdings in a table.
 //
 
 import SwiftUI
@@ -24,20 +24,31 @@ struct ETFHoldingsPopoverView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header with title + close
+            // Header with title + close (replaced with x button)
             HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(.white) // Adjust color as needed
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+                .padding(.leading) // Add some leading padding
+
+                Spacer() // Push the x button to the left if needed
+
                 Text(etf.etfName)
                     .font(.title2)
                     .foregroundColor(.white)
-                Spacer()
-                Button("Close") {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                Spacer() // Keep some space on the right
+                    .frame(width: 30) // Match the width of the button
+
             }
             .padding(.horizontal)
-            .padding(.vertical, 6)
-            .background(Color.gray.opacity(0.8))
+            .padding(.vertical, 8) // Adjusted vertical padding to match AddBondView
+            .background(AppTheme.tileBackground) // Using AppTheme.tileBackground
 
             // Table of holdings
             Table(acquisitions, sortOrder: $sortOrder) {
@@ -97,9 +108,9 @@ struct ETFHoldingsPopoverView: View {
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .scrollContentBackground(.hidden)
-            .background(AppTheme.panelBackground)
             .padding([.horizontal, .bottom])
         }
+        .background(AppTheme.panelBackground)
         .frame(minWidth: 800, minHeight: 400)
     }
 }
