@@ -1,3 +1,4 @@
+//
 //  MyBondManager
 //  AddETFView.swift
 //  A SwiftUI form view for adding a new ETF position
@@ -10,153 +11,173 @@ import CoreData
 struct AddHoldingView: View {
     // MARK: – Core Data
     @Environment(\.managedObjectContext) private var viewContext
-    @Environment(\.dismiss)        private var dismiss
+    @Environment(\.dismiss)           private var dismiss: DismissAction // Explicitly specify DismissAction
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \ETFEntity.etfName, ascending: true)],
         animation: .default)
     private var allETFs: FetchedResults<ETFEntity>
-    
+
     // MARK: – UI State
     enum Mode { case existing, new }
     @State private var mode: Mode = .existing
-    
+
     // existing ETF selection
     @State private var selectedETF: ETFEntity?
-    
+
     // new ETF fields
     @State private var newISIN: String = ""
     @State private var fetchedHeader: InstrumentHeaderScraper.ETFInstrumentHeader?
     @State private var isFetching = false
     @State private var fetchError: Error?
-    
+
     // holding fields (shared)
     @State private var acquisitionDate: Date = Date()
     @State private var acquisitionPrice: String = ""
     @State private var numberOfShares: String = ""
-    
+
     // success state
     @State private var showSuccess = false
 
     private let scraper = InstrumentHeaderScraper()
-    
+
     var body: some View {
-        Form {
-            // Mode picker
-            Picker("Mode", selection: $mode) {
-                Text("Add to Existing ETF").tag(Mode.existing)
-                Text("Add New ETF + Holding").tag(Mode.new)
-            }
-            .pickerStyle(.segmented)
-            .padding(.bottom)
-            
-            // Existing ETF selection
-            if mode == .existing {
-                Section(header: Text("Select ETF")) {
-                    Picker("ETF", selection: $selectedETF) {
-                        ForEach(allETFs) { etf in
-                            Text(etf.etfName).tag(Optional(etf))
-                        }
-                    }
-                    .labelsHidden()
+        VStack(spacing: 0) {
+            // Title Bar
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(.secondary)
                 }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+
+                Text(mode == .existing ? "Add to Existing ETF" : "Add New ETF")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                Spacer()
+                    .frame(width: 30)
             }
-            
-            // New ETF fetch
-            if mode == .new {
-                Section(header: Text("Fetch ETF Header")) {
-                    HStack {
-                        TextField("ISIN", text: $newISIN)
-                            .textFieldStyle(.roundedBorder)
-                        Button {
-                            Task { await fetchHeader() }
-                        } label: {
-                            if isFetching {
-                                ProgressView()
-                            } else {
-                                Text("Fetch")
+            .padding()
+            .background(Color(.windowBackgroundColor))
+
+            Form {
+                // Mode picker
+                Picker("Mode", selection: $mode) {
+                    Text("Add to Existing ETF").tag(Mode.existing)
+                    Text("Add New ETF + Holding").tag(Mode.new)
+                }
+                .pickerStyle(.segmented)
+                .padding(.bottom)
+
+                // Existing ETF selection
+                if mode == .existing {
+                    Section(header: Text("Select ETF")) {
+                        Picker("ETF", selection: $selectedETF) {
+                            Text("(none)").tag(Optional<ETFEntity>(nil))
+                            ForEach(allETFs) { etf in
+                                Text(etf.etfName).tag(Optional(etf))
                             }
                         }
-                        .disabled(newISIN.isEmpty || isFetching)
-                    }
-                    
-                    if let header = fetchedHeader {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(header.name).font(.headline)
-                            Text("WKN: \(header.wkn)")
-                            Text("Price: \(header.price, specifier: "%.2f") \(header.currency ?? "")")
-                        }
-                    }
-                    
-                    if let err = fetchError {
-                        Text(err.localizedDescription)
-                            .foregroundColor(.red)
+                        .labelsHidden()
                     }
                 }
-            }
-            
-            // Holding inputs
-            if (mode == .existing && selectedETF != nil)
-                || (mode == .new && fetchedHeader != nil)
-            {
-                Section(header: Text("Holding Details")) {
-                    DatePicker(
-                        "Acquisition Date",
-                        selection: $acquisitionDate,
-                        in: ...Date(),                  // limit to today or earlier
-                        displayedComponents: .date
-                    )
-                    TextField("Acquisition Price", text: $acquisitionPrice)
-                    TextField("Number of Shares", text: $numberOfShares)
-                }
-                
-                // Button bar: Close + Save
-                Section {
-                    HStack {
-                        Button("Close") {
-                            dismiss()
+
+                // New ETF fetch
+                if mode == .new {
+                    Section(header: Text("Fetch ETF Header")) {
+                        HStack {
+                            TextField("ISIN", text: $newISIN)
+                                .textFieldStyle(.roundedBorder)
+                            Button {
+                                Task { await fetchHeader() }
+                            } label: {
+                                if isFetching {
+                                    ProgressView()
+                                } else {
+                                    Text("Fetch")
+                                }
+                            }
+                            .disabled(newISIN.isEmpty || isFetching)
                         }
-                        .keyboardShortcut(.cancelAction)
-                        
-                        Spacer()
-                        
-                        Button("Save Holding") {
-                            saveHolding()
+
+                        if let header = fetchedHeader {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(header.name).font(.headline)
+                                Text("WKN: \(header.wkn)")
+                                Text("Price: \(header.price, specifier: "%.2f") \(header.currency ?? "")")
+                            }
                         }
-                        .disabled(!canSave)
+
+                        if let err = fetchError {
+                            Text(err.localizedDescription)
+                                .foregroundColor(.red)
+                        }
                     }
                 }
-                
-                // Success message
-                if showSuccess {
+
+                // Holding inputs
+                if (mode == .existing && selectedETF != nil)
+                    || (mode == .new && fetchedHeader != nil)
+                {
+                    Section(header: Text("Holding Details")) {
+                        DatePicker(
+                            "Acquisition Date",
+                            selection: $acquisitionDate,
+                            in: ...Date(),
+                            displayedComponents: .date
+                        )
+                        TextField("Acquisition Price", text: $acquisitionPrice)
+                        TextField("Number of Shares", text: $numberOfShares)
+                    }
+
+                    // Button bar: Save
                     Section {
                         HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                            Text("Holding created successfully!")
-                                .fontWeight(.semibold)
+                            Spacer()
+                            Button("Save Holding") {
+                                saveHolding()
+                            }
+                            .disabled(!canSave)
+                            .keyboardShortcut(.defaultAction)
+                        }
+                    }
+
+                    // Success message
+                    if showSuccess {
+                        Section {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Holding created successfully!")
+                                    .fontWeight(.semibold)
+                            }
                         }
                     }
                 }
             }
+            .padding()
+            Spacer()
         }
-        .padding()
+        .frame(minWidth: 500, minHeight: 400)
     }
-    
+
     private var canSave: Bool {
         Double(acquisitionPrice) != nil &&
         Int32(numberOfShares) != nil &&
         ((mode == .existing && selectedETF != nil) ||
          (mode == .new && fetchedHeader != nil))
     }
-    
+
     // MARK: – Fetch header
     private func fetchHeader() async {
         fetchError = nil
         fetchedHeader = nil
         isFetching = true
         defer { isFetching = false }
-        
+
         do {
             let header = try await scraper.fetchInstrumentHeader(isin: newISIN)
             await MainActor.run { fetchedHeader = header }
@@ -164,7 +185,7 @@ struct AddHoldingView: View {
             await MainActor.run { fetchError = error }
         }
     }
-    
+
     // MARK: – Save holding
     private func saveHolding() {
         let etf: ETFEntity
@@ -179,17 +200,17 @@ struct AddHoldingView: View {
             etf.lastPrice = fetchedHeader!.price
             etf.issuer = ""
         }
-        
+
         let holding = ETFHoldings(context: viewContext)
         holding.acquisitionDate = acquisitionDate
         holding.acquisitionPrice = Double(acquisitionPrice)!
         holding.numberOfShares = Int32(Int(numberOfShares)!)
         holding.holdingtoetf = etf
-        
+
         if let latest = fetchedHeader?.price {
             etf.lastPrice = latest
         }
-        
+
         do {
             try viewContext.save()
             // Clear inputs

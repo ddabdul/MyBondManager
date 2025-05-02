@@ -1,11 +1,4 @@
 //
-//  ETFSellView.swift
-//  MyBondManager
-//
-//  Created by Olivier on 02/05/2025.
-//
-
-
 //  SellETFView.swift
 //  MyBondManager
 //
@@ -17,9 +10,10 @@ import CoreData
 
 @available(macOS 13.0, *)
 struct SellETFView: View {
+
     // MARK: – Environment
     @Environment(\.managedObjectContext) private var viewContext
-    @Environment(\.dismiss)           private var dismiss
+    @Environment(\.dismiss)           private var dismiss: DismissAction // Explicitly specify DismissAction
 
     // MARK: – Fetch ETFs
     @FetchRequest(
@@ -34,54 +28,75 @@ struct SellETFView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        Form {
-            // 1) Select your ETF
-            Section(header: Text("Select ETF")) {
-                Picker("ETF", selection: $selectedETF) {
-                    Text("(none)").tag(Optional<ETFEntity>(nil))
-                    ForEach(etfs) { etf in
-                        Text(etf.etfName).tag(Optional(etf))
-                    }
+        VStack(spacing: 0) {
+            // Title Bar
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(.secondary)
                 }
-                .labelsHidden()
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+
+                Text("Sell ETF Shares")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                // Placeholder for potential right-aligned buttons
+                Spacer()
+                    .frame(width: 30)
             }
+            .padding()
+            .background(Color(.windowBackgroundColor)) // Use a standard window background
 
-            // 2) Enter sale details
-            if let etf = selectedETF {
-                Section(header: Text("Sale Details")) {
-                    let maxShares = etf.totalShares
-                    HStack {
-                        TextField("Shares to Sell", text: $saleShares)
-                        Text("/ \(maxShares)")
-                            .foregroundColor(.secondary)
+            Form {
+                // 1) Select your ETF
+                Section(header: Text("Select ETF")) {
+                    Picker("ETF", selection: $selectedETF) {
+                        Text("(none)").tag(Optional<ETFEntity>(nil))
+                        ForEach(etfs) { etf in
+                            Text(etf.etfName).tag(Optional(etf))
+                        }
                     }
-
-                    DatePicker("Sale Date", selection: $saleDate, in: ...Date(), displayedComponents: .date)
+                    .labelsHidden()
                 }
 
-                // validation errors
-                if let err = errorMessage {
+                // 2) Enter sale details
+                if let etf = selectedETF {
+                    Section(header: Text("Sale Details")) {
+                        let maxShares = etf.totalShares
+                        HStack {
+                            TextField("Shares to Sell", text: $saleShares)
+                            Text("/ \(maxShares)")
+                                .foregroundColor(.secondary)
+                        }
+
+                        DatePicker("Sale Date", selection: $saleDate, in: ...Date(), displayedComponents: .date)
+                    }
+
+                    // validation errors
+                    if let err = errorMessage {
+                        Section {
+                            Text(err)
+                                .foregroundColor(.red)
+                        }
+                    }
+
+                    // 3) Buttons
                     Section {
-                        Text(err)
-                            .foregroundColor(.red)
-                    }
-                }
-
-                // 3) Buttons
-                Section {
-                    HStack {
-                        Button("Close") { dismiss() }
-                            .keyboardShortcut(.cancelAction)
-
-                        Spacer()
-
-                        Button("Save Sale") { saveSale() }
-                            .disabled(!canSave(etf: etf))
+                        HStack {
+                            Spacer()
+                            Button("Save Sale") { saveSale() }
+                                .disabled(!canSave(etf: etf))
+                                .keyboardShortcut(.defaultAction)
+                        }
                     }
                 }
             }
+            .padding()
+            Spacer() // Push content up if needed
         }
-        .padding()
         .frame(minWidth: 400, minHeight: 300)
     }
 
@@ -106,7 +121,6 @@ struct SellETFView: View {
         }
 
         var remaining = sharesToSell
-        // sort holdings oldest first
         let fifo = (etf.etftoholding as? Set<ETFHoldings>)?
             .sorted { $0.acquisitionDate < $1.acquisitionDate } ?? []
 
@@ -122,16 +136,12 @@ struct SellETFView: View {
             }
         }
 
-            do {
-                    try viewContext.save()
-                    
-                    // ⚡️ Force Core Data to re-send change notifications
-                    viewContext.refreshAllObjects()
-                    
-                    // then dismiss
-                    dismiss()
-                } catch {
-                    errorMessage = "Failed saving sale: \(error.localizedDescription)"
-                }
+        do {
+            try viewContext.save()
+            viewContext.refreshAllObjects()
+            dismiss()
+        } catch {
+            errorMessage = "Failed saving sale: \(error.localizedDescription)"
+        }
     }
 }
