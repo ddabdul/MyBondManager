@@ -122,11 +122,16 @@ struct SellETFView: View {
             }
         }
 
-        do {
-            try viewContext.save()
-            dismiss()
-        } catch {
-            errorMessage = "Failed saving sale: \(error.localizedDescription)"
-        }
+            do {
+                    try viewContext.save()
+                    
+                    // ⚡️ Force Core Data to re-send change notifications
+                    viewContext.refreshAllObjects()
+                    
+                    // then dismiss
+                    dismiss()
+                } catch {
+                    errorMessage = "Failed saving sale: \(error.localizedDescription)"
+                }
     }
 }
