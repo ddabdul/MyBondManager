@@ -22,6 +22,38 @@ extension ETFHoldings {
     @NSManaged public var holdingtoetf: ETFEntity
 
 }
+extension ETFHoldings {
+    /// total cost of this lot
+    var cost: Double {
+        Double(numberOfShares) * acquisitionPrice
+    }
+    /// current market value of this lot
+    var marketValue: Double {
+        Double(numberOfShares) * (holdingtoetf.lastPrice)
+    }
+    /// profit or loss
+    var profit: Double {
+        marketValue - cost
+    }
+    /// percent gain
+    var pctGain: Double {
+        cost > 0 ? (profit / cost * 100) : 0
+    }
+    /// days held (at least 1, to avoid division by zero)
+    var daysHeld: Int {
+        let raw = Calendar.current.dateComponents(
+            [.day],
+            from: acquisitionDate,
+            to: Date()
+        ).day ?? 0
+        return max(raw, 1)
+    }
+    /// annualized yield as (lastPrice – acquisitionPrice)/daysHeld * 365
+    var annualYield: Double {
+        let diff = holdingtoetf.lastPrice - acquisitionPrice
+        return diff / Double(daysHeld) * 365
+    }
+}
 
 extension ETFHoldings : Identifiable {
 

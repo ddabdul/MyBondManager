@@ -1,6 +1,7 @@
 //  ETFHoldingsPopoverView.swift
 //  MyBondManager
-//  Shows per‐acquisition ETF holdings in a table with annualized yield.
+//  Shows per‐acquisition ETF holdings in a fully sortable table.
+//
 
 import SwiftUI
 
@@ -10,115 +11,125 @@ struct ETFHoldingsPopoverView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var sortOrder: [KeyPathComparator<ETFHoldings>] = [
-        .init(\.acquisitionDate, order: .forward)
+        // default to sort by acquisitionDate ascending
+        KeyPathComparator(\.acquisitionDate, order: .forward)
     ]
 
     private var acquisitions: [ETFHoldings] {
-        (etf.etftoholding as? Set<ETFHoldings>)?
-            .sorted { $0.acquisitionDate < $1.acquisitionDate }
+        let allHoldings = (etf.etftoholding as? Set<ETFHoldings>)?
+            .sorted { $0.acquisitionDate < $1.acquisitionDate } // Initial sort (optional, but can maintain a consistent starting order)
         ?? []
+
+        // Sort the data based on the current sortOrder
+        return allHoldings.sorted(using: sortOrder)
     }
 
     var body: some View {
-            VStack(spacing: 0) {
-                // Header with title + close (replaced with x button)
-                HStack {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                            .foregroundColor(.white) // Adjust color as needed
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.cancelAction)
-                    .padding(.leading) // Add some leading padding
-
-                    Spacer() // Push the x button to the left if needed
-
-                    Text(etf.etfName)
-                        .font(.title2)
+        VStack(spacing: 0) {
+            // Header + X‐button
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
                         .foregroundColor(.white)
-                        .frame(maxWidth: .infinity, alignment: .center)
-
-                    Spacer() // Keep some space on the right
-                        .frame(width: 30) // Match the width of the button
-
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 8) // Adjusted vertical padding to match AddBondView
-               .background(AppTheme.tileBackground) // Using AppTheme.tileBackground
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+                .padding(.leading)
 
-                // Add some vertical space here
                 Spacer()
-                    .frame(height: 10) // Adjust the height as needed
 
+                Text(etf.etfName)
+                    .font(.title2)
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+
+                Spacer()
+                    .frame(width: 30) // match button width
+            }
+            .padding(.vertical, 8)
+            .background(AppTheme.tileBackground) // Assuming AppTheme is defined elsewhere
+
+            // Sortable Table
             Table(acquisitions, sortOrder: $sortOrder) {
-                TableColumn("Date", value: \.acquisitionDate) { h in
+                // 1) Date
+                TableColumn(
+                    "Date",
+                    sortUsing: KeyPathComparator(\.acquisitionDate)
+                ) { h in
                     Text(h.acquisitionDate,
-                         format: Date.FormatStyle()
-                             .day(.twoDigits)
-                             .month(.twoDigits)
-                             .year(.twoDigits))
+                         format:
+                            Date.FormatStyle()
+                                .day(.twoDigits)
+                                .month(.twoDigits)
+                                .year(.twoDigits))
                         .fixedSize(horizontal: true, vertical: false)
                 }
 
-                TableColumn("Shares", value: \.numberOfShares) { h in
+                // 2) Shares
+                TableColumn(
+                    "Shares",
+                    sortUsing: KeyPathComparator(\.numberOfShares)
+                ) { h in
                     Text("\(h.numberOfShares)")
+                        .multilineTextAlignment(.center)
                         .fixedSize(horizontal: true, vertical: false)
                 }
 
-                TableColumn("Cost") { h in
-                    let cost = Double(h.numberOfShares) * h.acquisitionPrice
-                    Text(String(format: "€%.0f", cost))
+                // 3) Cost
+                TableColumn(
+                    "Cost",
+                    sortUsing: KeyPathComparator(\.cost) // Assuming 'cost' is a property in ETFHoldings
+                ) { h in
+                    Text(h.cost, format: .currency(code: "EUR"))
                         .multilineTextAlignment(.trailing)
-                        .fixedSize(horizontal: true, vertical: false)
                 }
 
-                TableColumn("Value") { h in
-                    let value = Double(h.numberOfShares) * etf.lastPrice
-                    Text(String(format: "€%.0f", value))
+                // 4) Value
+                TableColumn(
+                    "Value",
+                    sortUsing: KeyPathComparator(\.marketValue) // Assuming 'marketValue' is a property in ETFHoldings
+                ) { h in
+                    Text(h.marketValue, format: .currency(code: "EUR"))
                         .multilineTextAlignment(.trailing)
-                        .fixedSize(horizontal: true, vertical: false)
                 }
 
-                TableColumn("P&L") { h in
-                    let cost  = Double(h.numberOfShares) * h.acquisitionPrice
-                    let value = Double(h.numberOfShares) * etf.lastPrice
-                    let delta = value - cost
-                    Text((delta >= 0 ? "+" : "") + String(format: "€%.0f", delta))
-                        .foregroundColor(delta >= 0 ? .green : .red)
+                // 5) P&L
+                TableColumn(
+                    "P&L",
+                    sortUsing: KeyPathComparator(\.profit) // Assuming 'profit' is a property in ETFHoldings
+                ) { h in
+                    Text(h.profit, format: .currency(code: "EUR"))
+                        .foregroundColor(h.profit >= 0 ? .green : .red)
                         .multilineTextAlignment(.trailing)
-                        .fixedSize(horizontal: true, vertical: false)
                 }
 
-                TableColumn("%") { h in
-                    let cost  = Double(h.numberOfShares) * h.acquisitionPrice
-                    let value = Double(h.numberOfShares) * etf.lastPrice
-                    let pct   = cost > 0 ? (value - cost)/cost*100 : 0
-                    Text(String(format: "%.2f%%", pct))
-                        .foregroundColor(pct >= 0 ? .green : .red)
+                // 6) % Gain (2 decimals)
+                TableColumn(
+                    "%",
+                    sortUsing: KeyPathComparator(\.pctGain) // Assuming 'pctGain' is a property in ETFHoldings
+                ) { h in
+                    Text(String(format: "%.2f%%", h.pctGain))
+                        .foregroundColor(h.pctGain >= 0 ? .green : .red)
                         .multilineTextAlignment(.trailing)
-                        .fixedSize(horizontal: true, vertical: false)
                 }
 
-                // — Annualized yield column
-                TableColumn("Ann. Yield") { h in
-                    let now = Date()
-                    // compute days as at least 1 to avoid division by zero
-                    let daysElapsed = Calendar.current
-                        .dateComponents([.day], from: h.acquisitionDate, to: now)
-                        .day.map { max($0, 1) } ?? 1
-                    let diff    = etf.lastPrice - h.acquisitionPrice
-                    let annual  = diff / Double(daysElapsed) * 365
-                    Text(String(format: "%.2f%%", annual))
+                // 7) Annualized Yield (2 decimals)
+                TableColumn(
+                    "Ann. Yield",
+                    sortUsing: KeyPathComparator(\.annualYield) // Assuming 'annualYield' is a property in ETFHoldings
+                ) { h in
+                    Text(String(format: "%.2f%%", h.annualYield))
                         .multilineTextAlignment(.trailing)
-                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
-            .tableStyle(.inset(alternatesRowBackgrounds: true))
-  //          .scrollContentBackground(.hidden)
+            .tableStyle(.inset) // Use the inset style
+            .alternatingRowBackgrounds() // Apply the alternatingRowBackgrounds modifier
+            // .scrollContentBackground(.hidden) // Removed as it interfered with alternating backgrounds
+            // .background(AppTheme.panelBackground) // Removed from Table to allow alternating backgrounds
             .padding([.horizontal, .bottom])
         }
-        .background(AppTheme.panelBackground)
-        .frame(minWidth: 600, minHeight: 400)
+        .background(AppTheme.panelBackground) // Apply panel background to the VStack
+        .frame(minWidth: 800, minHeight: 400)
     }
 }
