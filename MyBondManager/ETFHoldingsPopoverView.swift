@@ -1,10 +1,7 @@
-//
 //  ETFHoldingsPopoverView.swift
 //  MyBondManager
+//  Shows per‐acquisition ETF holdings in a table.
 //
-//  Created by Olivier on 01/05/2025.
-//
-
 
 import SwiftUI
 
@@ -13,7 +10,12 @@ struct ETFHoldingsPopoverView: View {
     @ObservedObject var etf: ETFEntity
     @Environment(\.dismiss) private var dismiss
 
-    // Sort acquisitions by date
+    // Sort holdings by acquisitionDate ascending by default
+    @State private var sortOrder: [KeyPathComparator<ETFHoldings>] = [
+        .init(\.acquisitionDate, order: .forward)
+    ]
+
+    // Extract + sort the holdings set
     private var acquisitions: [ETFHoldings] {
         (etf.etftoholding as? Set<ETFHoldings>)?
             .sorted { $0.acquisitionDate < $1.acquisitionDate }
@@ -22,7 +24,7 @@ struct ETFHoldingsPopoverView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header row with Close button
+            // Header with title + close
             HStack {
                 Text(etf.etfName)
                     .font(.title2)
@@ -37,73 +39,67 @@ struct ETFHoldingsPopoverView: View {
             .padding(.vertical, 6)
             .background(Color.gray.opacity(0.8))
 
-            // Column titles
-            HStack {
-                Text("Date")
-                Spacer()
-                Text("Shares")
-                    .frame(minWidth: 80, alignment: .trailing)
-                Spacer()
-                Text("Cost")
-                    .frame(minWidth: 80, alignment: .trailing)
-                Spacer()
-                Text("Value")
-                    .frame(minWidth: 80, alignment: .trailing)
-                Spacer()
-                Text("P&L")
-                    .frame(minWidth: 80, alignment: .trailing)
-                Spacer()
-                Text("%")
-                    .frame(minWidth: 60, alignment: .trailing)
-            }
-            .font(.headline)
-            .foregroundColor(.white)
-            .padding(.horizontal)
-            .padding(.vertical, 6)
-            .background(Color.gray.opacity(0.7))
-
-            // Data rows
-            ForEach(Array(acquisitions.enumerated()), id: \.element) { idx, h in
-                let cost  = Double(h.numberOfShares) * h.acquisitionPrice
-                let value = Double(h.numberOfShares) * etf.lastPrice
-                let delta = value - cost
-                let pct   = cost > 0 ? delta / cost * 100 : 0
-
-                HStack {
-                    Text(h.acquisitionDate, format: Date.FormatStyle()
-                                                .day(.twoDigits)
-                                                .month(.twoDigits)
-                                                .year(.twoDigits))
-                    Spacer()
-                    Text("\(h.numberOfShares)")
-                        .frame(minWidth: 80, alignment: .trailing)
-                    Spacer()
-                    Text(String(format: "€%.0f", cost))
-                        .frame(minWidth: 80, alignment: .trailing)
-                    Spacer()
-                    Text(String(format: "€%.0f", value))
-                        .frame(minWidth: 80, alignment: .trailing)
-                    Spacer()
-                    Text((delta >= 0 ? "+" : "") + String(format: "€%.0f", delta))
-                        .frame(minWidth: 80, alignment: .trailing)
-                        .foregroundColor(delta >= 0 ? .green : .red)
-                    Spacer()
-                    Text(String(format: "%.2f%%", pct))
-                        .frame(minWidth: 60, alignment: .trailing)
-                        .foregroundColor(pct >= 0 ? .green : .red)
+            // Table of holdings
+            Table(acquisitions, sortOrder: $sortOrder) {
+                // Date column
+                TableColumn("Date", value: \.acquisitionDate) { h in
+                    Text(h.acquisitionDate,
+                         format: Date.FormatStyle()
+                            .day(.twoDigits)
+                            .month(.twoDigits)
+                            .year(.twoDigits))
+                        .fixedSize(horizontal: true, vertical: false)
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 6)
-                .background(
-                    (idx.isMultiple(of: 2)
-                        ? Color.gray.opacity(0.3)
-                        : Color.gray.opacity(0.25))
-                )
-                .foregroundColor(.white)
-            }
 
-            Spacer()
+                // Shares column
+                TableColumn("Shares", value: \.numberOfShares) { h in
+                    Text("\(h.numberOfShares)")
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                // Cost column
+                TableColumn("Cost") { h in
+                    let cost = Double(h.numberOfShares) * h.acquisitionPrice
+                    Text(String(format: "€%.0f", cost))
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                // Value column
+                TableColumn("Value") { h in
+                    let value = Double(h.numberOfShares) * etf.lastPrice
+                    Text(String(format: "€%.0f", value))
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                // P&L column
+                TableColumn("P&L") { h in
+                    let cost  = Double(h.numberOfShares) * h.acquisitionPrice
+                    let value = Double(h.numberOfShares) * etf.lastPrice
+                    let delta = value - cost
+                    Text((delta >= 0 ? "+" : "") + String(format: "€%.0f", delta))
+                        .foregroundColor(delta >= 0 ? .green : .red)
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                // % column
+                TableColumn("%") { h in
+                    let cost  = Double(h.numberOfShares) * h.acquisitionPrice
+                    let value = Double(h.numberOfShares) * etf.lastPrice
+                    let pct   = cost > 0 ? (value - cost) / cost * 100 : 0
+                    Text(String(format: "%.2f%%", pct))
+                        .foregroundColor(pct >= 0 ? .green : .red)
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+            .tableStyle(.inset(alternatesRowBackgrounds: true))
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.panelBackground)
+            .padding([.horizontal, .bottom])
         }
-        .background(AppTheme.panelBackground)
+        .frame(minWidth: 800, minHeight: 400)
     }
 }

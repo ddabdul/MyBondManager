@@ -32,40 +32,39 @@ struct AddBondViewAsync: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Title Bar
+            // Title Bar with Custom Styling
             HStack {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white) // Match title color
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
 
                 Text("Add New Bond")
-                    .font(.headline)
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity, alignment: .center)
 
                 Spacer()
                     .frame(width: 30)
             }
-            .padding()
-            .background(Color(.windowBackgroundColor))
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(AppTheme.tileBackground) // Use the specified background
 
             Form {
-                Section("Required for Scraping") {
+                Section("Please enter the required information") {
                     TextField("ISIN", text: $isin)
                         .onSubmit { isin = isin.uppercased() }
                     DatePicker("Acquisition Date", selection: $acquisitionDate, displayedComponents: .date)
-                }
-
-                Section("Manual Inputs") {
                     TextField("Par Value", text: $parValueStr)
                     TextField("Acquisition Price", text: $acquisitionPrice)
                     TextField("Depot Bank", text: $depotBank)
                 }
 
-                Section("Scraped Data") {
+                Section("Automaticly collected") {
                     TextField("Bond Name", text: $name)
                         .disabled(true)
                     TextField("Issuer", text: $issuer)
@@ -90,7 +89,7 @@ struct AddBondViewAsync: View {
                     HStack {
                         Spacer() // Push buttons to the right
 
-                        Button("Scrape Data") {
+                        Button("Collect Data") {
                             startScrape()
                         }
                         .disabled(isLoading || isin.isEmpty)
@@ -109,7 +108,8 @@ struct AddBondViewAsync: View {
             .padding()
             Spacer()
         }
-        .frame(minWidth: 600, minHeight: 500)
+        .background(AppTheme.panelBackground) // Set panelBackground for the overall background
+        // Remove the explicit frame to fit content
         .disabled(isLoading)
         .overlay(
             Group {

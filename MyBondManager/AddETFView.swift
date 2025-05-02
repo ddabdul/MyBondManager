@@ -43,39 +43,41 @@ struct AddHoldingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Title Bar
+            // Title Bar with Custom Styling
             HStack {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white) // Match title color
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
 
-                Text(mode == .existing ? "Add to Existing ETF" : "Add New ETF")
-                    .font(.headline)
+                Text(mode == .existing ? "Add to an existing ETF" : "Add a new ETF")
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity, alignment: .center)
 
                 Spacer()
                     .frame(width: 30)
             }
-            .padding()
-            .background(Color(.windowBackgroundColor))
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(AppTheme.tileBackground) // Use the specified background
 
             Form {
                 // Mode picker
-                Picker("Mode", selection: $mode) {
-                    Text("Add to Existing ETF").tag(Mode.existing)
-                    Text("Add New ETF + Holding").tag(Mode.new)
+                Picker("", selection: $mode) {
+                    Text("Add to an existing ETF").tag(Mode.existing)
+                    Text("Add a new ETF").tag(Mode.new)
                 }
                 .pickerStyle(.segmented)
                 .padding(.bottom)
 
                 // Existing ETF selection
                 if mode == .existing {
-                    Section(header: Text("Select ETF")) {
-                        Picker("ETF", selection: $selectedETF) {
+                    Section(header: Text("Select an ETF")) {
+                        Picker("Existing ETF", selection: $selectedETF) {
                             Text("(none)").tag(Optional<ETFEntity>(nil))
                             ForEach(allETFs) { etf in
                                 Text(etf.etfName).tag(Optional(etf))
@@ -87,7 +89,7 @@ struct AddHoldingView: View {
 
                 // New ETF fetch
                 if mode == .new {
-                    Section(header: Text("Fetch ETF Header")) {
+                    Section(header: Text("Enter the ISIN to collect the ETF Data")) {
                         HStack {
                             TextField("ISIN", text: $newISIN)
                                 .textFieldStyle(.roundedBorder)
@@ -97,7 +99,7 @@ struct AddHoldingView: View {
                                 if isFetching {
                                     ProgressView()
                                 } else {
-                                    Text("Fetch")
+                                    Text("Collect")
                                 }
                             }
                             .disabled(newISIN.isEmpty || isFetching)
@@ -161,7 +163,8 @@ struct AddHoldingView: View {
             .padding()
             Spacer()
         }
-        .frame(minWidth: 500, minHeight: 400)
+        .background(AppTheme.panelBackground) // Set panelBackground for the overall background
+        // Remove the explicit frame to fit content
     }
 
     private var canSave: Bool {
