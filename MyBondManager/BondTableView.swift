@@ -205,63 +205,77 @@ struct BondSummaryDetailView: View {
     @State private var bondToDelete: BondEntity?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text(summary.name)
-                        .font(.title2)
-                        .bold()
-                    Spacer()
-                    Button("Close") { dismiss() }
-                        .keyboardShortcut(.cancelAction)
+        VStack(spacing: 0) {
+            // Title Bar
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(.secondary)
                 }
-                Divider()
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Issuer: \(summary.issuer)")
-                    Text("Coupon: \(summary.couponFormatted)")
-                    Text("Maturity: \(Formatters.shortDate.string(from: summary.maturityDate))")
-                    Text("Total Nominal: \(summary.formattedTotalNominal)")
-                    Text("Expected Profit: \(summary.expectedProfitFormatted)")
-                        .fontWeight(.semibold)
-                    if summary.recordCount > 1 {
-                        Text("(Summarized \(summary.recordCount) records)")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                Divider()
-
-                Text("Details:")
+                Text(summary.name)
                     .font(.headline)
-
-                ForEach(summary.records.filter { !$0.isDeleted }, id: \.objectID) { bond in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Nominal: \(bond.parValueFormatted)")
-                            Text("Price:   \(bond.acquisitionPriceFormatted)")
-                            Text("Acquisition: \(bond.acquisitionDateFormatted)")
-                            Text("Bank: \(bond.depotBank)")
-                            Text("YTM: \(bond.ytmFormatted)")
-                        }
-                        Spacer()
-                        Button("Edit") { editingBond = bond }
-                            .buttonStyle(BorderlessButtonStyle())
-                        Button(role: .destructive) {
-                            bondToDelete = bond
-                            showDeleteAlert = true
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                    }
-                    .padding(.vertical, 4)
-                    Divider()
-                }
+                    .frame(maxWidth: .infinity, alignment: .center)
 
                 Spacer()
+                    .frame(width: 30)
             }
             .padding()
+            .background(Color(.windowBackgroundColor))
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Issuer: \(summary.issuer)")
+                        Text("Coupon: \(summary.couponFormatted)")
+                        Text("Maturity: \(Formatters.shortDate.string(from: summary.maturityDate))")
+                        Text("Total Nominal: \(summary.formattedTotalNominal)")
+                        Text("Expected Profit: \(summary.expectedProfitFormatted)")
+                            .fontWeight(.semibold)
+                        if summary.recordCount > 1 {
+                            Text("(Summarized \(summary.recordCount) records)")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    Divider()
+
+                    Text("Details:")
+                        .font(.headline)
+
+                    ForEach(summary.records.filter { !$0.isDeleted }, id: \.objectID) { bond in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Nominal: \(bond.parValueFormatted)")
+                                Text("Price:   \(bond.acquisitionPriceFormatted)")
+                                Text("Acquisition: \(bond.acquisitionDateFormatted)")
+                                Text("Bank: \(bond.depotBank)")
+                                Text("YTM: \(bond.ytmFormatted)")
+                            }
+                            Spacer()
+                            Button("Edit") { editingBond = bond }
+                                .buttonStyle(BorderlessButtonStyle())
+                            Button(role: .destructive) {
+                                bondToDelete = bond
+                                showDeleteAlert = true
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                        }
+                        .padding(.vertical, 4)
+                        Divider()
+                    }
+
+                    Spacer()
+                }
+                .padding()
+            }
         }
         .frame(minWidth: 400, minHeight: 300)
         .popover(item: $editingBond, arrowEdge: .top) { bond in
