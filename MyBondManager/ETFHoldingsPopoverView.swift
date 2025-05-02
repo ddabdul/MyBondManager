@@ -48,7 +48,7 @@ struct ETFHoldingsPopoverView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 8) // Adjusted vertical padding to match AddBondView
-            .background(AppTheme.tileBackground) // Using AppTheme.tileBackground
+           .background(AppTheme.tileBackground) // Using AppTheme.tileBackground
 
             // Add some vertical space here
             Spacer()
@@ -111,10 +111,10 @@ struct ETFHoldingsPopoverView: View {
                 }
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
-            .scrollContentBackground(.hidden)
-    //        .background(AppTheme.panelBackground)
-            .padding([.horizontal, .bottom])
+   //         .scrollContentBackground(.hidden)
+            .background(AppTheme.panelBackgroundLight)
         }
+        .background(AppTheme.panelBackground)
         .frame(minWidth: 800, minHeight: 400)
     }
 }

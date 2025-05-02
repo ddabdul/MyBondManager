@@ -22,7 +22,7 @@ enum AppTheme {
     /// The same dark-grey you’ve been using under your summary cards.
     /// You can point this at an asset (e.g. “PanelBackground”) or use a literal.
     static let panelBackground = Color("PanelBackground")
-    
+    static let panelBackgroundLight = Color(red: 0.95, green: 0.95, blue: 0.95)
     // If you’d rather hard-code it here:
     // static let panelBackground = Color(red: 0.14, green: 0.14, blue: 0.16)
 }
