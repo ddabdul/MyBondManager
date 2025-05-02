@@ -50,6 +50,10 @@ struct ETFHoldingsPopoverView: View {
             .padding(.vertical, 8) // Adjusted vertical padding to match AddBondView
             .background(AppTheme.tileBackground) // Using AppTheme.tileBackground
 
+            // Add some vertical space here
+            Spacer()
+                .frame(height: 10) // Adjust the height as needed
+
             // Table of holdings
             Table(acquisitions, sortOrder: $sortOrder) {
                 // Date column
@@ -108,9 +112,9 @@ struct ETFHoldingsPopoverView: View {
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .scrollContentBackground(.hidden)
+    //        .background(AppTheme.panelBackground)
             .padding([.horizontal, .bottom])
         }
-        .background(AppTheme.panelBackground)
         .frame(minWidth: 800, minHeight: 400)
     }
 }
