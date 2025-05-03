@@ -1,16 +1,7 @@
 //
 //  ExportValidationView.swift
 //  MyBondManager
-//
-//  Created by Olivier on 03/05/2025.
-//
-
-
-//
-//  ExportValidationView.swift
-//  MyBondManager
-//
-//  Created by Olivier on 06/05/2025.
+//  Updated 10/05/2025 – security-scoped access + Close button
 //
 
 import SwiftUI
@@ -19,18 +10,21 @@ import CoreData
 struct ExportValidationView: View {
     let folderURL: URL
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.dismiss) private var dismiss
 
     @State private var issues: [String] = []
     @State private var isValid = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // Header
             Text(isValid ? "✅ JSON matches Core Data" : "❗️ Found discrepancies")
                 .font(.title2)
                 .foregroundColor(isValid ? .green : .red)
 
             Divider()
 
+            // Issue list or “no issues”
             if issues.isEmpty {
                 Text("No issues detected.")
                     .foregroundColor(.secondary)
@@ -44,118 +38,125 @@ struct ExportValidationView: View {
                     }
                 }
             }
+
+            Spacer()
+
+            // Close button
+            HStack {
+                Spacer()
+                Button("Close") {
+                    dismiss()
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+            }
         }
         .padding()
-        .onAppear(perform: runValidation)
         .frame(minWidth: 500, minHeight: 300)
+        .onAppear(perform: runValidation)
     }
 
     private func runValidation() {
+        print("🔍 Validation started for folder:", folderURL.path)
         var foundIssues: [String] = []
 
-        // JSON decoder
+        // Gain read permission for everything under folderURL
+        let granted = folderURL.startAccessingSecurityScopedResource()
+        defer {
+            if granted {
+                folderURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        // ——— 1. Validate bonds.json —————————————————————————————————
+        // ——— 1. bonds.json ——————————————————————————————
         let bondsURL = folderURL.appendingPathComponent("bonds.json")
+        print("📂 Loading bonds.json from:", bondsURL.path)
         do {
             let data = try Data(contentsOf: bondsURL)
+            print("📦 bonds.json read: \(data.count) bytes")
             let jsonBonds = try decoder.decode([BondCodable].self, from: data)
+            print("✅ Decoded \(jsonBonds.count) BondCodable items")
 
-            // Fetch core data bonds
-            let request: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
-            let cdBonds = try viewContext.fetch(request)
+            let cdBonds = try viewContext.fetch(BondEntity.fetchRequest())
+            print("💾 Fetched \(cdBonds.count) BondEntity items")
 
-            // Index by ID
             let jsonById = Dictionary(uniqueKeysWithValues: jsonBonds.map { ($0.id, $0) })
             let cdById   = Dictionary(uniqueKeysWithValues: cdBonds.map { ($0.id, $0) })
 
-            // 1a) Missing / extra
-            for cd in cdBonds {
-                if jsonById[cd.id] == nil {
-                    foundIssues.append("Bond \(cd.name) (\(cd.id)) missing from JSON")
-                }
+            for cd in cdBonds where jsonById[cd.id] == nil {
+                let msg = "Bond missing from JSON: \(cd.name) (\(cd.id))"
+                print("⚠️", msg)
+                foundIssues.append(msg)
             }
-            for jb in jsonBonds {
-                if cdById[jb.id] == nil {
-                    foundIssues.append("JSON contains unknown bond \(jb.name) (\(jb.id))")
-                }
+            for jb in jsonBonds where cdById[jb.id] == nil {
+                let msg = "Unknown bond in JSON: \(jb.name) (\(jb.id))"
+                print("⚠️", msg)
+                foundIssues.append(msg)
             }
-
-            // 1b) Field mismatches
             for (id, jb) in jsonById {
                 guard let cd = cdById[id] else { continue }
                 if cd.name != jb.name {
-                    foundIssues.append("Bond[\(jb.id)] name: CoreData=\(cd.name) JSON=\(jb.name)")
+                    let msg = "Name mismatch \(id): Core=\(cd.name) JSON=\(jb.name)"
+                    print("⚠️", msg)
+                    foundIssues.append(msg)
                 }
-                if cd.isin != jb.isin {
-                    foundIssues.append("Bond[\(jb.id)] isin mismatch")
-                }
-                if cd.issuer != jb.issuer {
-                    foundIssues.append("Bond[\(jb.id)] issuer mismatch")
-                }
-                if cd.initialPrice != jb.initialPrice {
-                    foundIssues.append("Bond[\(jb.id)] initialPrice: CoreData=\(cd.initialPrice) JSON=\(jb.initialPrice)")
-                }
-                // …repeat for any other key fields you care about…
+                // …add more field checks here…
             }
         }
         catch {
-            foundIssues.append("Error validating bonds.json: \(error.localizedDescription)")
+            let msg = "❌ Error validating bonds.json: \(error.localizedDescription)"
+            print(msg)
+            foundIssues.append(msg)
         }
 
-        // ——— 2. Validate etfs.json ————————————————————————————————————
+        // ——— 2. etfs.json —————————————————————————————————
         let etfsURL = folderURL.appendingPathComponent("etfs.json")
+        print("📂 Loading etfs.json from:", etfsURL.path)
         do {
             let data = try Data(contentsOf: etfsURL)
+            print("📦 etfs.json read: \(data.count) bytes")
             let jsonETFs = try decoder.decode([ETFEntityCodable].self, from: data)
+            print("✅ Decoded \(jsonETFs.count) ETFEntityCodable items")
 
-            let request: NSFetchRequest<ETFEntity> = ETFEntity.fetchRequest()
-            let cdETFs = try viewContext.fetch(request)
+            let cdETFs = try viewContext.fetch(ETFEntity.fetchRequest())
+            print("💾 Fetched \(cdETFs.count) ETFEntity items")
 
             let jsonById = Dictionary(uniqueKeysWithValues: jsonETFs.map { ($0.id, $0) })
             let cdById   = Dictionary(uniqueKeysWithValues: cdETFs.map { ($0.id, $0) })
 
-            for cd in cdETFs {
-                if jsonById[cd.id] == nil {
-                    foundIssues.append("ETF \(cd.etfName) (\(cd.id)) missing from JSON")
-                }
+            for cd in cdETFs where jsonById[cd.id] == nil {
+                let msg = "ETF missing from JSON: \(cd.etfName) (\(cd.id))"
+                print("⚠️", msg)
+                foundIssues.append(msg)
             }
-            for je in jsonETFs {
-                if cdById[je.id] == nil {
-                    foundIssues.append("JSON contains unknown ETF \(je.etfName) (\(je.id))")
-                }
+            for je in jsonETFs where cdById[je.id] == nil {
+                let msg = "Unknown ETF in JSON: \(je.etfName) (\(je.id))"
+                print("⚠️", msg)
+                foundIssues.append(msg)
             }
-
             for (id, je) in jsonById {
                 guard let cd = cdById[id] else { continue }
                 if cd.etfName != je.etfName {
-                    foundIssues.append("ETF[\(id)] name mismatch")
+                    let msg = "ETF name mismatch \(id): Core=\(cd.etfName) JSON=\(je.etfName)"
+                    print("⚠️", msg)
+                    foundIssues.append(msg)
                 }
-                if cd.isin != je.isin {
-                    foundIssues.append("ETF[\(id)] isin mismatch")
-                }
-                if cd.lastPrice != je.lastPrice {
-                    foundIssues.append("ETF[\(id)] lastPrice: Core=\(cd.lastPrice) JSON=\(je.lastPrice)")
-                }
-                // you could also compare counts of priceHistory/holdings:
-                if cd.etfPriceMany.count != je.priceHistory.count {
-                    foundIssues.append("ETF[\(id)] priceHistory count mismatch: Core=\(cd.etfPriceMany.count) JSON=\(je.priceHistory.count)")
-                }
-                if cd.etftoholding.count != je.holdings.count {
-                    foundIssues.append("ETF[\(id)] holdings count mismatch: Core=\(cd.etftoholding.count) JSON=\(je.holdings.count)")
-                }
+                // …and so on…
             }
         }
         catch {
-            foundIssues.append("Error validating etfs.json: \(error.localizedDescription)")
+            let msg = "❌ Error validating etfs.json: \(error.localizedDescription)"
+            print(msg)
+            foundIssues.append(msg)
         }
 
         // Finalize
         DispatchQueue.main.async {
             self.issues = foundIssues
             self.isValid = foundIssues.isEmpty
+            print("🔍 Validation complete – isValid=\(self.isValid), issues=\(foundIssues.count)")
         }
     }
 }

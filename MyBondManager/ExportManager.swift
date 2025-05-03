@@ -1,14 +1,11 @@
 //
 //  ExportManager.swift
 //  MyBondManager
-//
-//  Created by Olivier on 03/05/2025.
-//  Updated 05/05/2025 – use runModal + security-scoped bookmarks
+//  Updated 10/05/2025 – full‐folder access via security‐scoped URLs
 //
 
 import Foundation
 import CoreData
-import AppKit    // for NSOpenPanel
 
 // MARK: – Codable mirrors
 
@@ -64,48 +61,39 @@ public struct ETFEntityCodable: Codable {
 public class ExportManager {
     public init() {}
 
-    /// Brings up a folder-picker (modal), then writes both JSONs into that folder.
-    public func exportAllWithUserChoice(from context: NSManagedObjectContext) {
-        let panel = NSOpenPanel()
-        panel.title                   = "Choose folder to save JSON export"
-        panel.canChooseFiles          = false
-        panel.canChooseDirectories    = true
-        panel.allowsMultipleSelection = false
-
-        // runModal spins its own event loop and avoids the 500 ms deferral timeout
-        DispatchQueue.main.async {
-            let result = panel.runModal()
-            guard result == .OK, let folderURL = panel.url else { return }
-
-            // Gain permission to write there
-            let granted = folderURL.startAccessingSecurityScopedResource()
-            defer {
-                if granted {
-                    folderURL.stopAccessingSecurityScopedResource()
-                }
-            }
-
-            do {
-                try self.exportBonds(from: context, to: folderURL)
-                try self.exportETFs(from: context, to: folderURL)
-                // Optionally: show a “Success” alert here
-            }
-            catch {
-                // Surface the error however you prefer
-                print("Export failed:", error)
+    /// Export both JSON files into `folderURL`, handling security-scoped access.
+    /// Throws on any error.
+    public func exportAll(
+        to folderURL: URL,
+        from context: NSManagedObjectContext
+    ) throws {
+        // ① Acquire permission for the entire folder
+        let granted = folderURL.startAccessingSecurityScopedResource()
+        defer {
+            if granted {
+                folderURL.stopAccessingSecurityScopedResource()
             }
         }
+
+        // ② Do the writes
+        try exportBonds(from: context, to: folderURL)
+        try exportETFs(from: context, to: folderURL)
     }
 
-    // MARK: • Bonds
+    // ─── Bonds ──────────────────────────────────────────────────────────
 
-    private func exportBonds(from context: NSManagedObjectContext, to folderURL: URL) throws {
+    private func exportBonds(
+        from context: NSManagedObjectContext,
+        to folderURL: URL
+    ) throws {
         let req: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
         let bonds = try context.fetch(req)
 
         let codables = bonds.map { bond in
             let flows = bond.cashFlowsArray.map {
-                CashFlowCodable(date: $0.date, amount: $0.amount, nature: $0.nature)
+                CashFlowCodable(date: $0.date,
+                                amount: $0.amount,
+                                nature: $0.nature)
             }
             return BondCodable(
                 id: bond.id,
@@ -131,9 +119,12 @@ public class ExportManager {
         try data.write(to: fileURL, options: .atomic)
     }
 
-    // MARK: • ETFs
+    // ─── ETFs ───────────────────────────────────────────────────────────
 
-    private func exportETFs(from context: NSManagedObjectContext, to folderURL: URL) throws {
+    private func exportETFs(
+        from context: NSManagedObjectContext,
+        to folderURL: URL
+    ) throws {
         let req: NSFetchRequest<ETFEntity> = ETFEntity.fetchRequest()
         let etfs = try context.fetch(req)
 

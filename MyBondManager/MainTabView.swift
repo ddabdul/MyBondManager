@@ -1,12 +1,12 @@
 //
 //  MainTabView.swift
 //  MyBondManager
-//  Updated 05/05/2025 – add ETF refresh, sell & export buttons
+//  Updated 10/05/2025 – fix sheet builder & debug prints
 //
 
 import SwiftUI
 import CoreData
-import AppKit
+import UniformTypeIdentifiers
 
 @available(macOS 13.0, *)
 struct MainTabView: View {
@@ -14,13 +14,18 @@ struct MainTabView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @EnvironmentObject private var notifier: LaunchNotifier
 
-    // MARK: – State
+    // MARK: – State for existing features
     @State private var showingMaturedSheet    = false
     @State private var showingAddBondView     = false
     @State private var showingRecalcAlert     = false
     @State private var showingAddETFView      = false
     @State private var showingSellETFView     = false
     @State private var isRefreshingETF        = false
+
+    // MARK: – State for export
+    @State private var isExportPanelPresented   = false
+    @State private var showingExportValidation  = false
+    @State private var validationFolderURL: URL?
 
     var body: some View {
         GeometryReader { geo in
@@ -39,12 +44,73 @@ struct MainTabView: View {
                              PersistenceController.shared.container.viewContext)
             }
         }
+        .onAppear {
+            print("🏠 MainTabView appeared")
+        }
+        // 1️⃣ SwiftUI folder picker
+        .fileImporter(
+            isPresented: $isExportPanelPresented,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            print("📁 fileImporter result:", result)
+            switch result {
+            case .success(let urls):
+                guard let folder = urls.first else {
+                    print("⚠️ fileImporter: no folder URL")
+                    return
+                }
+                print("✅ User picked folder:", folder.path)
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        try ExportManager()
+                            .exportAll(to: folder, from: viewContext)
+                        DispatchQueue.main.async {
+                            print("✅ exportAll succeeded, showing validation sheet")
+                            validationFolderURL = folder
+                            showingExportValidation = true
+                        }
+                    }
+                    catch {
+                        DispatchQueue.main.async {
+                            print("❌ exportAll failed:", error)
+                            notifier.alertMessage = "Export failed: \(error.localizedDescription)"
+                        }
+                    }
+                }
+
+            case .failure(let error):
+                print("❌ fileImporter failed:", error)
+                notifier.alertMessage = "Could not select folder: \(error.localizedDescription)"
+            }
+        }
+        // 2️⃣ Observe the flag with the new zero‐param onChange
+                .onChange(of: showingExportValidation) {
+                    print("🔄 showingExportValidation is now", showingExportValidation)
+                }
+        // 3️⃣ Present validation sheet
+        .sheet(isPresented: $showingExportValidation) {
+            Group {
+                if let folder = validationFolderURL {
+                    ExportValidationView(folderURL: folder)
+                        .environment(\.managedObjectContext, viewContext)
+                        .onAppear {
+                            print("📝 ExportValidationView onAppear")
+                        }
+                } else {
+                    Text("❌ No folder URL!")
+                }
+            }
+        }
     }
 
     /// Toggle the sidebar
     private func toggleSidebar() {
         NSApp.keyWindow?.firstResponder?
-            .tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
+            .tryToPerform(
+                #selector(NSSplitViewController.toggleSidebar(_:)),
+                with: nil
+            )
     }
 
     // MARK: — Portfolio Tab
@@ -73,23 +139,28 @@ struct MainTabView: View {
                 .help("Toggle Sidebar")
             }
             ToolbarItem(placement: .navigation) {
-                Button(action: {
-                    ExportManager().exportAllWithUserChoice(from: viewContext)
-                }) {
+                Button {
+                    print("🔘 Export tapped (portfolioTab)")
+                    isExportPanelPresented = true
+                } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .help("Export JSON…")
+                .help("Export & Validate JSON…")
             }
 
             // ── RIGHT SIDE ──
             ToolbarItem(placement: .primaryAction) {
-                Button { showingAddBondView = true } label: {
+                Button {
+                    showingAddBondView = true
+                } label: {
                     Image(systemName: "plus")
                 }
                 .help("Add a new bond")
             }
             ToolbarItem(placement: .primaryAction) {
-                Button { showingMaturedSheet = true } label: {
+                Button {
+                    showingMaturedSheet = true
+                } label: {
                     Label("Matured", systemImage: "clock.arrow.circlepath")
                 }
                 .help("Show matured bonds")
@@ -125,7 +196,6 @@ struct MainTabView: View {
             max:   geo.size.width*0.5
         )
         .toolbar {
-            // ── LEFT SIDE ──
             ToolbarItem(placement: .navigation) {
                 Button(action: toggleSidebar) {
                     Image(systemName: "sidebar.leading")
@@ -133,24 +203,26 @@ struct MainTabView: View {
                 .help("Toggle Sidebar")
             }
             ToolbarItem(placement: .navigation) {
-                Button(action: {
-                    ExportManager().exportAllWithUserChoice(from: viewContext)
-                }) {
+                Button {
+                    print("🔘 Export tapped (cashFlowTab)")
+                    isExportPanelPresented = true
+                } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .help("Export JSON…")
+                .help("Export & Validate JSON…")
             }
 
-            // ── RIGHT SIDE ──
             ToolbarItem(placement: .primaryAction) {
-                Button { recalculateAllCashFlows() } label: {
+                Button {
+                    recalculateAllCashFlows()
+                } label: {
                     Label("Recalculate", systemImage: "arrow.clockwise")
                 }
                 .help("Recalculate cash flows")
             }
         }
         .alert("Cash flows recalculated", isPresented: $showingRecalcAlert) {
-            Button("OK", role: .cancel) { }
+            Button("OK", role: .cancel) {}
         }
         .tabItem {
             Label("Bond CashFlows", systemImage: "dollarsign.circle")
@@ -175,7 +247,6 @@ struct MainTabView: View {
             max:   geo.size.width*0.5
         )
         .toolbar {
-            // ── LEFT SIDE ──
             ToolbarItem(placement: .navigation) {
                 Button(action: toggleSidebar) {
                     Image(systemName: "sidebar.leading")
@@ -183,17 +254,19 @@ struct MainTabView: View {
                 .help("Toggle Sidebar")
             }
             ToolbarItem(placement: .navigation) {
-                Button(action: {
-                    ExportManager().exportAllWithUserChoice(from: viewContext)
-                }) {
+                Button {
+                    print("🔘 Export tapped (etfTab)")
+                    isExportPanelPresented = true
+                } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .help("Export JSON…")
+                .help("Export & Validate JSON…")
             }
 
-            // ── RIGHT SIDE ──
             ToolbarItem(placement: .primaryAction) {
-                Button { showingAddETFView = true } label: {
+                Button {
+                    showingAddETFView = true
+                } label: {
                     Image(systemName: "plus")
                 }
                 .help("Add a new ETF holding")
@@ -279,7 +352,7 @@ struct MainTabView: View {
                     showingRecalcAlert = true
                 }
             } catch {
-                print("❗️ Error recalculating cash flows: \(error)")
+                print("❗️ Error recalculating cash flows:", error)
             }
         }
     }
@@ -299,4 +372,3 @@ struct MainTabView_Previews: PreviewProvider {
             )
     }
 }
-
