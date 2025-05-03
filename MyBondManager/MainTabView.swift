@@ -1,6 +1,7 @@
+//
 //  MainTabView.swift
 //  MyBondManager
-//  Updated 02/05/2025 – add ETF refresh & sell buttons
+//  Updated 05/05/2025 – add ETF refresh, sell & export buttons
 //
 
 import SwiftUI
@@ -18,7 +19,7 @@ struct MainTabView: View {
     @State private var showingAddBondView     = false
     @State private var showingRecalcAlert     = false
     @State private var showingAddETFView      = false
-    @State private var showingSellETFView     = false        // ← new
+    @State private var showingSellETFView     = false
     @State private var isRefreshingETF        = false
 
     var body: some View {
@@ -46,7 +47,6 @@ struct MainTabView: View {
             .tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
     }
 
-
     // MARK: — Portfolio Tab
 
     @ViewBuilder
@@ -65,20 +65,34 @@ struct MainTabView: View {
             max:   geo.size.width*0.5
         )
         .toolbar {
+            // ── LEFT SIDE ──
             ToolbarItem(placement: .navigation) {
                 Button(action: toggleSidebar) {
                     Image(systemName: "sidebar.leading")
-                }.help("Toggle Sidebar")
+                }
+                .help("Toggle Sidebar")
             }
+            ToolbarItem(placement: .navigation) {
+                Button(action: {
+                    ExportManager().exportAllWithUserChoice(from: viewContext)
+                }) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .help("Export JSON…")
+            }
+
+            // ── RIGHT SIDE ──
             ToolbarItem(placement: .primaryAction) {
                 Button { showingAddBondView = true } label: {
                     Image(systemName: "plus")
-                }.help("Add a new bond")
+                }
+                .help("Add a new bond")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { showingMaturedSheet = true } label: {
                     Label("Matured", systemImage: "clock.arrow.circlepath")
-                }.help("Show matured bonds")
+                }
+                .help("Show matured bonds")
             }
         }
         .sheet(isPresented: $showingAddBondView) {
@@ -92,7 +106,6 @@ struct MainTabView: View {
             Label("Bond Portfolio", systemImage: "list.bullet")
         }
     }
-
 
     // MARK: — Cash Flow Tab
 
@@ -112,15 +125,28 @@ struct MainTabView: View {
             max:   geo.size.width*0.5
         )
         .toolbar {
+            // ── LEFT SIDE ──
             ToolbarItem(placement: .navigation) {
                 Button(action: toggleSidebar) {
                     Image(systemName: "sidebar.leading")
-                }.help("Toggle Sidebar")
+                }
+                .help("Toggle Sidebar")
             }
+            ToolbarItem(placement: .navigation) {
+                Button(action: {
+                    ExportManager().exportAllWithUserChoice(from: viewContext)
+                }) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .help("Export JSON…")
+            }
+
+            // ── RIGHT SIDE ──
             ToolbarItem(placement: .primaryAction) {
                 Button { recalculateAllCashFlows() } label: {
                     Label("Recalculate", systemImage: "arrow.clockwise")
-                }.help("Recalculate cash flows")
+                }
+                .help("Recalculate cash flows")
             }
         }
         .alert("Cash flows recalculated", isPresented: $showingRecalcAlert) {
@@ -130,7 +156,6 @@ struct MainTabView: View {
             Label("Bond CashFlows", systemImage: "dollarsign.circle")
         }
     }
-
 
     // MARK: — ETF Tab
 
@@ -150,21 +175,29 @@ struct MainTabView: View {
             max:   geo.size.width*0.5
         )
         .toolbar {
-            // Sidebar toggle
+            // ── LEFT SIDE ──
             ToolbarItem(placement: .navigation) {
                 Button(action: toggleSidebar) {
                     Image(systemName: "sidebar.leading")
-                }.help("Toggle Sidebar")
+                }
+                .help("Toggle Sidebar")
+            }
+            ToolbarItem(placement: .navigation) {
+                Button(action: {
+                    ExportManager().exportAllWithUserChoice(from: viewContext)
+                }) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .help("Export JSON…")
             }
 
-            // Add ETF holding
+            // ── RIGHT SIDE ──
             ToolbarItem(placement: .primaryAction) {
                 Button { showingAddETFView = true } label: {
                     Image(systemName: "plus")
-                }.help("Add a new ETF holding")
+                }
+                .help("Add a new ETF holding")
             }
-
-            // Refresh ETF prices
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task {
@@ -186,16 +219,16 @@ struct MainTabView: View {
                     } else {
                         Image(systemName: "arrow.clockwise.circle")
                     }
-                }.help("Refresh all ETF prices")
+                }
+                .help("Refresh all ETF prices")
             }
-
-            // Sell ETF shares
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     showingSellETFView = true
                 } label: {
                     Image(systemName: "minus.circle")
-                }.help("Sell ETF shares")
+                }
+                .help("Sell ETF shares")
             }
         }
         .sheet(isPresented: $showingAddETFView) {
@@ -224,7 +257,6 @@ struct MainTabView: View {
             Label("ETF", systemImage: "chart.bar")
         }
     }
-
 
     // MARK: — Helper
 
@@ -267,3 +299,4 @@ struct MainTabView_Previews: PreviewProvider {
             )
     }
 }
+

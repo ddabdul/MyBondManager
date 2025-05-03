@@ -1,13 +1,14 @@
-
 //
 //  ExportManager.swift
 //  MyBondManager
 //
 //  Created by Olivier on 03/05/2025.
+//  Updated 05/05/2025 – use runModal + security-scoped bookmarks
 //
 
 import Foundation
 import CoreData
+import AppKit    // for NSOpenPanel
 
 // MARK: – Codable mirrors
 
@@ -33,14 +34,14 @@ public struct BondCodable: Codable {
 }
 
 public struct ETFPriceCodable: Codable {
-    let id: String                // use the Core Data objectID URI as a stable string
+    let id: String
     let datePrice: Date
     let price: Double
     let etfId: UUID
 }
 
 public struct ETFHoldingsCodable: Codable {
-    let id: String                // same here
+    let id: String
     let etfId: UUID
     let acquisitionDate: Date
     let acquisitionPrice: Double
@@ -61,46 +62,50 @@ public struct ETFEntityCodable: Codable {
 // MARK: – ExportManager
 
 public class ExportManager {
-    private let containerIdentifier: String
+    public init() {}
 
-    /// The iCloud Drive Documents folder for your app
-    private var documentsURL: URL {
-        guard let base = FileManager.default
-                .url(forUbiquityContainerIdentifier: containerIdentifier)?
-                .appendingPathComponent("Documents")
-        else {
-            fatalError("iCloud container '\(containerIdentifier)' unavailable")
+    /// Brings up a folder-picker (modal), then writes both JSONs into that folder.
+    public func exportAllWithUserChoice(from context: NSManagedObjectContext) {
+        let panel = NSOpenPanel()
+        panel.title                   = "Choose folder to save JSON export"
+        panel.canChooseFiles          = false
+        panel.canChooseDirectories    = true
+        panel.allowsMultipleSelection = false
+
+        // runModal spins its own event loop and avoids the 500 ms deferral timeout
+        DispatchQueue.main.async {
+            let result = panel.runModal()
+            guard result == .OK, let folderURL = panel.url else { return }
+
+            // Gain permission to write there
+            let granted = folderURL.startAccessingSecurityScopedResource()
+            defer {
+                if granted {
+                    folderURL.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            do {
+                try self.exportBonds(from: context, to: folderURL)
+                try self.exportETFs(from: context, to: folderURL)
+                // Optionally: show a “Success” alert here
+            }
+            catch {
+                // Surface the error however you prefer
+                print("Export failed:", error)
+            }
         }
-        if !FileManager.default.fileExists(atPath: base.path) {
-            try? FileManager.default.createDirectory(
-              at: base,
-              withIntermediateDirectories: true
-            )
-        }
-        return base
-    }
-
-    public init(containerIdentifier: String) {
-        self.containerIdentifier = containerIdentifier
-    }
-
-    /// Export *all* entities to JSON files in iCloud Drive
-    public func exportAll(from context: NSManagedObjectContext) throws {
-        try exportBonds(from: context)
-        try exportETFs(from: context)
     }
 
     // MARK: • Bonds
 
-    private func exportBonds(from context: NSManagedObjectContext) throws {
+    private func exportBonds(from context: NSManagedObjectContext, to folderURL: URL) throws {
         let req: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
         let bonds = try context.fetch(req)
 
-        let codables = bonds.map { bond -> BondCodable in
+        let codables = bonds.map { bond in
             let flows = bond.cashFlowsArray.map {
-                CashFlowCodable(date: $0.date,
-                                amount: $0.amount,
-                                nature: $0.nature)
+                CashFlowCodable(date: $0.date, amount: $0.amount, nature: $0.nature)
             }
             return BondCodable(
                 id: bond.id,
@@ -121,35 +126,34 @@ public class ExportManager {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(codables)
-        let fileURL = documentsURL.appendingPathComponent("bonds.json")
+
+        let fileURL = folderURL.appendingPathComponent("bonds.json", isDirectory: false)
         try data.write(to: fileURL, options: .atomic)
     }
 
     // MARK: • ETFs
 
-    private func exportETFs(from context: NSManagedObjectContext) throws {
+    private func exportETFs(from context: NSManagedObjectContext, to folderURL: URL) throws {
         let req: NSFetchRequest<ETFEntity> = ETFEntity.fetchRequest()
         let etfs = try context.fetch(req)
 
-        let codables = etfs.map { etf -> ETFEntityCodable in
-            // 1) Price history
+        let codables = etfs.map { etf in
             let prices = (etf.etfPriceMany as? Set<ETFPrice>)?.map { price in
                 ETFPriceCodable(
-                  id: price.objectID.uriRepresentation().absoluteString,
-                  datePrice: price.datePrice,
-                  price: price.price,
-                  etfId: etf.id
+                    id: price.objectID.uriRepresentation().absoluteString,
+                    datePrice: price.datePrice,
+                    price: price.price,
+                    etfId: etf.id
                 )
             } ?? []
 
-            // 2) Holdings
             let holds = (etf.etftoholding as? Set<ETFHoldings>)?.map { h in
                 ETFHoldingsCodable(
-                  id: h.objectID.uriRepresentation().absoluteString,
-                  etfId: etf.id,
-                  acquisitionDate: h.acquisitionDate,
-                  acquisitionPrice: h.acquisitionPrice,
-                  numberOfShares: h.numberOfShares
+                    id: h.objectID.uriRepresentation().absoluteString,
+                    etfId: etf.id,
+                    acquisitionDate: h.acquisitionDate,
+                    acquisitionPrice: h.acquisitionPrice,
+                    numberOfShares: h.numberOfShares
                 )
             } ?? []
 
@@ -168,7 +172,8 @@ public class ExportManager {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(codables)
-        let fileURL = documentsURL.appendingPathComponent("etfs.json")
+
+        let fileURL = folderURL.appendingPathComponent("etfs.json", isDirectory: false)
         try data.write(to: fileURL, options: .atomic)
     }
 }
