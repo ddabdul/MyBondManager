@@ -29,26 +29,27 @@ struct SellETFView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Title Bar
+            // Title Bar with Custom Styling
             HStack {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white) // Match title color
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
 
-                Text("Sell ETF Shares")
-                    .font(.headline)
+                Text("Sell an ETF holding (FIFO)")
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                // Placeholder for potential right-aligned buttons
                 Spacer()
                     .frame(width: 30)
             }
-            .padding()
-            .background(Color(.windowBackgroundColor)) // Use a standard window background
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(AppTheme.tileBackground) // Use the specified background
 
             Form {
                 // 1) Select your ETF
@@ -72,7 +73,7 @@ struct SellETFView: View {
                                 .foregroundColor(.secondary)
                         }
 
-                        DatePicker("Sale Date", selection: $saleDate, in: ...Date(), displayedComponents: .date)
+    //                    DatePicker("Sale Date", selection: $saleDate, in: ...Date(), displayedComponents: .date)
                     }
 
                     // validation errors

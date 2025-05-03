@@ -53,7 +53,7 @@ struct AddHoldingView: View {
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
 
-                Text(mode == .existing ? "Add to an existing ETF" : "Add a new ETF")
+                Text("Add an ETF Holding")
                     .font(.system(.headline, design: .rounded))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity, alignment: .center)

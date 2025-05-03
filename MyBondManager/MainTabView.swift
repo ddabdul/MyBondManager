@@ -89,7 +89,7 @@ struct MainTabView: View {
                 .frame(minWidth: 700, minHeight: 400)
         }
         .tabItem {
-            Label("Portfolio", systemImage: "list.bullet")
+            Label("Bond Portfolio", systemImage: "list.bullet")
         }
     }
 
@@ -127,7 +127,7 @@ struct MainTabView: View {
             Button("OK", role: .cancel) { }
         }
         .tabItem {
-            Label("Cash Flow", systemImage: "dollarsign.circle")
+            Label("Bond CashFlows", systemImage: "dollarsign.circle")
         }
     }
 
@@ -194,7 +194,7 @@ struct MainTabView: View {
                 Button {
                     showingSellETFView = true
                 } label: {
-                    Image(systemName: "banknote")
+                    Image(systemName: "minus.circle")
                 }.help("Sell ETF shares")
             }
         }

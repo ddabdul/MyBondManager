@@ -18,6 +18,9 @@ struct BondPortfolioManagerApp: App {
         let context = persistenceController.container.viewContext
         self.viewContext = context
         _notifier = StateObject(wrappedValue: LaunchNotifier(context: context))
+        // ── CLEANUP EMPTY ETFs ──
+         // Remove any ETFEntity with zero holdings at launch
+         persistenceController.deleteEmptyETFs()
     }
 
     var body: some Scene {

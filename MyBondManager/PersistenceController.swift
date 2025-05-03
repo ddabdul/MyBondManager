@@ -1,3 +1,9 @@
+//  PersistenceController.swift
+//  MyBondManager
+//  Created by Olivier on 11/04/2025.
+//  Updated on 02/05/2025.
+
+
 import CoreData
 
 struct PersistenceController {
@@ -23,9 +29,27 @@ struct PersistenceController {
         backgroundContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
     }
 
+    /// Deletes any ETFEntity whose holding set is empty (i.e. totalShares == 0)
+    func deleteEmptyETFs() {
+        let ctx = container.viewContext
+        let req: NSFetchRequest<ETFEntity> = ETFEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "etftoholding.@count == 0")
+
+        do {
+            let empty = try ctx.fetch(req)
+            for etf in empty {
+                ctx.delete(etf)
+            }
+            if ctx.hasChanges {
+                try ctx.save()
+            }
+        } catch {
+            print("❗️ Failed cleaning empty ETFs:", error)
+        }
+    }
+
     /// Call this whenever you create or update a BondEntity.
     func saveAndGenerateCashFlows(bond: BondEntity) {
-        // 1) Persist your bond edits on the viewContext
         let viewCtx = container.viewContext
         guard viewCtx.hasChanges else { return }
         do {
@@ -34,10 +58,7 @@ struct PersistenceController {
             fatalError("Failed to save viewContext: \(error)")
         }
 
-        // 2) Propagate changes to bg context (if you’re using NSPersistentStoreRemoteChangeNotifications,
-        //    or simply refetch the Bond object in the bgContext)
         backgroundContext.perform {
-            // If your BondEntity has an objectID, you can get its bgContext instance:
             let bgBond = self.backgroundContext.object(with: bond.objectID) as! BondEntity
             do {
                 try CashFlowGenerator(context: self.backgroundContext)
@@ -60,4 +81,3 @@ struct PersistenceController {
         }
     }
 }
-

@@ -39,25 +39,25 @@ final class LaunchNotifier: ObservableObject {
         let defaults    = UserDefaults.standard
 
         // If we have no saved value, assume one week ago
-  //      let lastLaunch: Date
-   //     if let saved = defaults.object(forKey: "lastLaunchDate") as? Date {
-  //          lastLaunch = saved
- //       } else {
-  //          lastLaunch = Calendar.current.date(
-  //              byAdding: .day,
-  //              value: -7,
-   //             to: now
-   //         )!
-    //    }
+        let lastLaunch: Date
+        if let saved = defaults.object(forKey: "lastLaunchDate") as? Date {
+            lastLaunch = saved
+        } else {
+           lastLaunch = Calendar.current.date(
+                byAdding: .day,
+                value: -7,
+                to: now
+            )!
+        }
 
-     //   print("Last launch date: \(lastLaunch)") // Added print statement
+        print("Last launch date: \(lastLaunch)") // Added print statement
         
-        // Force lastLaunchDate to a specific past date for testing
-         let testDateComponents = DateComponents(year: 2025, month: 4, day: 20) // Example: April 20, 2025
-         let forcedLastLaunch = Calendar.current.date(from: testDateComponents)!
-         let lastLaunch: Date = forcedLastLaunch
+       // Force lastLaunchDate to a specific past date for testing
+       // let testDateComponents = DateComponents(year: 2025, month: 4, day: 20) // Example: April 20, 2025
+       // let forcedLastLaunch = Calendar.current.date(from: testDateComponents)!
+      //  let lastLaunch: Date = forcedLastLaunch
 
-         print("Forced last launch date (for testing): \(lastLaunch)") // Added print statement
+      //  print("Forced last launch date (for testing): \(lastLaunch)") // Added print statement
         var events: [BondEvent] = []
 
         // 1) Find matured bonds
