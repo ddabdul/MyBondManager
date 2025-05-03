@@ -1,13 +1,13 @@
 //
-//  CashFlowCodable.swift
+// CoreDataCodables.swift
+// Shared Codable definitions for Export & Import
 //  MyBondManager
 //
 //  Created by Olivier on 03/05/2025.
 //
 
 
-// CoreDataCodables.swift
-// Shared Codable definitions for Export & Import
+
 
 import Foundation
 

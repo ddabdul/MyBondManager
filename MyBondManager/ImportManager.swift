@@ -1,10 +1,3 @@
-//
-//  CashFlowCodable.swift
-//  MyBondManager
-//
-//  Created by Olivier on 03/05/2025.
-//
-
 
 //
 //  ImportManager.swift
@@ -18,52 +11,7 @@ import CoreData
 
 // MARK: – Codable mirrors (same as your ExportManager)
 
-public struct CashFlowCodable: Codable {
-    let date: Date
-    let amount: Double
-    let nature: String
-}
-
-public struct BondCodable: Codable {
-    let id: UUID
-    let name: String
-    let isin: String
-    let issuer: String
-    let depotBank: String
-    let acquisitionDate: Date
-    let maturityDate: Date
-    let couponRate: Double
-    let parValue: Double
-    let initialPrice: Double
-    let yieldToMaturity: Double
-    let cashFlows: [CashFlowCodable]
-}
-
-public struct ETFPriceCodable: Codable {
-    let id: String
-    let datePrice: Date
-    let price: Double
-    let etfId: UUID
-}
-
-public struct ETFHoldingsCodable: Codable {
-    let id: String
-    let etfId: UUID
-    let acquisitionDate: Date
-    let acquisitionPrice: Double
-    let numberOfShares: Int32
-}
-
-public struct ETFEntityCodable: Codable {
-    let id: UUID
-    let etfName: String
-    let isin: String
-    let issuer: String
-    let wkn: String
-    let lastPrice: Double
-    let priceHistory: [ETFPriceCodable]
-    let holdings: [ETFHoldingsCodable]
-}
+//Moved in CoreDataCodable
 
 // MARK: – ImportManager
 
