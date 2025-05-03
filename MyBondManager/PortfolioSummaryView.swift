@@ -98,13 +98,11 @@ struct PortfolioSummaryView: View {
             .reduce(0) { $0 + $1.amount }
     }
 
+    /// Sum of all future interest + capital-gains – capital-loss cash-flows
     private var totalExpectedProfitCF: Double {
-        futureCashFlows
-            .filter {
-                let n = $0.natureEnum
-                return n == .interest || n == .capitalGains
-            }
-            .reduce(0) { $0 + $1.amount }
+        totalInterestExpected
+      + totalCapitalGainExpected
+      - totalCapitalLossExpected
     }
 
     private var nextMaturingBond: BondEntity? {
@@ -195,7 +193,7 @@ struct PortfolioSummaryView: View {
     }
 
     private var totalGains: Double {
-        totalCapitalGainExpected + totalETFProfit - totalCapitalLossExpected + totalExpectedProfitCF
+        totalExpectedProfitCF + totalETFProfit
     }
 
     // MARK: – View Body
@@ -229,7 +227,7 @@ struct PortfolioSummaryView: View {
                     )
                     MetricView(
                         icon:  "arrow.up.circle",
-                        title: "Total Gains",
+                        title: "Total Returns",
                         value: Formatters.currency
                             .string(from: NSNumber(value: totalGains))
                             ?? "–"
@@ -265,17 +263,17 @@ struct PortfolioSummaryView: View {
                                    .string(from: NSNumber(value: totalInterestExpected))
                                    ?? "–")
                     MetricView(icon: "arrow.up.circle",
-                               title: "Exp. Gain",
+                               title: "Exp. Capital Gains",
                                value: Formatters.currency
                                    .string(from: NSNumber(value: totalCapitalGainExpected))
                                    ?? "–")
                     MetricView(icon: "arrow.down.circle.fill",
-                               title: "Exp. Loss",
+                               title: "Exp. Capital Losses",
                                value: Formatters.currency
                                    .string(from: NSNumber(value: totalCapitalLossExpected))
                                    ?? "–")
                     MetricView(icon: "star.circle",
-                               title: "Exp. Profit CF",
+                               title: "Total Expected Returns",
                                value: Formatters.currency
                                    .string(from: NSNumber(value: totalExpectedProfitCF))
                                    ?? "–")
@@ -289,7 +287,7 @@ struct PortfolioSummaryView: View {
                     spacing: 12
                 ) {
                     MetricView(icon: "chart.bar",
-                               title: "ETF Invested",
+                               title: "ETF Capital Invested",
                                value: Formatters.currency
                                    .string(from: NSNumber(value: totalETFInvested))
                                    ?? "–")
