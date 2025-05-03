@@ -63,7 +63,7 @@ struct ETFHoldingsPopoverView: View {
                                 .day(.twoDigits)
                                 .month(.twoDigits)
                                 .year(.twoDigits))
-                        .fixedSize(horizontal: true, vertical: false)
+
                 }
 
                 // 2) Shares
@@ -73,7 +73,6 @@ struct ETFHoldingsPopoverView: View {
                 ) { h in
                     Text("\(h.numberOfShares)")
                         .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: true, vertical: false)
                 }
 
                 // 3) Cost

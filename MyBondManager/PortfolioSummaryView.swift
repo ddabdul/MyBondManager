@@ -1,9 +1,8 @@
-//
 //  PortfolioSummaryView.swift
 //  MyBondManager
 //  Adjusted to CoreData
 //  Created by Olivier on 26/04/2025.
-//  Updated 08/05/2025 – add capital-loss & expected-profit tiles
+//  Updated 10/05/2025 – add ETF Invested & ETF Profit tiles
 //
 
 import SwiftUI
@@ -18,6 +17,7 @@ struct PortfolioSummaryView: View {
         Calendar.current.startOfDay(for: Date())
     }
 
+    // Bonds
     @FetchRequest(
         sortDescriptors: [
             NSSortDescriptor(keyPath: \BondEntity.acquisitionDate, ascending: false)
@@ -30,6 +30,15 @@ struct PortfolioSummaryView: View {
     )
     private var bondEntities: FetchedResults<BondEntity>
 
+    // ETFs
+    @FetchRequest(
+        sortDescriptors: [
+            NSSortDescriptor(keyPath: \ETFEntity.etfName, ascending: true)
+        ],
+        animation: .default
+    )
+    private var etfEntities: FetchedResults<ETFEntity>
+
     // MARK: – UI State
     @State private var selectedDepotBank: String   = "All"
     @State private var potentialPrice: String      = ""
@@ -37,15 +46,13 @@ struct PortfolioSummaryView: View {
     @State private var potentialMaturityDate: Date = Date()
     @State private var calculatedYTM: Double?      = nil
 
-    // MARK: – Helpers
+    // MARK: – Bond Helpers
 
-    /// Unique depot banks in your store, prefixed with “All”
     private var depotBanks: [String] {
         let banks = Set(bondEntities.map { $0.depotBank })
         return ["All"] + banks.sorted()
     }
 
-    /// Apply the “All” filter
     private var filteredBonds: [BondEntity] {
         guard selectedDepotBank != "All" else {
             return Array(bondEntities)
@@ -53,20 +60,16 @@ struct PortfolioSummaryView: View {
         return bondEntities.filter { $0.depotBank == selectedDepotBank }
     }
 
-    /// Flatten all cash-flow events across filtered bonds
     private var allCashFlows: [CashFlowEntity] {
-        filteredBonds.flatMap { bond in
-            bond.cashFlows ?? []
-        }
+        filteredBonds.flatMap { $0.cashFlows ?? [] }
     }
 
-    /// Only cash-flow events dated today or in the future
     private var futureCashFlows: [CashFlowEntity] {
         let now = Date()
         return allCashFlows.filter { $0.date >= now }
     }
 
-    // MARK: – Summary Metrics
+    // MARK: – Bond Metrics
 
     private var numberOfBonds: Int { filteredBonds.count }
 
@@ -87,31 +90,25 @@ struct PortfolioSummaryView: View {
         return totalYears / Double(filteredBonds.count)
     }
 
-    // MARK: – Expected-Interest, Gain, Loss & Profit
-
-    /// Sum of all *future* interest cash-flows
     private var totalInterestExpected: Double {
         futureCashFlows
             .filter { $0.natureEnum == .interest }
             .reduce(0) { $0 + $1.amount }
     }
 
-    /// Sum of all *future* capital-gains cash-flows
     private var totalCapitalGainExpected: Double {
         futureCashFlows
             .filter { $0.natureEnum == .capitalGains }
             .reduce(0) { $0 + $1.amount }
     }
 
-    /// Sum of all *future* capital-loss cash-flows
     private var totalCapitalLossExpected: Double {
         futureCashFlows
             .filter { $0.natureEnum == .capitalLoss }
             .reduce(0) { $0 + $1.amount }
     }
 
-    /// Sum of all *future* interest + capital-gains cash-flows
-    private var totalProfitExpected: Double {
+    private var totalExpectedProfitCF: Double {
         futureCashFlows
             .filter {
                 let n = $0.natureEnum
@@ -120,25 +117,13 @@ struct PortfolioSummaryView: View {
             .reduce(0) { $0 + $1.amount }
     }
 
-    /// Sum of all *future* one-off “expectedProfit” cash-flows
-    private var totalExpectedProfitCF: Double {
-        futureCashFlows
-            .filter { $0.natureEnum == .expectedProfit }
-            .reduce(0) { $0 + $1.amount }
-    }
-
-    // MARK: – Next Maturity
-
     private var nextMaturingBond: BondEntity? {
         filteredBonds.min { $0.maturityDate < $1.maturityDate }
     }
 
-    // MARK: – Next Coupon Info
-
     private func nextCouponDate(for bond: BondEntity) -> Date? {
         let cal = Calendar.current
-        let md = bond.maturityDate
-        let comps = cal.dateComponents([.month, .day], from: md)
+        let comps = cal.dateComponents([.month, .day], from: bond.maturityDate)
         let candidate = DateComponents(
             year:  cal.component(.year, from: Date()),
             month: comps.month,
@@ -174,27 +159,45 @@ struct PortfolioSummaryView: View {
         """
     }
 
-    // MARK: – YTM Estimate
-
     private func calculateYTM() {
         let par = 100.0
         guard
             let price = Double(potentialPrice),
             let rate  = Double(potentialCouponRate)
         else {
-            calculatedYTM = nil
-            return
+            calculatedYTM = nil; return
         }
         let couponAmt = par * rate / 100
         let yrs = potentialMaturityDate
             .timeIntervalSince(Date()) / (365 * 24 * 3600)
         guard yrs > 0 else {
-            calculatedYTM = nil
-            return
+            calculatedYTM = nil; return
         }
         let numerator   = couponAmt + (par - price) / yrs
         let denominator = (par + price) / 2
         calculatedYTM = (numerator / denominator) * 100
+    }
+
+    // MARK: – ETF Metrics
+
+    /// Flatten all ETFHoldings across your ETFs
+    private var allETFHoldings: [ETFHoldings] {
+        etfEntities.flatMap { ( $0.etftoholding as? Set<ETFHoldings> ) ?? [] }
+    }
+
+    /// Total capital invested = Σ acquisitionPrice × shares
+    private var totalETFInvested: Double {
+        allETFHoldings.reduce(0) { sum, h in
+            sum + Double(h.numberOfShares) * h.acquisitionPrice
+        }
+    }
+
+    /// Total profit buildup = Σ (lastPrice – acquisitionPrice) × shares
+    private var totalETFProfit: Double {
+        allETFHoldings.reduce(0) { sum, h in
+            let diff = h.holdingtoetf.lastPrice - h.acquisitionPrice
+            return sum + Double(h.numberOfShares) * diff
+        }
     }
 
     // MARK: – View Body
@@ -202,7 +205,7 @@ struct PortfolioSummaryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Header + Filter
+                // — Header + Filter
                 HStack {
                     Text("Portfolio Summary")
                         .font(.title2).bold()
@@ -217,11 +220,12 @@ struct PortfolioSummaryView: View {
                 }
                 .padding(.bottom, 8)
 
-                // Metrics Grid — now 8 tiles
+                // — Metrics Grid: now 10 tiles
                 LazyVGrid(
-                    columns: [GridItem(.flexible()), GridItem(.flexible())],
+                    columns: [ GridItem(.flexible()), GridItem(.flexible()) ],
                     spacing: 12
                 ) {
+                    // Bonds area…
                     MetricView(icon: "doc.plaintext",
                                title: "Bonds",
                                value: "\(numberOfBonds)")
@@ -258,9 +262,21 @@ struct PortfolioSummaryView: View {
                                value: Formatters.currency
                                         .string(from: NSNumber(value: totalExpectedProfitCF))
                                         ?? "–")
+
+                    // — NEW: ETF area
+                    MetricView(icon: "chart.bar",
+                               title: "ETF Invested",
+                               value: Formatters.currency
+                                        .string(from: NSNumber(value: totalETFInvested))
+                                        ?? "–")
+                    MetricView(icon: "chart.pie",
+                               title: "ETF Profit",
+                               value: Formatters.currency
+                                        .string(from: NSNumber(value: totalETFProfit))
+                                        ?? "–")
                 }
 
-                // Next Maturity Tile
+                // — Next Maturity Tile
                 MetricView(
                     icon:  "flag.checkered",
                     title: "Next Maturity",
@@ -270,7 +286,7 @@ struct PortfolioSummaryView: View {
                 )
                 .frame(maxWidth: .infinity)
 
-                // Next Coupon Tile
+                // — Next Coupon Tile
                 MetricView(
                     icon:  "calendar.badge.clock",
                     title: "Next Coupon",
@@ -278,7 +294,7 @@ struct PortfolioSummaryView: View {
                 )
                 .frame(maxWidth: .infinity)
 
-                // YTM Estimate Section
+                // — YTM Estimate Section
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Estimate Bond YTM")
                         .font(.headline)
@@ -324,6 +340,9 @@ struct PortfolioSummaryView: View {
         }
     }
 }
+
+// unchanged MetricView…
+
 
 struct MetricView: View {
     let icon: String
