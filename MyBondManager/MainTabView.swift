@@ -1,12 +1,17 @@
 //
 //  MainTabView.swift
 //  MyBondManager
-//  Updated 10/05/2025 – fix sheet builder & debug prints
+//  Updated 11/05/2025 – make URL Identifiable & use runModal panels
 //
 
 import SwiftUI
 import CoreData
-import UniformTypeIdentifiers
+import AppKit   // for NSOpenPanel
+
+// MARK: – Allow `sheet(item:)` to work with URL
+extension URL: Identifiable {
+    public var id: URL { self }
+}
 
 @available(macOS 13.0, *)
 struct MainTabView: View {
@@ -15,23 +20,20 @@ struct MainTabView: View {
     @EnvironmentObject private var notifier: LaunchNotifier
 
     // MARK: – State for existing features
-    @State private var showingMaturedSheet    = false
-    @State private var showingAddBondView     = false
-    @State private var showingRecalcAlert     = false
-    @State private var showingAddETFView      = false
-    @State private var showingSellETFView     = false
-    @State private var isRefreshingETF        = false
+    @State private var showingAddBond    = false
+    @State private var showingMatured    = false
+    @State private var showingRecalc     = false
+    @State private var showingAddETF     = false
+    @State private var showingSellETF    = false
+    @State private var isRefreshingETF   = false
 
-    // MARK: – State for export
-    @State private var isExportPanelPresented   = false
-    @State private var showingExportValidation  = false
+    // MARK: – State for export/validation
     @State private var validationFolderURL: URL?
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                AppTheme.panelBackground
-                    .ignoresSafeArea()
+                AppTheme.panelBackground.ignoresSafeArea()
 
                 TabView {
                     portfolioTab(geo: geo)
@@ -44,73 +46,68 @@ struct MainTabView: View {
                              PersistenceController.shared.container.viewContext)
             }
         }
-        .onAppear {
-            print("🏠 MainTabView appeared")
+        // Present validation sheet whenever `validationFolderURL` is non‐nil
+        .sheet(item: $validationFolderURL) { url in
+            ExportValidationView(folderURL: url)
+                .environment(\.managedObjectContext, viewContext)
         }
-        // 1️⃣ SwiftUI folder picker
-        .fileImporter(
-            isPresented: $isExportPanelPresented,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            print("📁 fileImporter result:", result)
-            switch result {
-            case .success(let urls):
-                guard let folder = urls.first else {
-                    print("⚠️ fileImporter: no folder URL")
-                    return
-                }
-                print("✅ User picked folder:", folder.path)
-                DispatchQueue.global(qos: .userInitiated).async {
-                    do {
-                        try ExportManager()
-                            .exportAll(to: folder, from: viewContext)
-                        DispatchQueue.main.async {
-                            print("✅ exportAll succeeded, showing validation sheet")
-                            validationFolderURL = folder
-                            showingExportValidation = true
-                        }
-                    }
-                    catch {
-                        DispatchQueue.main.async {
-                            print("❌ exportAll failed:", error)
-                            notifier.alertMessage = "Export failed: \(error.localizedDescription)"
-                        }
-                    }
-                }
+    }
 
-            case .failure(let error):
-                print("❌ fileImporter failed:", error)
-                notifier.alertMessage = "Could not select folder: \(error.localizedDescription)"
-            }
-        }
-        // 2️⃣ Observe the flag with the new zero‐param onChange
-                .onChange(of: showingExportValidation) {
-                    print("🔄 showingExportValidation is now", showingExportValidation)
-                }
-        // 3️⃣ Present validation sheet
-        .sheet(isPresented: $showingExportValidation) {
-            Group {
-                if let folder = validationFolderURL {
-                    ExportValidationView(folderURL: folder)
-                        .environment(\.managedObjectContext, viewContext)
-                        .onAppear {
-                            print("📝 ExportValidationView onAppear")
-                        }
-                } else {
-                    Text("❌ No folder URL!")
+    // MARK: – Sidebar toggle
+    private func toggleSidebar() {
+        NSApp.keyWindow?.firstResponder?
+            .tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
+    }
+
+    // MARK: – Folder‐panel helpers
+
+    private func chooseFolderAndExport() {
+        let panel = NSOpenPanel()
+        panel.title                   = "Select folder to export JSON"
+        panel.canChooseDirectories    = true
+        panel.canChooseFiles          = false
+        panel.allowsMultipleSelection = false
+
+        if panel.runModal() == .OK, let folder = panel.url {
+            let granted = folder.startAccessingSecurityScopedResource()
+            defer { if granted { folder.stopAccessingSecurityScopedResource() } }
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try ExportManager().exportAll(to: folder, from: viewContext)
+                    DispatchQueue.main.async {
+                        validationFolderURL = folder
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        notifier.alertMessage = "Export failed: \(error.localizedDescription)"
+                    }
                 }
             }
         }
     }
 
-    /// Toggle the sidebar
-    private func toggleSidebar() {
-        NSApp.keyWindow?.firstResponder?
-            .tryToPerform(
-                #selector(NSSplitViewController.toggleSidebar(_:)),
-                with: nil
-            )
+    private func chooseFolderAndImport() {
+        let panel = NSOpenPanel()
+        panel.title                   = "Select folder to import JSON"
+        panel.canChooseDirectories    = true
+        panel.canChooseFiles          = false
+        panel.allowsMultipleSelection = false
+
+        if panel.runModal() == .OK, let folder = panel.url {
+            let granted = folder.startAccessingSecurityScopedResource()
+            defer { if granted { folder.stopAccessingSecurityScopedResource() } }
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try ImportManager().importAll(from: folder, into: viewContext)
+                } catch {
+                    DispatchQueue.main.async {
+                        notifier.alertMessage = "Import failed: \(error.localizedDescription)"
+                    }
+                }
+            }
+        }
     }
 
     // MARK: — Portfolio Tab
@@ -121,6 +118,7 @@ struct MainTabView: View {
             PortfolioSummaryView()
                 .frame(minWidth: geo.size.width/3)
                 .background(AppTheme.panelBackground)
+
         } detail: {
             BondTableView()
                 .background(AppTheme.panelBackground)
@@ -131,7 +129,7 @@ struct MainTabView: View {
             max:   geo.size.width*0.5
         )
         .toolbar {
-            // ── LEFT SIDE ──
+            // ── LEFT ──
             ToolbarItem(placement: .navigation) {
                 Button(action: toggleSidebar) {
                     Image(systemName: "sidebar.leading")
@@ -139,37 +137,36 @@ struct MainTabView: View {
                 .help("Toggle Sidebar")
             }
             ToolbarItem(placement: .navigation) {
-                Button {
-                    print("🔘 Export tapped (portfolioTab)")
-                    isExportPanelPresented = true
-                } label: {
+                Button(action: chooseFolderAndExport) {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .help("Export & Validate JSON…")
+                .help("Export JSON…")
+            }
+            ToolbarItem(placement: .navigation) {
+                Button(action: chooseFolderAndImport) {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .help("Import JSON…")
             }
 
-            // ── RIGHT SIDE ──
+            // ── RIGHT ──
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingAddBondView = true
-                } label: {
+                Button { showingAddBond = true } label: {
                     Image(systemName: "plus")
                 }
                 .help("Add a new bond")
             }
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingMaturedSheet = true
-                } label: {
+                Button { showingMatured = true } label: {
                     Label("Matured", systemImage: "clock.arrow.circlepath")
                 }
                 .help("Show matured bonds")
             }
         }
-        .sheet(isPresented: $showingAddBondView) {
+        .sheet(isPresented: $showingAddBond) {
             AddBondViewAsync()
         }
-        .sheet(isPresented: $showingMaturedSheet) {
+        .sheet(isPresented: $showingMatured) {
             MaturedBondsView()
                 .frame(minWidth: 700, minHeight: 400)
         }
@@ -186,6 +183,7 @@ struct MainTabView: View {
             PortfolioSummaryView()
                 .frame(minWidth: geo.size.width/3)
                 .background(AppTheme.panelBackground)
+
         } detail: {
             CashFlowView()
                 .background(AppTheme.panelBackground)
@@ -203,25 +201,25 @@ struct MainTabView: View {
                 .help("Toggle Sidebar")
             }
             ToolbarItem(placement: .navigation) {
-                Button {
-                    print("🔘 Export tapped (cashFlowTab)")
-                    isExportPanelPresented = true
-                } label: {
+                Button(action: chooseFolderAndExport) {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .help("Export & Validate JSON…")
+                .help("Export JSON…")
             }
-
+            ToolbarItem(placement: .navigation) {
+                Button(action: chooseFolderAndImport) {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .help("Import JSON…")
+            }
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    recalculateAllCashFlows()
-                } label: {
+                Button { recalculateAllCashFlows() } label: {
                     Label("Recalculate", systemImage: "arrow.clockwise")
                 }
                 .help("Recalculate cash flows")
             }
         }
-        .alert("Cash flows recalculated", isPresented: $showingRecalcAlert) {
+        .alert("Cash flows recalculated", isPresented: $showingRecalc) {
             Button("OK", role: .cancel) {}
         }
         .tabItem {
@@ -237,6 +235,7 @@ struct MainTabView: View {
             PortfolioSummaryView()
                 .frame(minWidth: geo.size.width/3)
                 .background(AppTheme.panelBackground)
+
         } detail: {
             ETFListView()
                 .background(AppTheme.panelBackground)
@@ -254,19 +253,19 @@ struct MainTabView: View {
                 .help("Toggle Sidebar")
             }
             ToolbarItem(placement: .navigation) {
-                Button {
-                    print("🔘 Export tapped (etfTab)")
-                    isExportPanelPresented = true
-                } label: {
+                Button(action: chooseFolderAndExport) {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .help("Export & Validate JSON…")
+                .help("Export JSON…")
             }
-
+            ToolbarItem(placement: .navigation) {
+                Button(action: chooseFolderAndImport) {
+                    Image(systemName: "square.and.arrow.down")
+                }
+                .help("Import JSON…")
+            }
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingAddETFView = true
-                } label: {
+                Button { showingAddETF = true } label: {
                     Image(systemName: "plus")
                 }
                 .help("Add a new ETF holding")
@@ -296,19 +295,17 @@ struct MainTabView: View {
                 .help("Refresh all ETF prices")
             }
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingSellETFView = true
-                } label: {
+                Button { showingSellETF = true } label: {
                     Image(systemName: "minus.circle")
                 }
                 .help("Sell ETF shares")
             }
         }
-        .sheet(isPresented: $showingAddETFView) {
+        .sheet(isPresented: $showingAddETF) {
             AddHoldingView()
                 .frame(minWidth: 500, minHeight: 400)
         }
-        .sheet(isPresented: $showingSellETFView) {
+        .sheet(isPresented: $showingSellETF) {
             SellETFView()
                 .frame(minWidth: 500, minHeight: 400)
         }
@@ -331,28 +328,26 @@ struct MainTabView: View {
         }
     }
 
-    // MARK: — Helper
+    // MARK: — Helper: recalc cash flows
 
     private func recalculateAllCashFlows() {
-        let persistence = PersistenceController.shared
-        let context = persistence.backgroundContext
-
-        context.perform {
-            let request: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
+        let ctx = PersistenceController.shared.backgroundContext
+        ctx.perform {
+            let req: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
             do {
-                let bonds = try context.fetch(request)
-                let generator = CashFlowGenerator(context: context)
-                for bond in bonds {
-                    try generator.regenerateCashFlows(for: bond)
+                let bonds = try ctx.fetch(req)
+                let gen   = CashFlowGenerator(context: ctx)
+                for b in bonds {
+                    try gen.regenerateCashFlows(for: b)
                 }
-                if context.hasChanges {
-                    try context.save()
+                if ctx.hasChanges {
+                    try ctx.save()
                 }
                 DispatchQueue.main.async {
-                    showingRecalcAlert = true
+                    showingRecalc = true
                 }
             } catch {
-                print("❗️ Error recalculating cash flows:", error)
+                // ignore
             }
         }
     }
