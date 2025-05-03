@@ -1,16 +1,17 @@
 //
 //  MainTabView.swift
 //  MyBondManager
-//  Updated 11/05/2025 – make URL Identifiable & use runModal panels
+//  Updated 12/05/2025 – use Identifiable wrapper for URL
 //
 
 import SwiftUI
 import CoreData
 import AppKit   // for NSOpenPanel
 
-// MARK: – Allow `sheet(item:)` to work with URL
-extension URL: Identifiable {
-    public var id: URL { self }
+/// A simple Identifiable wrapper around a URL, to drive SwiftUI’s `sheet(item:)`.
+private struct FolderSelection: Identifiable {
+    let url: URL
+    var id: URL { url }
 }
 
 @available(macOS 13.0, *)
@@ -19,7 +20,7 @@ struct MainTabView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @EnvironmentObject private var notifier: LaunchNotifier
 
-    // MARK: – State for existing features
+    // MARK: – State for existing sheets & alerts
     @State private var showingAddBond    = false
     @State private var showingMatured    = false
     @State private var showingRecalc     = false
@@ -27,8 +28,8 @@ struct MainTabView: View {
     @State private var showingSellETF    = false
     @State private var isRefreshingETF   = false
 
-    // MARK: – State for export/validation
-    @State private var validationFolderURL: URL?
+    // MARK: – State for export validation sheet
+    @State private var validationSelection: FolderSelection?
 
     var body: some View {
         GeometryReader { geo in
@@ -46,9 +47,9 @@ struct MainTabView: View {
                              PersistenceController.shared.container.viewContext)
             }
         }
-        // Present validation sheet whenever `validationFolderURL` is non‐nil
-        .sheet(item: $validationFolderURL) { url in
-            ExportValidationView(folderURL: url)
+        // Present the validation view when a folder has been selected and exported
+        .sheet(item: $validationSelection) { selection in
+            ExportValidationView(folderURL: selection.url)
                 .environment(\.managedObjectContext, viewContext)
         }
     }
@@ -56,7 +57,10 @@ struct MainTabView: View {
     // MARK: – Sidebar toggle
     private func toggleSidebar() {
         NSApp.keyWindow?.firstResponder?
-            .tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
+            .tryToPerform(
+                #selector(NSSplitViewController.toggleSidebar(_:)),
+                with: nil
+            )
     }
 
     // MARK: – Folder‐panel helpers
@@ -76,7 +80,7 @@ struct MainTabView: View {
                 do {
                     try ExportManager().exportAll(to: folder, from: viewContext)
                     DispatchQueue.main.async {
-                        validationFolderURL = folder
+                        validationSelection = FolderSelection(url: folder)
                     }
                 } catch {
                     DispatchQueue.main.async {
@@ -116,17 +120,16 @@ struct MainTabView: View {
     private func portfolioTab(geo: GeometryProxy) -> some View {
         NavigationSplitView {
             PortfolioSummaryView()
-                .frame(minWidth: geo.size.width/3)
+                .frame(minWidth: geo.size.width / 3)
                 .background(AppTheme.panelBackground)
-
         } detail: {
             BondTableView()
                 .background(AppTheme.panelBackground)
         }
         .navigationSplitViewColumnWidth(
-            min:   geo.size.width/3,
-            ideal: geo.size.width/3,
-            max:   geo.size.width*0.5
+            min: geo.size.width / 3,
+            ideal: geo.size.width / 3,
+            max: geo.size.width * 0.5
         )
         .toolbar {
             // ── LEFT ──
@@ -181,17 +184,16 @@ struct MainTabView: View {
     private func cashFlowTab(geo: GeometryProxy) -> some View {
         NavigationSplitView {
             PortfolioSummaryView()
-                .frame(minWidth: geo.size.width/3)
+                .frame(minWidth: geo.size.width / 3)
                 .background(AppTheme.panelBackground)
-
         } detail: {
             CashFlowView()
                 .background(AppTheme.panelBackground)
         }
         .navigationSplitViewColumnWidth(
-            min:   geo.size.width/3,
-            ideal: geo.size.width/3,
-            max:   geo.size.width*0.5
+            min: geo.size.width / 3,
+            ideal: geo.size.width / 3,
+            max: geo.size.width * 0.5
         )
         .toolbar {
             ToolbarItem(placement: .navigation) {
@@ -233,17 +235,16 @@ struct MainTabView: View {
     private func etfTab(geo: GeometryProxy) -> some View {
         NavigationSplitView {
             PortfolioSummaryView()
-                .frame(minWidth: geo.size.width/3)
+                .frame(minWidth: geo.size.width / 3)
                 .background(AppTheme.panelBackground)
-
         } detail: {
             ETFListView()
                 .background(AppTheme.panelBackground)
         }
         .navigationSplitViewColumnWidth(
-            min:   geo.size.width/3,
-            ideal: geo.size.width/3,
-            max:   geo.size.width*0.5
+            min: geo.size.width / 3,
+            ideal: geo.size.width / 3,
+            max: geo.size.width * 0.5
         )
         .toolbar {
             ToolbarItem(placement: .navigation) {
