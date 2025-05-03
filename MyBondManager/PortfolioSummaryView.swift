@@ -195,7 +195,7 @@ struct PortfolioSummaryView: View {
     }
 
     private var totalGains: Double {
-        totalCapitalGainExpected + totalETFProfit
+        totalCapitalGainExpected + totalETFProfit - totalCapitalLossExpected + totalExpectedProfitCF
     }
 
     // MARK: – View Body

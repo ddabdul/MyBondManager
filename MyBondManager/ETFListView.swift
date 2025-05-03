@@ -1,8 +1,7 @@
-//
 //  ETFListView.swift
 //  MyBondManager
-//
 //  Created by Olivier on 30/04/2025.
+//  Updated 11/05/2025 – format Total Value as currency
 //
 
 import SwiftUI
@@ -14,7 +13,8 @@ struct ETFListView: View {
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \ETFEntity.etfName, ascending: true)],
-        animation: .default)
+        animation: .default
+    )
     private var etfs: FetchedResults<ETFEntity>
 
     @State private var selectedID: UUID?
@@ -32,44 +32,52 @@ struct ETFListView: View {
         .background(AppTheme.tileBackground)
     }
 
+    /// Only show ETFs whose total shares > 0
+    private var displayedETFs: [ETFEntity] {
+        etfs.filter { $0.totalShares > 0 }
+    }
 
     var body: some View {
-        VStack(spacing: 0) { // Use a VStack to stack the title bar and the table
-            titleBar // Include the titleBar here
-            Table(etfs, selection: $selectedID) {
-                TableColumn("ETF Name") { (etf: ETFEntity) in
+        VStack(spacing: 0) {
+            titleBar
+
+            Table(displayedETFs, selection: $selectedID) {
+                TableColumn("ETF Name") { etf in
                     Text(etf.etfName)
                         .multilineTextAlignment(.leading)
                         .lineLimit(nil)
                 }
                 .width(min: 160)
 
-                TableColumn("Holdings") { (etf: ETFEntity) in
+                TableColumn("Holdings") { etf in
                     Text("\(etf.numberOfHoldings)")
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .width(ideal: 60)
 
-                TableColumn("Total Shares") { (etf: ETFEntity) in
+                TableColumn("Total Shares") { etf in
                     Text("\(etf.totalShares)")
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .width(ideal: 60)
 
-                TableColumn("Last Price") { (etf: ETFEntity) in
+                TableColumn("Last Price") { etf in
                     Text(String(format: "%.2f", etf.lastPrice))
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .width(ideal: 60)
 
-                TableColumn("Total Value") { (etf: ETFEntity) in
-                    Text(String(format: "%.2f", etf.totalValue))
-                        .frame(maxWidth: .infinity, alignment: .center)
+                TableColumn("Total Value") { etf in
+                    Text(
+                        Formatters.currency
+                            .string(from: NSNumber(value: etf.totalValue))
+                            ?? "–"
+                    )
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .width(ideal: 100)
 
-                // ➤ New History column
-                TableColumn("History") { (etf: ETFEntity) in
+                TableColumn("History") { etf in
                     Button {
                         historyETF = etf
                     } label: {
@@ -83,11 +91,10 @@ struct ETFListView: View {
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .scrollContentBackground(.hidden)
             .background(AppTheme.panelBackground)
-
-            // existing popover for holdings
-            .onChange(of: selectedID) { _old, newID in
+            .onChange(of: selectedID) { _, newID in
                 guard let id = newID,
-                      let etf = etfs.first(where: { $0.id == id }) else { return }
+                      let etf = displayedETFs.first(where: { $0.id == id })
+                else { return }
                 popoverETF = etf
                 selectedID = nil
             }
@@ -95,7 +102,6 @@ struct ETFListView: View {
                 ETFHoldingsPopoverView(etf: etf)
                     .frame(minWidth: 600, minHeight: 400)
             }
-            // new sheet for history
             .sheet(item: $historyETF) { etf in
                 ETFPriceListView(etf: etf)
                     .frame(minWidth: 400, minHeight: 300)
