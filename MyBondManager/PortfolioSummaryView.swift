@@ -2,7 +2,7 @@
 //  MyBondManager
 //  Adjusted to CoreData
 //  Created by Olivier on 26/04/2025.
-//  Updated 10/05/2025 – add ETF Invested & ETF Profit tiles
+//  Updated 11/05/2025 – restore full bond tiles + top combined metrics
 //
 
 import SwiftUI
@@ -17,24 +17,17 @@ struct PortfolioSummaryView: View {
         Calendar.current.startOfDay(for: Date())
     }
 
-    // Bonds
+    // — Bonds
     @FetchRequest(
-        sortDescriptors: [
-            NSSortDescriptor(keyPath: \BondEntity.acquisitionDate, ascending: false)
-        ],
-        predicate: NSPredicate(
-            format: "maturityDate >= %@",
-            Self.startOfToday as NSDate
-        ),
+        sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.acquisitionDate, ascending: false)],
+        predicate: NSPredicate(format: "maturityDate >= %@", Self.startOfToday as NSDate),
         animation: .default
     )
     private var bondEntities: FetchedResults<BondEntity>
 
-    // ETFs
+    // — ETFs
     @FetchRequest(
-        sortDescriptors: [
-            NSSortDescriptor(keyPath: \ETFEntity.etfName, ascending: true)
-        ],
+        sortDescriptors: [NSSortDescriptor(keyPath: \ETFEntity.etfName, ascending: true)],
         animation: .default
     )
     private var etfEntities: FetchedResults<ETFEntity>
@@ -54,19 +47,15 @@ struct PortfolioSummaryView: View {
     }
 
     private var filteredBonds: [BondEntity] {
-        guard selectedDepotBank != "All" else {
-            return Array(bondEntities)
-        }
+        guard selectedDepotBank != "All" else { return Array(bondEntities) }
         return bondEntities.filter { $0.depotBank == selectedDepotBank }
-    }
-
-    private var allCashFlows: [CashFlowEntity] {
-        filteredBonds.flatMap { $0.cashFlows ?? [] }
     }
 
     private var futureCashFlows: [CashFlowEntity] {
         let now = Date()
-        return allCashFlows.filter { $0.date >= now }
+        return filteredBonds
+            .flatMap { $0.cashFlows ?? [] }
+            .filter { $0.date >= now }
     }
 
     // MARK: – Bond Metrics
@@ -83,9 +72,10 @@ struct PortfolioSummaryView: View {
 
     private var averageMaturityYears: Double {
         guard !filteredBonds.isEmpty else { return 0 }
-        let totalYears = filteredBonds.reduce(0) { sum, bond in
-            let interval = bond.maturityDate.timeIntervalSince(Date())
-            return sum + (interval / (365 * 24 * 3600))
+        let totalYears = filteredBonds.reduce(0.0) { sum, bond in
+            sum + bond.maturityDate
+                    .timeIntervalSince(Date())
+                    / (365 * 24 * 3600)
         }
         return totalYears / Double(filteredBonds.count)
     }
@@ -169,7 +159,8 @@ struct PortfolioSummaryView: View {
         }
         let couponAmt = par * rate / 100
         let yrs = potentialMaturityDate
-            .timeIntervalSince(Date()) / (365 * 24 * 3600)
+            .timeIntervalSince(Date())
+            / (365 * 24 * 3600)
         guard yrs > 0 else {
             calculatedYTM = nil; return
         }
@@ -180,19 +171,16 @@ struct PortfolioSummaryView: View {
 
     // MARK: – ETF Metrics
 
-    /// Flatten all ETFHoldings across your ETFs
     private var allETFHoldings: [ETFHoldings] {
-        etfEntities.flatMap { ( $0.etftoholding as? Set<ETFHoldings> ) ?? [] }
+        etfEntities.flatMap { ($0.etftoholding as? Set<ETFHoldings>) ?? [] }
     }
 
-    /// Total capital invested = Σ acquisitionPrice × shares
     private var totalETFInvested: Double {
         allETFHoldings.reduce(0) { sum, h in
             sum + Double(h.numberOfShares) * h.acquisitionPrice
         }
     }
 
-    /// Total profit buildup = Σ (lastPrice – acquisitionPrice) × shares
     private var totalETFProfit: Double {
         allETFHoldings.reduce(0) { sum, h in
             let diff = h.holdingtoetf.lastPrice - h.acquisitionPrice
@@ -200,19 +188,29 @@ struct PortfolioSummaryView: View {
         }
     }
 
+    // MARK: – Combined Tiles
+
+    private var totalCapital: Double {
+        totalPrincipal + totalETFInvested
+    }
+
+    private var totalGains: Double {
+        totalCapitalGainExpected + totalETFProfit
+    }
+
     // MARK: – View Body
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // — Header + Filter
+                // Header + Filter
                 HStack {
                     Text("Portfolio Summary")
                         .font(.title2).bold()
                     Spacer()
                     Picker("Depot Bank", selection: $selectedDepotBank) {
-                        ForEach(depotBanks, id: \.self) { bank in
-                            Text(bank).tag(bank)
+                        ForEach(depotBanks, id: \.self) {
+                            Text($0).tag($0)
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
@@ -220,63 +218,91 @@ struct PortfolioSummaryView: View {
                 }
                 .padding(.bottom, 8)
 
-                // — Metrics Grid: now 10 tiles
+                // Top Combined Metrics
+                HStack(spacing: 12) {
+                    MetricView(
+                        icon:  "banknote.fill",
+                        title: "Total Capital",
+                        value: Formatters.currency
+                            .string(from: NSNumber(value: totalCapital))
+                            ?? "–"
+                    )
+                    MetricView(
+                        icon:  "arrow.up.circle",
+                        title: "Total Gains",
+                        value: Formatters.currency
+                            .string(from: NSNumber(value: totalGains))
+                            ?? "–"
+                    )
+                }
+
+                Divider().background(Color.white.opacity(0.3))
+
+                // Full Bonds Section (8 tiles)
                 LazyVGrid(
                     columns: [ GridItem(.flexible()), GridItem(.flexible()) ],
                     spacing: 12
                 ) {
-                    // Bonds area…
                     MetricView(icon: "doc.plaintext",
                                title: "Bonds",
                                value: "\(numberOfBonds)")
-                    MetricView(icon: "dollarsign.circle",
+                    MetricView(icon: "eurosign.circle",
                                title: "Acquisition",
                                value: Formatters.currency
-                                        .string(from: NSNumber(value: totalAcquisitionCost))
-                                        ?? "–")
+                                   .string(from: NSNumber(value: totalAcquisitionCost))
+                                   ?? "–")
                     MetricView(icon: "banknote",
                                title: "Principal",
                                value: Formatters.currency
-                                        .string(from: NSNumber(value: totalPrincipal))
-                                        ?? "–")
+                                   .string(from: NSNumber(value: totalPrincipal))
+                                   ?? "–")
                     MetricView(icon: "clock.arrow.circlepath",
                                title: "Maturity (yrs)",
                                value: String(format: "%.1f", averageMaturityYears))
                     MetricView(icon: "arrow.down.circle",
                                title: "Exp. Interest",
                                value: Formatters.currency
-                                        .string(from: NSNumber(value: totalInterestExpected))
-                                        ?? "–")
+                                   .string(from: NSNumber(value: totalInterestExpected))
+                                   ?? "–")
                     MetricView(icon: "arrow.up.circle",
                                title: "Exp. Gain",
                                value: Formatters.currency
-                                        .string(from: NSNumber(value: totalCapitalGainExpected))
-                                        ?? "–")
+                                   .string(from: NSNumber(value: totalCapitalGainExpected))
+                                   ?? "–")
                     MetricView(icon: "arrow.down.circle.fill",
                                title: "Exp. Loss",
                                value: Formatters.currency
-                                        .string(from: NSNumber(value: totalCapitalLossExpected))
-                                        ?? "–")
+                                   .string(from: NSNumber(value: totalCapitalLossExpected))
+                                   ?? "–")
                     MetricView(icon: "star.circle",
                                title: "Exp. Profit CF",
                                value: Formatters.currency
-                                        .string(from: NSNumber(value: totalExpectedProfitCF))
-                                        ?? "–")
+                                   .string(from: NSNumber(value: totalExpectedProfitCF))
+                                   ?? "–")
+                }
 
-                    // — NEW: ETF area
+                Divider().background(Color.white.opacity(0.3))
+
+                // ETF Section (2 tiles)
+                LazyVGrid(
+                    columns: [ GridItem(.flexible()), GridItem(.flexible()) ],
+                    spacing: 12
+                ) {
                     MetricView(icon: "chart.bar",
                                title: "ETF Invested",
                                value: Formatters.currency
-                                        .string(from: NSNumber(value: totalETFInvested))
-                                        ?? "–")
+                                   .string(from: NSNumber(value: totalETFInvested))
+                                   ?? "–")
                     MetricView(icon: "chart.pie",
                                title: "ETF Profit",
                                value: Formatters.currency
-                                        .string(from: NSNumber(value: totalETFProfit))
-                                        ?? "–")
+                                   .string(from: NSNumber(value: totalETFProfit))
+                                   ?? "–")
                 }
 
-                // — Next Maturity Tile
+                Divider().background(Color.white.opacity(0.3))
+
+                // Next Maturity Tile
                 MetricView(
                     icon:  "flag.checkered",
                     title: "Next Maturity",
@@ -286,7 +312,7 @@ struct PortfolioSummaryView: View {
                 )
                 .frame(maxWidth: .infinity)
 
-                // — Next Coupon Tile
+                // Next Coupon Tile
                 MetricView(
                     icon:  "calendar.badge.clock",
                     title: "Next Coupon",
@@ -294,7 +320,7 @@ struct PortfolioSummaryView: View {
                 )
                 .frame(maxWidth: .infinity)
 
-                // — YTM Estimate Section
+                // YTM Estimate Section
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Estimate Bond YTM")
                         .font(.headline)
@@ -330,20 +356,13 @@ struct PortfolioSummaryView: View {
                 .padding(.bottom)
             }
             .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: Color.primary.opacity(0.1),
-                            radius: 4, x: 0, y: 2)
-            )
-            .padding([.horizontal, .top])
         }
     }
 }
 
-// unchanged MetricView…
-
-
+// -----------------------------------
+// MARK: – MetricView
+// -----------------------------------
 struct MetricView: View {
     let icon: String
     let title: String
@@ -371,4 +390,3 @@ struct MetricView: View {
         .cornerRadius(8)
     }
 }
-
