@@ -1,3 +1,4 @@
+//
 //  PortfolioSummaryView.swift
 //  MyBondManager
 //  Adjusted to CoreData
@@ -32,8 +33,10 @@ struct PortfolioSummaryView: View {
     )
     private var etfEntities: FetchedResults<ETFEntity>
 
-    // MARK: – UI State
-    @State private var selectedDepotBank: String   = "All"
+    // MARK: – Shared Depot-Bank Selection
+    @Binding var selectedDepotBank: String
+
+    // MARK: – UI State for YTM Estimate
     @State private var potentialPrice: String      = ""
     @State private var potentialCouponRate: String = ""
     @State private var potentialMaturityDate: Date = Date()
@@ -386,5 +389,13 @@ struct MetricView: View {
         .padding(12)
         .background(AppTheme.tileBackground)
         .cornerRadius(8)
+    }
+}
+
+struct PortfolioSummaryView_Previews: PreviewProvider {
+    static var previews: some View {
+        PortfolioSummaryView(selectedDepotBank: .constant("All"))
+            .environment(\.managedObjectContext,
+                         PersistenceController.shared.container.viewContext)
     }
 }

@@ -1,6 +1,9 @@
-// BondTableView.swift
-// MyBondManager
-// Updated 05/05/2025 to use panelBackground throughout
+//
+//  BondTableView.swift
+//  MyBondManager
+//
+//  Updated 05/05/2025 to use panelBackground throughout
+//
 
 import SwiftUI
 import CoreData
@@ -78,6 +81,7 @@ struct BondSummary: Identifiable {
 // MARK: – BondTableView
 // —————————————————————————————
 struct BondTableView: View {
+    @Binding var selectedDepotBank: String
     @Environment(\.managedObjectContext) private var moc
 
     static private var startOfToday: Date {
@@ -96,8 +100,16 @@ struct BondTableView: View {
     ]
     @State private var selectedSummaryID: String?
 
+    // Filter bondEntities by the selected depot bank
+    private var filteredEntities: [BondEntity] {
+        guard selectedDepotBank != "All" else {
+            return Array(bondEntities)
+        }
+        return bondEntities.filter { $0.depotBank == selectedDepotBank }
+    }
+
     private var summaries: [BondSummary] {
-        Dictionary(grouping: bondEntities, by: \.isin).map { isin, ents in
+        Dictionary(grouping: filteredEntities, by: \.isin).map { isin, ents in
             let first = ents[0]
             return BondSummary(
                 id:           isin,
@@ -243,6 +255,7 @@ struct BondSummaryDetailView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+
                     Divider()
 
                     Text("Details:")
@@ -304,7 +317,8 @@ struct BondSummaryDetailView: View {
 // —————————————————————————————
 struct BondTableView_Previews: PreviewProvider {
     static var previews: some View {
-        BondTableView()
-            .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
+        BondTableView(selectedDepotBank: .constant("All"))
+            .environment(\.managedObjectContext,
+                         PersistenceController.shared.container.viewContext)
     }
 }

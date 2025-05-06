@@ -30,6 +30,8 @@ struct MainTabView: View {
 
     // MARK: – State for export validation sheet
     @State private var validationSelection: FolderSelection?
+    // 1️⃣ Lift the picker state here:
+    @State private var selectedDepotBank: String = "All"
 
     var body: some View {
         GeometryReader { geo in
@@ -119,11 +121,11 @@ struct MainTabView: View {
     @ViewBuilder
     private func portfolioTab(geo: GeometryProxy) -> some View {
         NavigationSplitView {
-            PortfolioSummaryView()
+            PortfolioSummaryView(selectedDepotBank: $selectedDepotBank)
                 .frame(minWidth: geo.size.width / 3)
                 .background(AppTheme.panelBackground)
         } detail: {
-            BondTableView()
+            BondTableView(selectedDepotBank: $selectedDepotBank)
                 .background(AppTheme.panelBackground)
         }
         .navigationSplitViewColumnWidth(
@@ -183,7 +185,7 @@ struct MainTabView: View {
     @ViewBuilder
     private func cashFlowTab(geo: GeometryProxy) -> some View {
         NavigationSplitView {
-            PortfolioSummaryView()
+            PortfolioSummaryView(selectedDepotBank: $selectedDepotBank)
                 .frame(minWidth: geo.size.width / 3)
                 .background(AppTheme.panelBackground)
         } detail: {
@@ -234,7 +236,7 @@ struct MainTabView: View {
     @ViewBuilder
     private func etfTab(geo: GeometryProxy) -> some View {
         NavigationSplitView {
-            PortfolioSummaryView()
+            PortfolioSummaryView(selectedDepotBank: $selectedDepotBank)
                 .frame(minWidth: geo.size.width / 3)
                 .background(AppTheme.panelBackground)
         } detail: {
