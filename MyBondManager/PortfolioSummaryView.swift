@@ -4,6 +4,7 @@
 //  Adjusted to CoreData
 //  Created by Olivier on 26/04/2025.
 //  Updated 11/05/2025 – restore full bond tiles + top combined metrics
+//  Updated 15/05/2025 – add portfolio weighted average YTM tile
 //
 
 import SwiftUI
@@ -106,6 +107,20 @@ struct PortfolioSummaryView: View {
         totalInterestExpected
       + totalCapitalGainExpected
       - totalCapitalLossExpected
+    }
+
+    // MARK: – Weighted Average YTM
+    /// Portfolio‐weighted average yield to maturity (by par value)
+    private var weightedAverageYTM: Double {
+        let totalPar = filteredBonds.reduce(0.0) { $0 + $1.parValue }
+        guard totalPar > 0 else { return 0 }
+        let sumWeighted = filteredBonds.reduce(0.0) { acc, bond in
+            acc + bond.yieldToMaturity * bond.parValue
+        }
+        return sumWeighted / totalPar
+    }
+    private var weightedAverageYTMFormatted: String {
+        String(format: "%.2f%%", weightedAverageYTM)
     }
 
     private var nextMaturingBond: BondEntity? {
@@ -239,7 +254,7 @@ struct PortfolioSummaryView: View {
 
                 Divider().background(Color.white.opacity(0.3))
 
-                // Full Bonds Section (8 tiles)
+                // Full Bonds Section (now 9 tiles)
                 LazyVGrid(
                     columns: [ GridItem(.flexible()), GridItem(.flexible()) ],
                     spacing: 12
@@ -280,6 +295,9 @@ struct PortfolioSummaryView: View {
                                value: Formatters.currency
                                    .string(from: NSNumber(value: totalExpectedProfitCF))
                                    ?? "–")
+                    MetricView(icon: "percent",
+                               title: "Avg. YTM",
+                               value: weightedAverageYTMFormatted)
                 }
 
                 Divider().background(Color.white.opacity(0.3))
