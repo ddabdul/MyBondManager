@@ -1,11 +1,7 @@
 //
 //  CashFlowView.swift
 //  MyBondManager (macOS only)
-//  Updated 07/05/2025: bonds within each month now sorted chronologically
-//  Updated 10/05/2025: use AppTheme.panelBackground everywhere
-//  Updated 12/05/2025: separate title bar from scroll content
-//  Updated 13/05/2025: added spacing between title, filter & list
-//  Updated 14/05/2025: replaced deprecated onChange(of:perform:)
+//  Updated 14/05/2025: filter on shared Depot Bank selection + modernized onChange
 //
 
 import SwiftUI
@@ -89,6 +85,7 @@ fileprivate struct YearGroup: Identifiable {
 // MARK: – CashFlowView
 
 struct CashFlowView: View {
+    @Binding var selectedDepotBank: String
     @Environment(\.managedObjectContext) private var moc
 
     // — Filter state
@@ -130,24 +127,18 @@ struct CashFlowView: View {
             // 3) Scrollable List
             cashFlowList
         }
-        .onAppear {
-            fetchCashFlows()
-        }
-        // zero-parameter onChange
-        .onChange(of: searchText) {
-            fetchCashFlows()
-        }
-        .onChange(of: selectedNature) {
-            fetchCashFlows()
-        }
-        .onChange(of: startDate) {
+        .onAppear { fetchCashFlows() }
+        .onChange(of: searchText)        { fetchCashFlows() }
+        .onChange(of: selectedNature)    { fetchCashFlows() }
+        .onChange(of: startDate)         {
             if startDate > endDate { endDate = startDate }
             fetchCashFlows()
         }
-        .onChange(of: endDate) {
+        .onChange(of: endDate)           {
             if endDate < startDate { startDate = endDate }
             fetchCashFlows()
         }
+        .onChange(of: selectedDepotBank) { fetchCashFlows() }
         .background(
             AppTheme.panelBackground
                 .edgesIgnoringSafeArea(.all)
@@ -157,7 +148,7 @@ struct CashFlowView: View {
     // MARK: – Sub-view #1: Filter Bar
 
     private var filterBar: some View {
-        HStack {
+        HStack(spacing: 12) {
             TextField("Search bond…", text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 200)
@@ -214,9 +205,17 @@ struct CashFlowView: View {
                 NSPredicate(format: "nature == %@", nat.rawValue)
             )
         }
+        // Filter by selected depot bank:
+        if selectedDepotBank != "All" {
+            predicates.append(
+                NSPredicate(format: "bond.depotBank == %@", selectedDepotBank)
+            )
+        }
 
         req.predicate       = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
-        req.sortDescriptors = [NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)]
+        req.sortDescriptors = [
+            NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)
+        ]
 
         do {
             cashFlowsArray = try moc.fetch(req)
