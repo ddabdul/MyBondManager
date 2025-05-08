@@ -1,4 +1,3 @@
-
 //
 //  ImportManager.swift
 //  MyBondManager
@@ -8,10 +7,6 @@
 
 import Foundation
 import CoreData
-
-// MARK: – Codable mirrors (same as your ExportManager)
-
-//Moved in CoreDataCodable
 
 // MARK: – ImportManager
 
@@ -41,14 +36,33 @@ public class ImportManager {
             do {
                 try importBonds(from: folderURL, into: context)
                 try importETFs(from: folderURL, into: context)
+
                 if context.hasChanges {
-                    try context.save()
+                    // Detailed save with validation‐error logging
+                    do {
+                        try context.save()
+                    }
+                    catch let error as NSError {
+                        if let details = error.userInfo[NSDetailedErrorsKey] as? [NSError] {
+                            for validationError in details {
+                                let obj   = validationError.userInfo[NSValidationObjectErrorKey] ?? "<unknown object>"
+                                let key   = validationError.userInfo[NSValidationKeyErrorKey]      ?? "<unknown key>"
+                                let value = validationError.userInfo[NSValidationValueErrorKey]    ?? "<no value>"
+                                print("❗️ Validation error on \(obj): \(key) = \(value) → \(validationError.localizedDescription)")
+                            }
+                        } else {
+                            print("❗️ Save error: \(error), \(error.userInfo)")
+                        }
+                        // Re‐throw so the outer catch captures it
+                        throw error
+                    }
                 }
             }
             catch {
                 caught = error
             }
         }
+
         if let error = caught {
             throw error
         }
@@ -67,14 +81,12 @@ public class ImportManager {
         let data = try Data(contentsOf: url)
         let jsonBonds = try decoder.decode([BondCodable].self, from: data)
 
-        // Fetch existing or insert new
         for jb in jsonBonds {
             let req: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
             req.predicate = NSPredicate(format: "id == %@", jb.id as CVarArg)
             let matches = try context.fetch(req)
             let bond: BondEntity = matches.first ?? BondEntity(context: context)
 
-            // Always overwrite scalar properties
             bond.id               = jb.id
             bond.name             = jb.name
             bond.isin             = jb.isin
@@ -87,17 +99,14 @@ public class ImportManager {
             bond.initialPrice     = jb.initialPrice
             bond.yieldToMaturity  = jb.yieldToMaturity
 
-            // Remove old cash flows
             for cf in bond.cashFlowsArray {
                 context.delete(cf)
             }
-
-            // Add new cash flows
             for cfj in jb.cashFlows {
                 let cf = CashFlowEntity(context: context)
-                cf.date      = cfj.date
-                cf.amount    = cfj.amount
-                cf.nature    = cfj.nature
+                cf.date   = cfj.date
+                cf.amount = cfj.amount
+                cf.nature = cfj.nature
                 bond.addToCashFlows(cf)
             }
         }
@@ -122,7 +131,6 @@ public class ImportManager {
             let matches = try context.fetch(req)
             let etf: ETFEntity = matches.first ?? ETFEntity(context: context)
 
-            // Overwrite scalar props
             etf.id        = je.id
             etf.etfName   = je.etfName
             etf.isin      = je.isin
@@ -130,13 +138,11 @@ public class ImportManager {
             etf.wkn       = je.wkn
             etf.lastPrice = je.lastPrice
 
-            // Remove old price history
             if let oldPrices = etf.etfPriceMany as? Set<ETFPrice> {
                 for p in oldPrices {
                     context.delete(p)
                 }
             }
-            // Add new prices
             for pj in je.priceHistory {
                 let p = ETFPrice(context: context)
                 p.datePrice = pj.datePrice
@@ -144,13 +150,11 @@ public class ImportManager {
                 etf.addToEtfPriceMany(p)
             }
 
-            // Remove old holdings
             if let oldH = etf.etftoholding as? Set<ETFHoldings> {
                 for h in oldH {
                     context.delete(h)
                 }
             }
-            // Add new holdings
             for hj in je.holdings {
                 let h = ETFHoldings(context: context)
                 h.acquisitionDate  = hj.acquisitionDate
