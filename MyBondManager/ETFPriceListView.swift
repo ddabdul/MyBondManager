@@ -1,9 +1,11 @@
 //  ETFPriceListView.swift
 //  MyBondManager
 //  Shows the full timestamped history of prices for one ETF.
+//
 
 import SwiftUI
 import CoreData
+import Algorithms    // for the “sorted(using:)” extension
 
 @available(macOS 13.0, *)
 struct ETFPriceListView: View {
@@ -13,19 +15,25 @@ struct ETFPriceListView: View {
     // 2) Keep track of sort order so we can use closure‐based columns
     @State private var sortOrder: [KeyPathComparator<ETFPrice>] = [
         // newest first
-        KeyPathComparator(\.datePrice, order: .reverse)
+        .init(\.datePrice, order: .reverse)
     ]
 
-    // 3) FetchRequest scoped to a single ETF
+    // 3) FetchRequest scoped to a single ETF — unsorted on purpose
     @FetchRequest private var prices: FetchedResults<ETFPrice>
     
     init(etf: ETFEntity) {
         _prices = FetchRequest(
             entity: ETFPrice.entity(),
-            sortDescriptors: [],  // we sort in the Table via sortOrder
+            sortDescriptors: [],  // no Core Data sort; we’ll do it in-memory
             predicate: NSPredicate(format: "etfPriceHistory == %@", etf),
             animation: .default
         )
+    }
+    
+    /// A little Array wrapper around the FetchedResults,
+    /// kept in sync with `sortOrder`.
+    private var sortedPrices: [ETFPrice] {
+        prices.sorted(using: sortOrder)
     }
     
     var body: some View {
@@ -41,15 +49,15 @@ struct ETFPriceListView: View {
             }
             .padding(.top)
             
-            // Price history table
-            Table(prices, sortOrder: $sortOrder) {
+            // Price history table, now driven by our sortedPrices array
+            Table(sortedPrices, sortOrder: $sortOrder) {
                 // — Date column —
                 TableColumn("Date", value: \.datePrice) { (entry: ETFPrice) in
                     Text(entry.datePrice,
                          format: Date.FormatStyle(date: .numeric, time: .standard))
                 }
                 .width(min: 150, ideal: 200)
-                
+
                 // — Price column —
                 TableColumn("Price", value: \.price) { (entry: ETFPrice) in
                     Text(String(format: "%.2f", entry.price))
