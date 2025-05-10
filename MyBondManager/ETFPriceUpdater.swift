@@ -13,26 +13,18 @@ public enum ETFPriceUpdaterError: Error {
     case genericError(Error)
 }
 
-/// A small service that will iterate over every ETFEntity in the given
-/// context, scrape its current price, update lastPrice, and append
-/// a new ETFPrice record with timestamp (date+time).
 @MainActor
 public class ETFPriceUpdater {
     private let context: NSManagedObjectContext
     private let scraper: InstrumentHeaderScraper
+    private let calendar = Calendar.current
 
-    /// - Parameters:
-    ///   - context: the NSManagedObjectContext you want to update (viewContext, backgroundContext, etc.)
-    ///   - scraper: your async/await scraper; defaults to a new instance.
     public init(context: NSManagedObjectContext,
                 scraper: InstrumentHeaderScraper = InstrumentHeaderScraper()) {
         self.context = context
         self.scraper = scraper
     }
 
-    /// Scrape and record the latest price for every ETF in Core Data.
-    /// Safe to call multiple times; existing history is never overwritten.
-    /// Throws an error if refreshing prices fails for one or more ETFs.
     public func refreshAllPrices() async throws {
         // 1) Fetch all ETFs
         let request: NSFetchRequest<ETFEntity> = ETFEntity.fetchRequest()
@@ -40,33 +32,68 @@ public class ETFPriceUpdater {
 
         var individualErrors: [String: Error] = [:]
 
+        // Precompute today’s boundaries
+        let now       = Date()
+        let startOfDay = calendar.startOfDay(for: now)
+        guard let nextDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)
+        else { throw ETFPriceUpdaterError.genericError(NSError()) }
+
         for etf in etfs {
             do {
-                // 2) Scrape price
-                let price = try await scraper.fetchPrice(isin: etf.isin)
-                let now   = Date() // full date + time
+                // 2) Scrape the latest price
+                let newPrice = try await scraper.fetchPrice(isin: etf.isin)
 
-                // 3) Update model
-                etf.lastPrice = price
+                // 3) Look for any existing entries for “today”
+                let histReq: NSFetchRequest<ETFPrice> = ETFPrice.fetchRequest()
+                histReq.predicate = NSPredicate(format:
+                    "etfPriceHistory == %@ AND datePrice >= %@ AND datePrice < %@",
+                    etf,
+                    startOfDay as NSDate,
+                    nextDay as NSDate
+                )
+                let existing = try context.fetch(histReq)
 
-                let historyEntry = ETFPrice(context: context)
-                historyEntry.datePrice     = now
-                historyEntry.price         = price
-                historyEntry.etfPriceHistory = etf
+                if existing.isEmpty {
+                    // No entry yet: create one
+                    let entry = ETFPrice(context: context)
+                    entry.etfPriceHistory = etf
+                    entry.datePrice        = now
+                    entry.price            = newPrice
+                } else {
+                    // We already have 1+ entries: average them all
+                    let totalOld = existing.reduce(0) { $0 + $1.price }
+                    let countOld = Double(existing.count)
+                    let average  = (totalOld + newPrice) / (countOld + 1)
+
+                    // Keep the first, delete the rest
+                    let keeper = existing[0]
+                    keeper.price     = average
+                    keeper.datePrice = startOfDay    // normalize to day
+
+                    for dup in existing.dropFirst() {
+                        context.delete(dup)
+                    }
+                }
+
+                // Also update the “lastPrice” on the ETF itself
+                etf.lastPrice = newPrice
 
             } catch {
-                // Collect errors for each ETF failure
                 individualErrors[etf.isin] = error
-                print("⚠️ ETFPriceUpdater: failed for \(etf.isin): \(error)")
+                print("⚠️ ETFPriceUpdater failed for \(etf.isin): \(error)")
             }
         }
 
-        // 4) Save once at the end
+        // 4) Save once
         if context.hasChanges {
-            try context.save()
+            do {
+                try context.save()
+            } catch {
+                throw ETFPriceUpdaterError.genericError(error)
+            }
         }
 
-        // 5) Throw an error if any individual refresh failed
+        // 5) Bubble up any per-ETF errors
         if !individualErrors.isEmpty {
             throw ETFPriceUpdaterError.failedToRefreshOneOrMore(errors: individualErrors)
         }
