@@ -99,7 +99,7 @@ struct AddHoldingView: View {
                                 if isFetching {
                                     ProgressView()
                                 } else {
-                                    Text("Collect")
+                                    Text("ADD")
                                 }
                             }
                             .disabled(newISIN.isEmpty || isFetching)

@@ -49,7 +49,7 @@ struct MainTabView: View {
                         importAction: chooseFolderAndImport
                     )
                     .tabItem {
-                        Label("Bond Portfolio", systemImage: "list.bullet")
+                        Label("Bond Portfolio", systemImage: "list.bullet")
                     }
 
                     // Instantiate Cash Flow Tab View
@@ -120,110 +120,110 @@ struct MainTabView: View {
     // MARK: – Shared Helper Actions
     // These methods are called by buttons in the tab views via closures
 
-    private func toggleSidebar() {
-        NSApp.keyWindow?.firstResponder?
-            .tryToPerform(
-                #selector(NSSplitViewController.toggleSidebar(_:)),
-                with: nil
-            )
-    }
+    private func toggleSidebar() {
+        NSApp.keyWindow?.firstResponder?
+        .tryToPerform(
+    #selector(NSSplitViewController.toggleSidebar(_:)),
+         with: nil
+        )
+    }
 
-    private func chooseFolderAndExport() {
-        let panel = NSOpenPanel()
-        panel.title                   = "Select folder to export JSON"
-        panel.canChooseDirectories    = true
-        panel.canChooseFiles          = false
-        panel.allowsMultipleSelection = false
+    private func chooseFolderAndExport() {
+        let panel = NSOpenPanel()
+        panel.title                   = "Select folder to export JSON"
+        panel.canChooseDirectories    = true
+        panel.canChooseFiles          = false
+        panel.allowsMultipleSelection = false
 
-        if panel.runModal() == .OK, let folder = panel.url {
+        if panel.runModal() == .OK, let folder = panel.url {
             // Perform export on a background queue
-            DispatchQueue.global(qos: .userInitiated).async {
+            DispatchQueue.global(qos: .userInitiated).async {
                 let granted = folder.startAccessingSecurityScopedResource() // Access needs to happen on the queue performing file ops
                 defer { if granted { folder.stopAccessingSecurityScopedResource() } }
 
-                do {
-                    try ExportManager().exportAll(to: folder, from: viewContext)
-                    DispatchQueue.main.async {
+                do {
+                try ExportManager().exportAll(to: folder, from: viewContext)
+                    DispatchQueue.main.async {
                         // Update UI state on the main queue after success
-                        validationSelection = FolderSelection(url: folder)
-                    }
-                } catch {
-                    DispatchQueue.main.async {
+                        validationSelection = FolderSelection(url: folder)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
                         // Update notifier alert message on the main queue after error
-                        notifier.alertMessage = "Export failed: \(error.localizedDescription)"
-                    }
-                }
-            }
-        }
-    }
+                        notifier.alertMessage = "Export failed: \(error.localizedDescription)"
+                    }
+                }
+            }
+        }
+    }
 
-    private func chooseFolderAndImport() {
-        let panel = NSOpenPanel()
-        panel.title                   = "Select folder to import JSON"
-        panel.canChooseDirectories    = true
-        panel.canChooseFiles          = false
-        panel.allowsMultipleSelection = false
+    private func chooseFolderAndImport() {
+        let panel = NSOpenPanel()
+        panel.title = "Select folder to import JSON"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
 
-        if panel.runModal() == .OK, let folder = panel.url {
+        if panel.runModal() == .OK, let folder = panel.url {
             // Perform import on a background queue
-            DispatchQueue.global(qos: .userInitiated).async {
+            DispatchQueue.global(qos: .userInitiated).async {
                 let granted = folder.startAccessingSecurityScopedResource() // Access needs to happen on the queue performing file ops
                 defer { if granted { folder.stopAccessingSecurityScopedResource() } }
 
-                do {
-                    try ImportManager().importAll(from: folder, into: viewContext) // Requires viewContext
-                } catch {
-                    DispatchQueue.main.async {
+                do {
+                try ImportManager().importAll(from: folder, into: viewContext) // Requires viewContext
+                } catch {
+                    DispatchQueue.main.async {
                         // Update notifier alert message on the main queue after error
-                        notifier.alertMessage = "Import failed: \(error.localizedDescription)"
-                    }
-                }
-            }
-        }
-    }
+                        notifier.alertMessage = "Import failed: \(error.localizedDescription)"
+                    }
+                }
+            }
+        }
+    }
 
     // MARK: – Helper: recalc cash flows
     // This method is called by the CashFlowTabView via a closure
 
-    private func recalculateAllCashFlows() {
+    private func recalculateAllCashFlows() {
         // Use a background context for lengthy operations
-        let ctx = PersistenceController.shared.backgroundContext
-        ctx.perform {
-            let req: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
-            do {
-                let bonds = try ctx.fetch(req)
-                let gen   = CashFlowGenerator(context: ctx) // Requires context
-                for b in bonds {
-                    try gen.regenerateCashFlows(for: b)
-                }
-                if ctx.hasChanges {
-                    try ctx.save()
-                }
+          let ctx = PersistenceController.shared.backgroundContext
+        ctx.perform {
+        let req: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
+            do {
+            let bonds = try ctx.fetch(req)
+                let gen   = CashFlowGenerator(context: ctx) // Requires context
+                for b in bonds {
+                try gen.regenerateCashFlows(for: b)
+                }
+                if ctx.hasChanges {
+                    try ctx.save()
+                }
                 // The alert state (showingRecalc) is now in CashFlowTabView.
                 // That view sets its local state *after* calling this action.
                 // No need to update state here anymore.
-            } catch {
-                // Handle error, e.g., log or show a global alert if needed,
+            } catch {
+                // Handle error, e.g., log or show a global alert if needed,
                 // but specific recalculation errors might be handled within the tab.
-            }
-        }
-    }
+            }
+        }
+    }
 }
 
 // MARK: - Preview
 
 struct MainTabView_Previews: PreviewProvider {
-    static var previews: some View {
-        MainTabView()
-            // Provide required environment objects for the preview
-            .environment(
-                \.managedObjectContext,
-                PersistenceController.shared.container.viewContext // Use a temporary or mock context
-            )
-            .environmentObject(
-                LaunchNotifier(context:
-                    PersistenceController.shared.container.viewContext
-                ) // Mock Notifier
-            )
-    }
+    static var previews: some View {
+        MainTabView()
+        // Provide required environment objects for the preview
+        .environment(
+            \.managedObjectContext,
+                                 PersistenceController.shared.container.viewContext // Use a temporary or mock context
+        )
+        .environmentObject(
+            LaunchNotifier(context:
+                    PersistenceController.shared.container.viewContext
+                          ) // Mock Notifier
+        )
+    }
 }
