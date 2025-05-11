@@ -38,23 +38,32 @@ struct ETFPriceListView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Close button row
-            HStack {
-                Spacer()
-                Button("Close") {
-                    dismiss()
+                // Title Bar
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)
+
+                    Text("ETF Prices")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, alignment: .center)
+
+                    Spacer()
+                        .frame(width: 30)
                 }
-                .keyboardShortcut(.cancelAction)
-                .padding(.trailing)
-            }
-            .padding(.top)
+                .padding()
+                .background(AppTheme.tileBackground)
             
             // Price history table, now driven by our sortedPrices array
             Table(sortedPrices, sortOrder: $sortOrder) {
                 // — Date column —
                 TableColumn("Date", value: \.datePrice) { (entry: ETFPrice) in
                     Text(entry.datePrice,
-                         format: Date.FormatStyle(date: .numeric, time: .standard))
+                         format: Date.FormatStyle(date: .numeric))
                 }
                 .width(min: 150, ideal: 200)
 
