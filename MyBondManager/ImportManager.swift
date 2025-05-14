@@ -98,6 +98,7 @@ public class ImportManager {
             bond.parValue         = jb.parValue
             bond.initialPrice     = jb.initialPrice
             bond.yieldToMaturity  = jb.yieldToMaturity
+            bond.wkn = jb.wkn
 
             for cf in bond.cashFlowsArray {
                 context.delete(cf)

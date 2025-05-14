@@ -29,6 +29,7 @@ public struct BondCodable: Codable {
     public let parValue: Double
     public let initialPrice: Double
     public let yieldToMaturity: Double
+    public let wkn: String
     public let cashFlows: [CashFlowCodable]
 }
 

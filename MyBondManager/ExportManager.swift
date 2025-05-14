@@ -62,6 +62,7 @@ public class ExportManager {
                 parValue: bond.parValue,
                 initialPrice: bond.initialPrice,
                 yieldToMaturity: bond.yieldToMaturity,
+                wkn: bond.wkn,
                 cashFlows: flows
             )
         }
