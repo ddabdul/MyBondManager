@@ -2,7 +2,7 @@
 //  ImportManager.swift
 //  MyBondManager
 //  Created by Olivier on 10/05/2025.
-//  Updated 10/05/2025 – re-import JSON & merge into Core Data
+//  Updated 15/05/2025 – now removes deleted items from Core Data
 //
 
 import Foundation
@@ -13,16 +13,15 @@ import CoreData
 public class ImportManager {
     public init() {}
 
-    /// Read `bonds.json` & `etfs.json` from `folderURL`, then insert/update your Core Data store.
+    /// Read `bonds.json` & `etfs.json` from `folderURL`, then sync with Core Data.
     /// - Parameters:
-    ///   - folderURL: directory where you previously wrote your JSONs
-    ///   - context: an NSManagedObjectContext (call on a background context if you like)
-    /// - Throws: any file‐I/O, decoding, or Core Data error
+    ///   - folderURL: directory containing your JSONs
+    ///   - context: an NSManagedObjectContext (use a background context for safety)
+    /// - Throws: any I/O, decoding, or Core Data error
     public func importAll(
         from folderURL: URL,
         into context: NSManagedObjectContext
     ) throws {
-        // 1) Acquire security‐scoped access (if using fileImporter)
         let granted = folderURL.startAccessingSecurityScopedResource()
         defer {
             if granted {
@@ -30,7 +29,6 @@ public class ImportManager {
             }
         }
 
-        // 2) Perform everything inside the context’s queue
         var caught: Error?
         context.performAndWait {
             do {
@@ -38,11 +36,9 @@ public class ImportManager {
                 try importETFs(from: folderURL, into: context)
 
                 if context.hasChanges {
-                    // Detailed save with validation‐error logging
                     do {
                         try context.save()
-                    }
-                    catch let error as NSError {
+                    } catch let error as NSError {
                         if let details = error.userInfo[NSDetailedErrorsKey] as? [NSError] {
                             for validationError in details {
                                 let obj   = validationError.userInfo[NSValidationObjectErrorKey] ?? "<unknown object>"
@@ -53,12 +49,10 @@ public class ImportManager {
                         } else {
                             print("❗️ Save error: \(error), \(error.userInfo)")
                         }
-                        // Re‐throw so the outer catch captures it
                         throw error
                     }
                 }
-            }
-            catch {
+            } catch {
                 caught = error
             }
         }
@@ -81,7 +75,15 @@ public class ImportManager {
         let data = try Data(contentsOf: url)
         let jsonBonds = try decoder.decode([BondCodable].self, from: data)
 
+        // Track existing IDs
+        let fetchAll: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
+        let existingBonds = try context.fetch(fetchAll)
+        let existingIDs = Set(existingBonds.compactMap { $0.id })
+        var jsonIDs = Set<UUID>()
+
         for jb in jsonBonds {
+            jsonIDs.insert(jb.id)
+
             let req: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
             req.predicate = NSPredicate(format: "id == %@", jb.id as CVarArg)
             let matches = try context.fetch(req)
@@ -98,8 +100,9 @@ public class ImportManager {
             bond.parValue         = jb.parValue
             bond.initialPrice     = jb.initialPrice
             bond.yieldToMaturity  = jb.yieldToMaturity
-            bond.wkn = jb.wkn
+            bond.wkn              = jb.wkn
 
+            // Replace cash flows
             for cf in bond.cashFlowsArray {
                 context.delete(cf)
             }
@@ -110,6 +113,12 @@ public class ImportManager {
                 cf.nature = cfj.nature
                 bond.addToCashFlows(cf)
             }
+        }
+
+        // Delete removed items
+        let toDeleteIDs = existingIDs.subtracting(jsonIDs)
+        for bond in existingBonds where toDeleteIDs.contains(bond.id) {
+            context.delete(bond)
         }
     }
 
@@ -126,7 +135,15 @@ public class ImportManager {
         let data = try Data(contentsOf: url)
         let jsonETFs = try decoder.decode([ETFEntityCodable].self, from: data)
 
+        // Track existing IDs
+        let fetchAll: NSFetchRequest<ETFEntity> = ETFEntity.fetchRequest()
+        let existingETFs = try context.fetch(fetchAll)
+        let existingIDs = Set(existingETFs.compactMap { $0.id })
+        var jsonIDs = Set<UUID>()
+
         for je in jsonETFs {
+            jsonIDs.insert(je.id)
+
             let req: NSFetchRequest<ETFEntity> = ETFEntity.fetchRequest()
             req.predicate = NSPredicate(format: "id == %@", je.id as CVarArg)
             let matches = try context.fetch(req)
@@ -139,6 +156,7 @@ public class ImportManager {
             etf.wkn       = je.wkn
             etf.lastPrice = je.lastPrice
 
+            // Replace price history
             if let oldPrices = etf.etfPriceMany as? Set<ETFPrice> {
                 for p in oldPrices {
                     context.delete(p)
@@ -151,6 +169,7 @@ public class ImportManager {
                 etf.addToEtfPriceMany(p)
             }
 
+            // Replace holdings
             if let oldH = etf.etftoholding as? Set<ETFHoldings> {
                 for h in oldH {
                     context.delete(h)
@@ -163,6 +182,12 @@ public class ImportManager {
                 h.numberOfShares   = hj.numberOfShares
                 etf.addToEtftoholding(h)
             }
+        }
+
+        // Delete removed items
+        let toDeleteIDs = existingIDs.subtracting(jsonIDs)
+        for etf in existingETFs where toDeleteIDs.contains(etf.id) {
+            context.delete(etf)
         }
     }
 }
