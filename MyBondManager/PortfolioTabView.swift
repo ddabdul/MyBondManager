@@ -65,14 +65,6 @@ struct PortfolioTabView: View {
         )
         // Define the toolbar specifically for this tab's NavigationView context
         .toolbar {
-            // ── LEFT (Navigation) ──
-            // Use passed actions for common toolbar items
-            ToolbarItem(placement: .navigation) {
-                Button(action: toggleSidebarAction) {
-                    Image(systemName: "sidebar.leading")
-                }
-                .help("Toggle Sidebar")
-            }
             ToolbarItem(placement: .navigation) {
                 Button(action: exportAction) {
                     Image(systemName: "square.and.arrow.up")

@@ -79,6 +79,14 @@ struct MainTabView: View {
                 }
                                           .toolbarBackground(AppTheme.panelBackground)
                                    .background(Color.clear)
+                                   .toolbar {
+                                       ToolbarItem(placement: .navigation) {
+                                           Button(action: toggleSidebar) {
+                                               Image(systemName: "sidebar.leading")
+                                           }
+                                           .help("Toggle Sidebar")
+                                       }
+                                   }
                 // Optional: Keep environment context here or set higher up in the App
                 // Keeping it here matches the original code's placement.
                                                  .environment(\.managedObjectContext,
