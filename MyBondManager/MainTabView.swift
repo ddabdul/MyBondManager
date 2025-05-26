@@ -97,7 +97,7 @@ struct MainTabView: View {
                 selectedDepotBank: $selectedDepotBank,
                 exportAction: chooseFolderAndExport,
                 importAction: chooseFolderAndImport,
-                recalculateAction: chooseFolderAndImport
+                recalculateAction: recalculateAllCashFlows
             )
             .environment(\.managedObjectContext, viewContext)
             .environmentObject(notifier)
