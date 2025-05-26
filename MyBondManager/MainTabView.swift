@@ -20,6 +20,7 @@ struct MainTabView: View {
     @State private var selectedDepotBank: String = "All"
     @State private var selectedTab: Tab = .portfolio
     @State private var validationSelection: FolderSelection?
+    @State private var isSidebarVisible: Bool = true
 
     enum Tab: String, CaseIterable, Identifiable {
         case portfolio, cashflows, etf
@@ -27,99 +28,114 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            NavigationView {
-                NavigationSplitView {
-                    // Sidebar: Portfolio Summary
-                    PortfolioSummaryView(selectedDepotBank: $selectedDepotBank)
-                        .frame(minWidth: geo.size.width / 3)
-                        .background(AppTheme.panelBackground)
-                } detail: {
-                    // Detail: Top picker + tab content
-                    VStack(spacing: 0) {
-                        Picker("View", selection: $selectedTab) {
-                            Label("Portfolio", systemImage: "list.bullet").tag(Tab.portfolio)
-                            Label("Cash Flows", systemImage: "dollarsign.circle").tag(Tab.cashflows)
-                            Label("ETF", systemImage: "chart.bar").tag(Tab.etf)
-                        }
-                        .pickerStyle(SegmentedPickerStyle())
-                        .padding()
-                        .background(AppTheme.panelBackground)
-
-                        Divider()
-
-                        detailContent(for: selectedTab, geo: geo)
-                            .background(AppTheme.panelBackground)
-                    }
+        VStack(spacing: 0) {
+            // Top bar: picker + action buttons + sidebar toggle
+            HStack {
+                Picker("View", selection: $selectedTab) {
+                    Label("Portfolio", systemImage: "list.bullet").tag(Tab.portfolio)
+                    Label("Cash Flows", systemImage: "dollarsign.circle").tag(Tab.cashflows)
+                    Label("ETF", systemImage: "chart.bar").tag(Tab.etf)
                 }
-                .navigationSplitViewColumnWidth(
-                    min: geo.size.width / 3,
-                    ideal: geo.size.width / 3,
-                    max: geo.size.width * 0.5
-                )
-            }
-            .toolbarRole(.editor)
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
+                .pickerStyle(SegmentedPickerStyle())
+                .frame(maxWidth: 300)
+
+                Spacer()
+
+                HStack(spacing: 12) {
+                    Button("Export", action: chooseFolderAndExport)
+                    Button("Import", action: chooseFolderAndImport)
+
+                    if selectedTab == .portfolio {
+                        Button(action: {}) {
+                            Label("Add Bond", systemImage: "plus")
+                        }
+
+                        Button(action: {}) {
+                            Label("Matured", systemImage: "clock.arrow.circlepath")
+                        }
+                    }
+
                     Button(action: toggleSidebar) {
                         Image(systemName: "sidebar.leading")
                     }
                     .help("Toggle Sidebar")
                 }
             }
-            .sheet(item: $validationSelection) { selection in
-                ExportValidationView(folderURL: selection.url)
-                    .environment(\.managedObjectContext, viewContext)
-                    .environmentObject(notifier)
+            .padding(.horizontal)
+            .padding(.top, 8)
+
+            Divider()
+
+            // Content area: sidebar + main detail
+            HStack(spacing: 0) {
+                if isSidebarVisible {
+                    PortfolioSummaryView(selectedDepotBank: $selectedDepotBank)
+                        .frame(minWidth: 280, idealWidth: 320, maxWidth: 360)
+                        .background(AppTheme.panelBackground)
+                        .transition(.move(edge: .leading))
+                }
+
+                Divider()
+
+                detailContent(for: selectedTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AppTheme.panelBackground)
             }
-            .environment(\.managedObjectContext, viewContext)
         }
+        .sheet(item: $validationSelection) { selection in
+            ExportValidationView(folderURL: selection.url)
+                .environment(\.managedObjectContext, viewContext)
+                .environmentObject(notifier)
+        }
+        .environment(\.managedObjectContext, viewContext)
     }
 
-    // MARK: - Tab Detail Renderer
+    // MARK: - Detail View Switcher
 
     @ViewBuilder
-    private func detailContent(for tab: Tab, geo: GeometryProxy) -> some View {
-        switch tab {
-        case .portfolio:
-            PortfolioTabView(
-                geo: geo,
-                selectedDepotBank: $selectedDepotBank,
-                exportAction: chooseFolderAndExport,
-                importAction: chooseFolderAndImport
-            )
-            .environment(\.managedObjectContext, viewContext)
-            .environmentObject(notifier)
+    private func detailContent(for tab: Tab) -> some View {
+        GeometryReader { geo in
+            switch tab {
+            case .portfolio:
+                PortfolioTabView(
+                    geo: geo,
+                    selectedDepotBank: $selectedDepotBank,
+                    exportAction: chooseFolderAndExport,
+                    importAction: chooseFolderAndImport
+                )
+                .environment(\.managedObjectContext, viewContext)
+                .environmentObject(notifier)
 
-        case .cashflows:
-            CashFlowTabView(
-                geo: geo,
-                selectedDepotBank: $selectedDepotBank,
-                exportAction: chooseFolderAndExport,
-                importAction: chooseFolderAndImport,
-                recalculateAction: recalculateAllCashFlows
-            )
-            .environment(\.managedObjectContext, viewContext)
-            .environmentObject(notifier)
+            case .cashflows:
+                CashFlowTabView(
+                    geo: geo,
+                    selectedDepotBank: $selectedDepotBank,
+                    exportAction: chooseFolderAndExport,
+                    importAction: chooseFolderAndImport,
+                    recalculateAction: recalculateAllCashFlows
+                )
+                .environment(\.managedObjectContext, viewContext)
+                .environmentObject(notifier)
 
-        case .etf:
-            ETFTabView(
-                geo: geo,
-                selectedDepotBank: $selectedDepotBank,
-                exportAction: chooseFolderAndExport,
-                importAction: chooseFolderAndImport
-            )
-            .environment(\.managedObjectContext, viewContext)
-            .environmentObject(notifier)
+            case .etf:
+                ETFTabView(
+                    geo: geo,
+                    selectedDepotBank: $selectedDepotBank,
+                    exportAction: chooseFolderAndExport,
+                    importAction: chooseFolderAndImport
+                )
+                .environment(\.managedObjectContext, viewContext)
+                .environmentObject(notifier)
+            }
         }
     }
 
-    // MARK: - Sidebar Toggle
+    // MARK: - Sidebar
 
     private func toggleSidebar() {
-        NSApp.keyWindow?.firstResponder?.tryToPerform(
-            #selector(NSSplitViewController.toggleSidebar(_:)), with: nil
-        )
+        withAnimation {
+            isSidebarVisible.toggle()
+        }
     }
 
     // MARK: - Export / Import
