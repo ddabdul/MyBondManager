@@ -2,113 +2,70 @@
 //  PortfolioTabView.swift
 //  MyBondManager
 //
-//  Created by Olivier on 11/05/2025.
-//
-
-
-// PortfolioTabView.swift
-// MyBondManager
-//
 
 import SwiftUI
-import CoreData // Needed for Core Data interactions and passing context
-// AppKit is not needed directly here unless child views require it
+import CoreData
 
 @available(macOS 13.0, *)
 struct PortfolioTabView: View {
 
     // MARK: - Environment
     @Environment(\.managedObjectContext) private var viewContext
-    @EnvironmentObject private var notifier: LaunchNotifier // Assuming notifier might be used by subviews or sheets
+    @EnvironmentObject private var notifier: LaunchNotifier
 
-    // MARK: - Passed State/Dependencies
-    let geo: GeometryProxy // Passed from MainTabView for layout calculations
-    @Binding var selectedDepotBank: String // Shared state binding
+    // MARK: - Passed State
+    let geo: GeometryProxy
+    @Binding var selectedDepotBank: String
 
-    // MARK: - Actions Passed from Parent (MainTabView)
-    // These actions control the shared features like sidebar, export, import
-    let toggleSidebarAction: () -> Void
+    // MARK: - Actions Passed from Parent
     let exportAction: () -> Void
     let importAction: () -> Void
 
-    // MARK: - State specific to this tab
+    // MARK: - Local State
     @State private var showingAddBond = false
     @State private var showingMatured = false
 
-    // Note: validationSelection and its sheet remain in MainTabView
-    // because the export action (which triggers validationSelection)
-    // is initiated from the parent or via passed action.
-
     var body: some View {
-        // This NavigationSplitView represents the content of this specific tab
-        NavigationSplitView {
-            // Sidebar View (using the shared selectedDepotBank binding)
-            PortfolioSummaryView(selectedDepotBank: $selectedDepotBank)
-                .frame(minWidth: geo.size.width / 3) // Use passed geometry
-                .background(AppTheme.panelBackground)
-                // Pass environment context if needed by PortfolioSummaryView
-                 .environment(\.managedObjectContext, viewContext)
-                 .environmentObject(notifier) // Pass environment objects if needed
-        } detail: {
-            // Detail View (using the shared selectedDepotBank binding)
-            BondTableView(selectedDepotBank: $selectedDepotBank)
-                .background(AppTheme.panelBackground)
-                // Pass environment context if needed by BondTableView
-                 .environment(\.managedObjectContext, viewContext)
-                 .environmentObject(notifier) // Pass environment objects if needed
-        }
-        // Apply split view width settings using passed geometry
-        .navigationSplitViewColumnWidth(
-            min: geo.size.width / 3,
-            ideal: geo.size.width / 3,
-            max: geo.size.width * 0.5
-        )
-        // Define the toolbar specifically for this tab's NavigationView context
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
+        VStack(alignment: .leading, spacing: 16) {
+            // Top Action Buttons (replaces old .toolbar)
+            HStack {
                 Button(action: exportAction) {
-                    Image(systemName: "square.and.arrow.up")
+                    Label("Export", systemImage: "square.and.arrow.up")
                 }
-                .help("Export JSON…")
-            }
-            ToolbarItem(placement: .navigation) {
                 Button(action: importAction) {
-                    Image(systemName: "square.and.arrow.down")
+                    Label("Import", systemImage: "square.and.arrow.down")
                 }
-                .help("Import JSON…")
-            }
 
-            // ── RIGHT (Primary Actions specific to Portfolio) ──
-            // Use local state for tab-specific actions
-            ToolbarItem(placement: .primaryAction) {
-                Button { showingAddBond = true } label: {
-                    Image(systemName: "plus")
+                Spacer()
+
+                Button(action: { showingAddBond = true }) {
+                    Label("Add Bond", systemImage: "plus")
                 }
-                .help("Add a new bond")
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button { showingMatured = true } label: {
+
+                Button(action: { showingMatured = true }) {
                     Label("Matured", systemImage: "clock.arrow.circlepath")
                 }
-                .help("Show matured bonds")
             }
+            .padding(.horizontal)
+
+            Divider()
+
+            BondTableView(selectedDepotBank: $selectedDepotBank)
+                .environment(\.managedObjectContext, viewContext)
+                .environmentObject(notifier)
+                .background(AppTheme.panelBackground)
         }
-        // Sheets specific to the Portfolio tab
         .sheet(isPresented: $showingAddBond) {
             AddBondViewAsync()
-                 // Sheets presented from this view need access to the context
                 .environment(\.managedObjectContext, viewContext)
-                 .environmentObject(notifier) // Pass environment objects if needed
+                .environmentObject(notifier)
         }
         .sheet(isPresented: $showingMatured) {
             MaturedBondsView()
                 .frame(minWidth: 700, minHeight: 400)
-                 // Sheets presented from this view need access to the context
                 .environment(\.managedObjectContext, viewContext)
-                 .environmentObject(notifier) // Pass environment objects if needed
+                .environmentObject(notifier)
         }
-        // Note: The .tabItem modifier is placed on the instance
-        // of this view within the parent TabView.
+        .padding()
     }
 }
-
