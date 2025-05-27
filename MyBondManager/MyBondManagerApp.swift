@@ -18,49 +18,46 @@ struct BondPortfolioManagerApp: App {
         let context = persistenceController.container.viewContext
         self.viewContext = context
         _notifier = StateObject(wrappedValue: LaunchNotifier(context: context))
-        // Cleanup any ETFs with no holdings
         persistenceController.deleteEmptyETFs()
     }
 
     var body: some Scene {
-        // ✅ Use Window instead of WindowGroup for macOS 14+
+        // ✅ Use `.window` for macOS 14+ customization
         Window("", id: "main") {
-            ZStack {
-                Color.black.ignoresSafeArea() // Full background fill
-
-                MainTabView()
-                    .environment(\.managedObjectContext, viewContext)
-                    .environmentObject(notifier)
-                    .preferredColorScheme(.dark)
-                    .accentColor(.white)
-            }
-            .task {
-                let updater = ETFPriceUpdater(context: viewContext)
-                do {
-                    try await updater.refreshAllPrices()
-                } catch {
-                    // Optionally show alert
+            MainTabView()
+                .environment(\.managedObjectContext, viewContext)
+                .environmentObject(notifier)
+                .preferredColorScheme(.dark)
+                .accentColor(.white)
+                .background(Color.black) // Ensures consistent background
+                .toolbarBackground(.visible, for: .windowToolbar)
+                .toolbarBackground(Color.black, for: .windowToolbar)
+                .task {
+                    let updater = ETFPriceUpdater(context: viewContext)
+                    do {
+                        try await updater.refreshAllPrices()
+                    } catch {
+                        // optionally set notifier.alertMessage
+                    }
                 }
-            }
-            .alert(
-                Text("Portfolio Update"),
-                isPresented: Binding<Bool>(
-                    get: { notifier.alertMessage != nil },
-                    set: { if !$0 { notifier.alertMessage = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) {
-                    notifier.alertMessage = nil
+                .alert(
+                    Text("Portfolio Update"),
+                    isPresented: Binding<Bool>(
+                        get: { notifier.alertMessage != nil },
+                        set: { if !$0 { notifier.alertMessage = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) {
+                        notifier.alertMessage = nil
+                    }
+                } message: {
+                    Text(notifier.alertMessage ?? "")
+                        .frame(minWidth: 300, alignment: .leading)
                 }
-            } message: {
-                Text(notifier.alertMessage ?? "")
-                    .frame(minWidth: 300, alignment: .leading)
-            }
         }
-        // ✅ Scene modifiers (only work with Window, not WindowGroup)
-        .windowStyle(.titleBar)
+        .windowStyle(.titleBar) // ✅ keep traffic lights
         .windowToolbarStyle(.unifiedCompact)
         .windowResizability(.contentSize)
-  //      .windowTitleHidden(true)
+        .defaultSize(width: 1200, height: 800)
     }
 }
