@@ -27,25 +27,6 @@ struct CashFlowTabView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
- //           HStack {
- //               Button(action: exportAction) {
- //                   Label("Export", systemImage: "square.and.arrow.up")
-  //              }
-  //              Button(action: importAction) {
-  //                  Label("Import", systemImage: "square.and.arrow.down")
-   //             }
-   //             Spacer()
-   //             Button {
-   //                 recalculateAction()
-   //                 showingRecalc = true
-   //             } label: {
-   //                 Label("Recalculate", systemImage: "arrow.clockwise")
-    //            }
-    //        }
-    //        .padding(.horizontal)
-
-    //        Divider()
-
             CashFlowView(selectedDepotBank: $selectedDepotBank)
                 .environment(\.managedObjectContext, viewContext)
                 .environmentObject(notifier)

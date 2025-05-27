@@ -151,7 +151,7 @@ struct CashFlowView: View {
         HStack(spacing: 12) {
             TextField("Search bond…", text: $searchText)
                 .textFieldStyle(.roundedBorder)
-                .frame(minWidth: 200)
+     //           .frame(minWidth: 200)
 
             Picker("Nature", selection: Binding(
                 get:  { selectedNature },
