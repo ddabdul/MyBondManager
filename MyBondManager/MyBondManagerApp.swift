@@ -31,7 +31,7 @@ struct BondPortfolioManagerApp: App {
                 .accentColor(.white)
                 .background(Color.black) // Ensures consistent background
                 .toolbarBackground(.visible, for: .windowToolbar)
-                .toolbarBackground(Color.black, for: .windowToolbar)
+                .toolbarBackground(Color.panelBackground, for: .windowToolbar)
                 .task {
                     let updater = ETFPriceUpdater(context: viewContext)
                     do {

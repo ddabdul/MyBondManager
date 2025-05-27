@@ -50,8 +50,8 @@ struct MainTabView: View {
                 // Dynamic buttons depending on view
                 switch selectedTab {
                 case .portfolio:
-                    Button("Export", action: chooseFolderAndExport)
-                    Button("Import", action: chooseFolderAndImport)
+                    Button("Export",systemImage: "square.and.arrow.up", action: chooseFolderAndExport)
+                    Button("Import",systemImage: "square.and.arrow.down", action: chooseFolderAndImport)
                     Button {
                         showingAddBond = true
                     } label: {
