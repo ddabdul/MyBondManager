@@ -20,7 +20,13 @@ struct MainTabView: View {
     @State private var selectedDepotBank: String = "All"
     @State private var selectedTab: Tab = .portfolio
     @State private var validationSelection: FolderSelection?
-    @State private var isSidebarVisible: Bool = true
+
+    @State private var showingAddBond = false
+    @State private var showingMatured = false
+    @State private var isRefreshingETF = false
+    @State private var showingSellETF = false
+    @State private var showingAddETF = false
+    @State private var showRecalculatedAlert = false  // ✅ New alert state
 
     enum Tab: String, CaseIterable, Identifiable {
         case portfolio, cashflows, etf
@@ -29,54 +35,75 @@ struct MainTabView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Top bar: picker + action buttons + sidebar toggle
+            // Global controls
             HStack {
-                Picker("View", selection: $selectedTab) {
+                Text("View")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                Picker("", selection: $selectedTab) {
                     Label("Portfolio", systemImage: "list.bullet").tag(Tab.portfolio)
                     Label("Cash Flows", systemImage: "dollarsign.circle").tag(Tab.cashflows)
                     Label("ETF", systemImage: "chart.bar").tag(Tab.etf)
                 }
                 .pickerStyle(SegmentedPickerStyle())
-                .frame(maxWidth: 300)
+                .frame(width: 300)
 
                 Spacer()
 
-                HStack(spacing: 12) {
+                // Dynamic buttons depending on view
+                switch selectedTab {
+                case .portfolio:
                     Button("Export", action: chooseFolderAndExport)
                     Button("Import", action: chooseFolderAndImport)
-
-                    if selectedTab == .portfolio {
-                        Button(action: {}) {
-                            Label("Add Bond", systemImage: "plus")
-                        }
-
-                        Button(action: {}) {
-                            Label("Matured", systemImage: "clock.arrow.circlepath")
-                        }
+                    Button {
+                        showingAddBond = true
+                    } label: {
+                        Label("Add Bond", systemImage: "plus")
+                    }
+                    Button {
+                        showingMatured = true
+                    } label: {
+                        Label("Matured", systemImage: "clock.arrow.circlepath")
                     }
 
-                    Button(action: toggleSidebar) {
-                        Image(systemName: "sidebar.leading")
+                case .cashflows:
+                    Button {
+                        recalculateAllCashFlows()
+                    } label: {
+                        Label("Recalculate", systemImage: "arrow.clockwise")
                     }
-                    .help("Toggle Sidebar")
+
+                case .etf:
+                    Button {
+                        refreshETFPrices()
+                    } label: {
+                        if isRefreshingETF {
+                            ProgressView()
+                        } else {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
+                    }
+                    Button {
+                        showingAddETF = true
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                    Button {
+                        showingSellETF = true
+                    } label: {
+                        Label("Sell", systemImage: "minus.circle")
+                    }
                 }
             }
-            .padding(.horizontal)
-            .padding(.top, 8)
+            .padding()
+            .background(AppTheme.panelBackground)
 
             Divider()
 
-            // Content area: sidebar + main detail
-            HStack(spacing: 0) {
-                if isSidebarVisible {
-                    PortfolioSummaryView(selectedDepotBank: $selectedDepotBank)
-                        .frame(minWidth: 280, idealWidth: 320, maxWidth: 360)
-                        .background(AppTheme.panelBackground)
-                        .transition(.move(edge: .leading))
-                }
-
-                Divider()
-
+            NavigationSplitView {
+                PortfolioSummaryView(selectedDepotBank: $selectedDepotBank)
+                    .background(AppTheme.panelBackground)
+            } detail: {
                 detailContent(for: selectedTab)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(AppTheme.panelBackground)
@@ -87,10 +114,36 @@ struct MainTabView: View {
                 .environment(\.managedObjectContext, viewContext)
                 .environmentObject(notifier)
         }
+        .sheet(isPresented: $showingAddBond) {
+            AddBondViewAsync()
+                .environment(\.managedObjectContext, viewContext)
+                .environmentObject(notifier)
+        }
+        .sheet(isPresented: $showingMatured) {
+            MaturedBondsView()
+                .frame(minWidth: 700, minHeight: 400)
+                .environment(\.managedObjectContext, viewContext)
+                .environmentObject(notifier)
+        }
+        .sheet(isPresented: $showingAddETF) {
+            AddHoldingView()
+                .frame(minWidth: 500, minHeight: 400)
+                .environment(\.managedObjectContext, viewContext)
+                .environmentObject(notifier)
+        }
+        .sheet(isPresented: $showingSellETF) {
+            SellETFView()
+                .frame(minWidth: 500, minHeight: 400)
+                .environment(\.managedObjectContext, viewContext)
+                .environmentObject(notifier)
+        }
+        .alert("Cash Flows recalculated", isPresented: $showRecalculatedAlert) {
+            Button("OK", role: .cancel) {}
+        }
         .environment(\.managedObjectContext, viewContext)
     }
 
-    // MARK: - Detail View Switcher
+    // MARK: – Content
 
     @ViewBuilder
     private func detailContent(for tab: Tab) -> some View {
@@ -103,9 +156,6 @@ struct MainTabView: View {
                     exportAction: chooseFolderAndExport,
                     importAction: chooseFolderAndImport
                 )
-                .environment(\.managedObjectContext, viewContext)
-                .environmentObject(notifier)
-
             case .cashflows:
                 CashFlowTabView(
                     geo: geo,
@@ -114,9 +164,6 @@ struct MainTabView: View {
                     importAction: chooseFolderAndImport,
                     recalculateAction: recalculateAllCashFlows
                 )
-                .environment(\.managedObjectContext, viewContext)
-                .environmentObject(notifier)
-
             case .etf:
                 ETFTabView(
                     geo: geo,
@@ -124,21 +171,11 @@ struct MainTabView: View {
                     exportAction: chooseFolderAndExport,
                     importAction: chooseFolderAndImport
                 )
-                .environment(\.managedObjectContext, viewContext)
-                .environmentObject(notifier)
             }
         }
     }
 
-    // MARK: - Sidebar
-
-    private func toggleSidebar() {
-        withAnimation {
-            isSidebarVisible.toggle()
-        }
-    }
-
-    // MARK: - Export / Import
+    // MARK: – Import / Export
 
     private func chooseFolderAndExport() {
         let panel = NSOpenPanel()
@@ -189,7 +226,7 @@ struct MainTabView: View {
         }
     }
 
-    // MARK: - Recalculate Cash Flows
+    // MARK: – Recalculate
 
     private func recalculateAllCashFlows() {
         let ctx = PersistenceController.shared.backgroundContext
@@ -204,8 +241,32 @@ struct MainTabView: View {
                 if ctx.hasChanges {
                     try ctx.save()
                 }
+                DispatchQueue.main.async {
+                    showRecalculatedAlert = true  // ✅ Show success alert
+                }
             } catch {
-                // Handle error
+                DispatchQueue.main.async {
+                    notifier.alertMessage = "❗️ Recalculation failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    // MARK: – Refresh ETF Prices
+
+    private func refreshETFPrices() {
+        isRefreshingETF = true
+        Task {
+            let updater = ETFPriceUpdater(context: viewContext)
+            do {
+                try await updater.refreshAllPrices()
+            } catch {
+                DispatchQueue.main.async {
+                    notifier.alertMessage = "❗️ Failed refreshing ETF prices: \(error.localizedDescription)"
+                }
+            }
+            DispatchQueue.main.async {
+                isRefreshingETF = false
             }
         }
     }

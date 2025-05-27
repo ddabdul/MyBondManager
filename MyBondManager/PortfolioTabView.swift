@@ -26,31 +26,10 @@ struct PortfolioTabView: View {
     @State private var showingMatured = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Top Action Buttons (replaces old .toolbar)
-            HStack {
-                Button(action: exportAction) {
-                    Label("Export", systemImage: "square.and.arrow.up")
-                }
-                Button(action: importAction) {
-                    Label("Import", systemImage: "square.and.arrow.down")
-                }
-
-                Spacer()
-
-                Button(action: { showingAddBond = true }) {
-                    Label("Add Bond", systemImage: "plus")
-                }
-
-                Button(action: { showingMatured = true }) {
-                    Label("Matured", systemImage: "clock.arrow.circlepath")
-                }
-            }
-            .padding(.horizontal)
-
-            Divider()
-
+        VStack(spacing: 0) {
+            // Table content area
             BondTableView(selectedDepotBank: $selectedDepotBank)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .environment(\.managedObjectContext, viewContext)
                 .environmentObject(notifier)
                 .background(AppTheme.panelBackground)
@@ -66,6 +45,11 @@ struct PortfolioTabView: View {
                 .environment(\.managedObjectContext, viewContext)
                 .environmentObject(notifier)
         }
-        .padding()
+        .onReceive(NotificationCenter.default.publisher(for: .addBondTapped)) { _ in
+            showingAddBond = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .maturedTapped)) { _ in
+            showingMatured = true
+        }
     }
 }

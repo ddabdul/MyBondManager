@@ -29,57 +29,57 @@ struct ETFTabView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Top Action Bar
-            HStack {
-                Button(action: exportAction) {
-                    Label("Export", systemImage: "square.and.arrow.up")
-                }
-                Button(action: importAction) {
-                    Label("Import", systemImage: "square.and.arrow.down")
-                }
+      //      HStack {
+      //          Button(action: exportAction) {
+      //              Label("Export", systemImage: "square.and.arrow.up")
+      //          }
+      //          Button(action: importAction) {
+      //              Label("Import", systemImage: "square.and.arrow.down")
+      //          }
 
-                Spacer()
+       //         Spacer()
 
-                Button {
-                    Task {
-                        isRefreshingETF = true
-                        let updater = ETFPriceUpdater(context: viewContext)
-                        do {
-                            try await updater.refreshAllPrices()
-                        } catch {
-                            DispatchQueue.main.async {
-                                notifier.alertMessage = """
-                                ❗️ Failed refreshing ETF prices:
-                                \(error.localizedDescription)
-                                """
-                            }
-                        }
-                        DispatchQueue.main.async {
-                            isRefreshingETF = false
-                        }
-                    }
-                } label: {
-                    if isRefreshingETF {
-                        ProgressView()
-                    } else {
-                        Label("Refresh", systemImage: "arrow.clockwise.circle")
-                    }
-                }
+       //         Button {
+       //             Task {
+       //                 isRefreshingETF = true
+       //                 let updater = ETFPriceUpdater(context: viewContext)
+       //                 do {
+       //                     try await updater.refreshAllPrices()
+        //                } catch {
+        //                    DispatchQueue.main.async {
+        //                        notifier.alertMessage = """
+        //                        ❗️ Failed refreshing ETF prices:
+        //                        \(error.localizedDescription)
+        //                        """
+         //                   }
+         //               }
+         //               DispatchQueue.main.async {
+         //                   isRefreshingETF = false
+         //               }
+         //           }
+         //       } label: {
+         //           if isRefreshingETF {
+         //               ProgressView()
+         //           } else {
+         //               Label("Refresh", systemImage: "arrow.clockwise.circle")
+         //           }
+         //       }
 
-                Button {
-                    showingAddETF = true
-                } label: {
-                    Label("Add", systemImage: "plus")
-                }
+         //       Button {
+         //           showingAddETF = true
+         //       } label: {
+         //           Label("Add", systemImage: "plus")
+         //       }
 
-                Button {
-                    showingSellETF = true
-                } label: {
-                    Label("Sell", systemImage: "minus.circle")
-                }
-            }
-            .padding(.horizontal)
+         //       Button {
+         //           showingSellETF = true
+         //       } label: {
+         //           Label("Sell", systemImage: "minus.circle")
+         //       }
+         //   }
+          //  .padding(.horizontal)
 
-            Divider()
+          //  Divider()
 
             // Main ETF List
             ETFListView()
