@@ -37,9 +37,6 @@ struct MainTabView: View {
         VStack(spacing: 0) {
             // Global controls
             HStack {
-                Text("View")
-                    .font(.caption)
-                    .foregroundColor(.gray)
                 Picker("", selection: $selectedTab) {
                     Label("Portfolio", systemImage: "list.bullet").tag(Tab.portfolio)
                     Label("Cash Flows", systemImage: "dollarsign.circle").tag(Tab.cashflows)

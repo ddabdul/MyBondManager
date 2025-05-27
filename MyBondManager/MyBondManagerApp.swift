@@ -18,15 +18,15 @@ struct BondPortfolioManagerApp: App {
         let context = persistenceController.container.viewContext
         self.viewContext = context
         _notifier = StateObject(wrappedValue: LaunchNotifier(context: context))
-        // ── CLEANUP EMPTY ETFs ──
-         // Remove any ETFEntity with zero holdings at launch
-         persistenceController.deleteEmptyETFs()
+        // Cleanup any ETFs with no holdings
+        persistenceController.deleteEmptyETFs()
     }
 
     var body: some Scene {
-        WindowGroup {
+        // ✅ Use Window instead of WindowGroup for macOS 14+
+        Window("", id: "main") {
             ZStack {
-                Color.black.ignoresSafeArea()
+                Color.black.ignoresSafeArea() // Full background fill
 
                 MainTabView()
                     .environment(\.managedObjectContext, viewContext)
@@ -38,12 +38,10 @@ struct BondPortfolioManagerApp: App {
                 let updater = ETFPriceUpdater(context: viewContext)
                 do {
                     try await updater.refreshAllPrices()
-                    // no alert on success
                 } catch {
-          //          notifier.alertMessage = "❗️Failed refreshing ETF prices:\n\(error.localizedDescription)"
+                    // Optionally show alert
                 }
             }
-            .onReceive(notifier.$alertMessage) { _ in }
             .alert(
                 Text("Portfolio Update"),
                 isPresented: Binding<Bool>(
@@ -59,5 +57,10 @@ struct BondPortfolioManagerApp: App {
                     .frame(minWidth: 300, alignment: .leading)
             }
         }
+        // ✅ Scene modifiers (only work with Window, not WindowGroup)
+        .windowStyle(.titleBar)
+        .windowToolbarStyle(.unifiedCompact)
+        .windowResizability(.contentSize)
+  //      .windowTitleHidden(true)
     }
 }
