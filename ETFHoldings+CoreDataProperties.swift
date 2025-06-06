@@ -50,8 +50,9 @@ extension ETFHoldings {
     }
     /// annualized yield as (lastPrice – acquisitionPrice)/daysHeld * 365
     var annualYield: Double {
-        let diff = holdingtoetf.lastPrice - acquisitionPrice
-        return diff / Double(daysHeld) * 365
+        let diff      = holdingtoetf.lastPrice - acquisitionPrice
+        let factor    = 365.0 / Double(daysHeld)
+        return (diff / acquisitionPrice) * factor * 100
     }
 }
 
