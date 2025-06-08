@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23788" systemVersion="24E263" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23788.4" systemVersion="24F74" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
     <entity name="BondEntity" representedClassName="BondEntity" syncable="YES">
         <attribute name="acquisitionDate" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="couponRate" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
@@ -41,6 +41,15 @@
         <attribute name="datePrice" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="price" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <relationship name="etfPriceHistory" maxCount="1" deletionRule="Nullify" destinationEntity="ETFEntity" inverseName="etfPriceMany" inverseEntity="ETFEntity"/>
+    </entity>
+    <entity name="HistoricalValuation" representedClassName="HistoricalValuation" syncable="YES">
+        <attribute name="assetType" attributeType="String"/>
+        <attribute name="capitalGains" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
+        <attribute name="date" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="depotBank" optional="YES" attributeType="String"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="interestReceived" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
+        <attribute name="investedCapital" attributeType="Decimal" defaultValueString="0.0"/>
     </entity>
     <entity name="Item" representedClassName="Item" syncable="YES" codeGenerationType="class">
         <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>

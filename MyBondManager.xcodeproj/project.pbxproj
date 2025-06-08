@@ -18,6 +18,7 @@
 		09C400042DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C400032DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift */; };
 		09C400052DBB947B00E0E99C /* BondEntity+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C400022DBB947B00E0E99C /* BondEntity+CoreDataClass.swift */; };
 		09D2B4992DCCF105004BE3C3 /* Algorithms in Frameworks */ = {isa = PBXBuildFile; productRef = 09D2B4982DCCF105004BE3C3 /* Algorithms */; };
+		09E5CB152DF5D30400AA6520 /* HistoricalValuation+CoreDataClassProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09E5CB142DF5D30400AA6520 /* HistoricalValuation+CoreDataClassProperties.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +44,7 @@
 		098EB4F82DBE982A008CB539 /* MyBondManagerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyBondManagerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		09C400022DBB947B00E0E99C /* BondEntity+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BondEntity+CoreDataClass.swift"; sourceTree = "<group>"; };
 		09C400032DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BondEntity+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		09E5CB142DF5D30400AA6520 /* HistoricalValuation+CoreDataClassProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HistoricalValuation+CoreDataClassProperties.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -80,6 +82,7 @@
 		0966F60C2DB3FB2600DC7CC7 = {
 			isa = PBXGroup;
 			children = (
+				09E5CB142DF5D30400AA6520 /* HistoricalValuation+CoreDataClassProperties.swift */,
 				092730B92DC279EE00FD7B65 /* ETFPrice+CoreDataClass.swift */,
 				092730BA2DC279EE00FD7B65 /* ETFPrice+CoreDataProperties.swift */,
 				092730B52DC25F5B00FD7B65 /* ETFHoldings+CoreDataClass.swift */,
@@ -222,6 +225,7 @@
 				09C400052DBB947B00E0E99C /* BondEntity+CoreDataClass.swift in Sources */,
 				092730B72DC25F5B00FD7B65 /* ETFHoldings+CoreDataProperties.swift in Sources */,
 				092730B82DC25F5B00FD7B65 /* ETFHoldings+CoreDataClass.swift in Sources */,
+				09E5CB152DF5D30400AA6520 /* HistoricalValuation+CoreDataClassProperties.swift in Sources */,
 				092730BB2DC279EE00FD7B65 /* ETFPrice+CoreDataProperties.swift in Sources */,
 				092730BC2DC279EE00FD7B65 /* ETFPrice+CoreDataClass.swift in Sources */,
 				092730B32DC25AAA00FD7B65 /* ETFEntity+CoreDataClass.swift in Sources */,
