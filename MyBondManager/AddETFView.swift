@@ -216,6 +216,12 @@ struct AddHoldingView: View {
 
         do {
             try viewContext.save()
+            // Record historical acquisition
+            try HistoricalDataRecorder.recordETFAcquisition(
+                holding: holding,
+                context: viewContext
+            )
+            
             // Clear inputs
             acquisitionPrice = ""
             numberOfShares = ""
