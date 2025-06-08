@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1630"
+   LastUpgradeVersion = "1640"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -51,7 +51,7 @@
             parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0936DA1B2DBE384C00EE350C"
+               BlueprintIdentifier = "098EB4F72DBE982A008CB539"
                BuildableName = "MyBondManagerTests.xctest"
                BlueprintName = "MyBondManagerTests"
                ReferencedContainer = "container:MyBondManager.xcodeproj">
