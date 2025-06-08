@@ -199,8 +199,19 @@ struct AddBondViewAsync: View {
 
             // 3️⃣ Persist bond + its new cash flows
             try moc.save()
+            
+            // 4️⃣ Record initial history via your recorder
+            do {
+                try HistoricalDataRecorder.recordBondAcquisition(
+                    bond: entity,
+                    context: moc
+                )
+                print("✅ Historical entry recorded for new bond.")
+            } catch {
+                print("⚠️ Failed to record historical entry: \(error)")
+            }
 
-            // 4️⃣ Dismiss on success
+            // 5 Dismiss on success
             dismiss()
         } catch {
             // Surface any CoreData or generator error
