@@ -128,6 +128,21 @@ struct SellETFView: View {
         for lot in fifo {
             guard remaining > 0 else { break }
             let available = lot.numberOfShares
+            let toSell = min(available, remaining)
+
+                    // ——— Historical record insertion ———
+                    do {
+                        try HistoricalDataRecorder.recordETFSale(
+                            holding: lot,
+                            soldShares: Int(toSell),
+                            pricePerShare: etf.lastPrice,
+                            date: saleDate,
+                            context: viewContext
+                        )
+                    } catch {
+                        print("⚠️ Failed to record ETF sale history: \(error)")
+                    }
+                    // ————————————————————————————————
             if available <= remaining {
                 remaining -= available
                 viewContext.delete(lot)
@@ -136,7 +151,8 @@ struct SellETFView: View {
                 remaining = 0
             }
         }
-
+        
+     
         do {
             try viewContext.save()
             viewContext.refreshAllObjects()
