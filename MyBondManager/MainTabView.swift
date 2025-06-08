@@ -29,7 +29,7 @@ struct MainTabView: View {
     @State private var showRecalculatedAlert = false  // ✅ New alert state
 
     enum Tab: String, CaseIterable, Identifiable {
-        case portfolio, cashflows, etf
+        case portfolio, cashflows, etf, history
         var id: String { rawValue }
     }
 
@@ -41,6 +41,8 @@ struct MainTabView: View {
                     Label("Portfolio", systemImage: "list.bullet").tag(Tab.portfolio)
                     Label("Cash Flows", systemImage: "dollarsign.circle").tag(Tab.cashflows)
                     Label("ETF", systemImage: "chart.bar").tag(Tab.etf)
+                    Label("History", systemImage: "clock.arrow.circlepath").tag(Tab.history)
+                    
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .frame(width: 300)
@@ -90,6 +92,9 @@ struct MainTabView: View {
                     } label: {
                         Label("Sell", systemImage: "minus.circle")
                     }
+                case .history:
+                                    // No buttons needed for snapshot view
+                                    EmptyView()
                 }
             }
             .padding()
@@ -167,6 +172,14 @@ struct MainTabView: View {
                     selectedDepotBank: $selectedDepotBank,
                     exportAction: chooseFolderAndExport,
                     importAction: chooseFolderAndImport
+                )
+                
+            case .history:
+                HistoricalSnapshotView(
+    //                geo: geo,
+    //                selectedDepotBank: $selectedDepotBank,
+    //                exportAction: chooseFolderAndExport,
+   //                 importAction: chooseFolderAndImport
                 )
             }
         }

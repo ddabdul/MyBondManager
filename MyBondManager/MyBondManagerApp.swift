@@ -1,9 +1,11 @@
 
+//
 //  MyBondManagerApp.swift
 //  MyBondManager
 //  Adjusted to CoreData + ETF price refresh
 //  Created by Olivier on 11/04/2025.
-//  Updated on 02/05/2025.
+//  Updated on 08/06/2025.
+//
 
 import SwiftUI
 import CoreData
@@ -19,17 +21,17 @@ struct BondPortfolioManagerApp: App {
         self.viewContext = context
         _notifier = StateObject(wrappedValue: LaunchNotifier(context: context))
         persistenceController.deleteEmptyETFs()
+ //       runHistoricalSnapshotOnce(context: context)
     }
 
     var body: some Scene {
-        // ✅ Use `.window` for macOS 14+ customization
         Window("", id: "main") {
             MainTabView()
                 .environment(\.managedObjectContext, viewContext)
                 .environmentObject(notifier)
                 .preferredColorScheme(.dark)
                 .accentColor(.white)
-                .background(Color.black) // Ensures consistent background
+                .background(Color.black)
                 .toolbarBackground(.visible, for: .windowToolbar)
                 .toolbarBackground(Color.panelBackground, for: .windowToolbar)
                 .task {
@@ -55,9 +57,24 @@ struct BondPortfolioManagerApp: App {
                         .frame(minWidth: 300, alignment: .leading)
                 }
         }
-        .windowStyle(.titleBar) // ✅ keep traffic lights
+        .windowStyle(.titleBar)
         .windowToolbarStyle(.unifiedCompact)
         .windowResizability(.contentSize)
         .defaultSize(width: 1200, height: 800)
     }
+
+    /// Runs a one-time snapshot of the current portfolio if not yet done
+//    private func runHistoricalSnapshotOnce(context: NSManagedObjectContext) {
+//        let key = "didRunInitialSnapshot"
+//        let hasRun = UserDefaults.standard.bool(forKey: key)
+//        guard !hasRun else { return }
+
+ //       do {
+ //           try HistoricalSnapshotService.snapshotCurrentPortfolio(context: context)
+ //           UserDefaults.standard.set(true, forKey: key)
+ //           print("✅ Initial historical snapshot recorded.")
+ //       } catch {
+ //           print("❌ Snapshot error: \(error)")
+ //       }
+ //   }
 }
