@@ -176,8 +176,8 @@ struct MainTabView: View {
                 
             case .history:
                 HistoricalSnapshotView(
-    //                geo: geo,
-    //                selectedDepotBank: $selectedDepotBank,
+                    geo: geo,
+                    selectedDepotBank: $selectedDepotBank,
     //                exportAction: chooseFolderAndExport,
    //                 importAction: chooseFolderAndImport
                 )
