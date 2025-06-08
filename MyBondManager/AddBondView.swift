@@ -110,7 +110,7 @@ struct AddBondViewAsync: View {
         }
         .background(AppTheme.panelBackground) // Set panelBackground for the overall background
         // Remove the explicit frame to fit content
-        .disabled(isLoading)
+ //       .disabled(isLoading)
         .overlay(
             Group {
                 if isLoading {
