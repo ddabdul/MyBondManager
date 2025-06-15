@@ -110,7 +110,7 @@ struct AddBondViewAsync: View {
         }
         .background(AppTheme.panelBackground) // Set panelBackground for the overall background
         // Remove the explicit frame to fit content
-        .disabled(isLoading)
+ //       .disabled(isLoading)
         .overlay(
             Group {
                 if isLoading {
@@ -200,7 +200,8 @@ struct AddBondViewAsync: View {
             // 3️⃣ Persist bond + its new cash flows
             try moc.save()
 
-            // 4️⃣ Dismiss on success
+
+            // 5 Dismiss on success
             dismiss()
         } catch {
             // Surface any CoreData or generator error
