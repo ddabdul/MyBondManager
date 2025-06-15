@@ -15,6 +15,8 @@
 		092730BC2DC279EE00FD7B65 /* ETFPrice+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092730B92DC279EE00FD7B65 /* ETFPrice+CoreDataClass.swift */; };
 		097331BF2DBF79D30066B4F6 /* CashFlowEntity+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 097331BE2DBF79D30066B4F6 /* CashFlowEntity+CoreDataProperties.swift */; };
 		097331C02DBF79D30066B4F6 /* CashFlowEntity+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 097331BD2DBF79D30066B4F6 /* CashFlowEntity+CoreDataClass.swift */; };
+		09BA55FA2DFED813001A40E0 /* CapitalTransaction+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09BA55F92DFED813001A40E0 /* CapitalTransaction+CoreDataClass.swift */; };
+		09BA55FC2DFED860001A40E0 /* CapitalTransaction+CoreDataProperties.swift.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09BA55FB2DFED860001A40E0 /* CapitalTransaction+CoreDataProperties.swift.swift */; };
 		09C400042DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C400032DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift */; };
 		09C400052DBB947B00E0E99C /* BondEntity+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C400022DBB947B00E0E99C /* BondEntity+CoreDataClass.swift */; };
 		09D2B4992DCCF105004BE3C3 /* Algorithms in Frameworks */ = {isa = PBXBuildFile; productRef = 09D2B4982DCCF105004BE3C3 /* Algorithms */; };
@@ -41,6 +43,8 @@
 		097331BD2DBF79D30066B4F6 /* CashFlowEntity+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CashFlowEntity+CoreDataClass.swift"; sourceTree = "<group>"; };
 		097331BE2DBF79D30066B4F6 /* CashFlowEntity+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CashFlowEntity+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		098EB4F82DBE982A008CB539 /* MyBondManagerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyBondManagerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		09BA55F92DFED813001A40E0 /* CapitalTransaction+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CapitalTransaction+CoreDataClass.swift"; sourceTree = "<group>"; };
+		09BA55FB2DFED860001A40E0 /* CapitalTransaction+CoreDataProperties.swift.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CapitalTransaction+CoreDataProperties.swift.swift"; sourceTree = "<group>"; };
 		09C400022DBB947B00E0E99C /* BondEntity+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BondEntity+CoreDataClass.swift"; sourceTree = "<group>"; };
 		09C400032DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BondEntity+CoreDataProperties.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -80,6 +84,8 @@
 		0966F60C2DB3FB2600DC7CC7 = {
 			isa = PBXGroup;
 			children = (
+				09BA55F92DFED813001A40E0 /* CapitalTransaction+CoreDataClass.swift */,
+				09BA55FB2DFED860001A40E0 /* CapitalTransaction+CoreDataProperties.swift.swift */,
 				092730B92DC279EE00FD7B65 /* ETFPrice+CoreDataClass.swift */,
 				092730BA2DC279EE00FD7B65 /* ETFPrice+CoreDataProperties.swift */,
 				092730B52DC25F5B00FD7B65 /* ETFHoldings+CoreDataClass.swift */,
@@ -218,6 +224,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				09BA55FC2DFED860001A40E0 /* CapitalTransaction+CoreDataProperties.swift.swift in Sources */,
+				09BA55FA2DFED813001A40E0 /* CapitalTransaction+CoreDataClass.swift in Sources */,
 				09C400042DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift in Sources */,
 				09C400052DBB947B00E0E99C /* BondEntity+CoreDataClass.swift in Sources */,
 				092730B72DC25F5B00FD7B65 /* ETFHoldings+CoreDataProperties.swift in Sources */,

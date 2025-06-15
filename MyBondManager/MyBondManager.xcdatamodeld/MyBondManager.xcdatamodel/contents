@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23788" systemVersion="24E263" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23788.4" systemVersion="24F74" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
     <entity name="BondEntity" representedClassName="BondEntity" syncable="YES">
         <attribute name="acquisitionDate" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="couponRate" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
@@ -14,6 +14,14 @@
         <attribute name="wkn" attributeType="String"/>
         <attribute name="yieldToMaturity" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
         <relationship name="cashFlows" toMany="YES" deletionRule="Cascade" destinationEntity="CashFlowEntity" inverseName="bond" inverseEntity="CashFlowEntity"/>
+        <relationship name="transaction" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="CapitalTransaction" inverseName="bond" inverseEntity="CapitalTransaction"/>
+    </entity>
+    <entity name="CapitalTransaction" representedClassName="CapitalTransaction" syncable="YES">
+        <attribute name="amount" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="date" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="type" optional="YES" attributeType="String"/>
+        <relationship name="bond" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="BondEntity" inverseName="transaction" inverseEntity="BondEntity"/>
+        <relationship name="etf" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ETFEntity" inverseName="transaction" inverseEntity="ETFEntity"/>
     </entity>
     <entity name="CashFlowEntity" representedClassName="CashFlowEntity" syncable="YES">
         <attribute name="amount" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
@@ -30,6 +38,7 @@
         <attribute name="wkn" attributeType="String"/>
         <relationship name="etfPriceMany" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ETFPrice" inverseName="etfPriceHistory" inverseEntity="ETFPrice"/>
         <relationship name="etftoholding" toMany="YES" deletionRule="Cascade" destinationEntity="ETFHoldings" inverseName="holdingtoetf" inverseEntity="ETFHoldings"/>
+        <relationship name="transaction" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="CapitalTransaction" inverseName="etf" inverseEntity="CapitalTransaction"/>
     </entity>
     <entity name="ETFHoldings" representedClassName="ETFHoldings" syncable="YES">
         <attribute name="acquisitionDate" attributeType="Date" usesScalarValueType="NO"/>
