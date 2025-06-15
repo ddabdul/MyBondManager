@@ -35,7 +35,7 @@ final class LaunchNotifier: ObservableObject {
     @Published var alertMessage: String?
 
     init(context moc: NSManagedObjectContext) {
-        let now         = Date()
+        let now = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
         let defaults    = UserDefaults.standard
 
         // If we have no saved value, assume one week ago
