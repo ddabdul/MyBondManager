@@ -37,24 +37,27 @@ struct CapitalTransactionRecorder {
   }
 
   /// Records the acquisition of an ETF.
-  func recordETFAcquisition(_ etf: ETFEntity) {
-    let txn = CapitalTransaction(context: context)
-    txn.date   = etf.acquisitionDate
-    txn.amount = etf.initialInvestment
-    txn.type   = "ETFBuy"
-    txn.etf    = etf
-  }
+    /// Records the acquisition of an ETF lot.
+      func recordETFAcquisition(from holding: ETFHoldings) {
+        let txn = CapitalTransaction(context: context)
+        txn.date   = holding.acquisitionDate
+        txn.amount = Double(holding.numberOfShares) * holding.acquisitionPrice
+        txn.type   = "ETFBuy"
+        txn.etf    = holding.holdingtoetf
+      }
 
-  /// Records the sale of an ETF.
-  func recordETFSale(_ etf: ETFEntity,
-                     saleValue: Double,
-                     at date: Date) {
-    let txn = CapitalTransaction(context: context)
-    txn.date   = date
-    txn.amount = -saleValue
-    txn.type   = "ETFSell"
-    txn.etf    = etf
-  }
+      /// Records the sale of an ETF lot (if and when you sell it).
+    func recordETFSale(from holding: ETFHoldings) {
+        // Only saleDate is optional now
+        guard let sellDate = holding.saleDate else { return }
+
+        let salePrice = holding.salePrice    // plain Double
+        let txn = CapitalTransaction(context: context)
+        txn.date   = sellDate
+        txn.amount = -Double(holding.numberOfShares) * salePrice
+        txn.type   = "ETFSell"
+        txn.etf    = holding.holdingtoetf
+    }
 
   /// Saves the context (call after batching one or more records).
   func save() throws {

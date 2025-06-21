@@ -209,6 +209,7 @@ struct AddHoldingView: View {
         holding.acquisitionPrice = Double(acquisitionPrice)!
         holding.numberOfShares = Int32(Int(numberOfShares)!)
         holding.holdingtoetf = etf
+        holding.salePrice = 0.0
 
         if let latest = fetchedHeader?.price {
             etf.lastPrice = latest
