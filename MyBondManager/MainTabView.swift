@@ -1,4 +1,3 @@
-//
 //  MainTabView.swift
 //  MyBondManager
 //
@@ -26,7 +25,10 @@ struct MainTabView: View {
     @State private var isRefreshingETF = false
     @State private var showingSellETF = false
     @State private var showingAddETF = false
-    @State private var showRecalculatedAlert = false  // ✅ New alert state
+    @State private var showRecalculatedAlert = false
+
+    // ← New state for the transactions sheet
+    @State private var showingTransactions = false
 
     enum Tab: String, CaseIterable, Identifiable {
         case portfolio, cashflows, etf
@@ -42,7 +44,7 @@ struct MainTabView: View {
                     Label("Cash Flows", systemImage: "dollarsign.circle").tag(Tab.cashflows)
                     Label("ETF", systemImage: "chart.bar").tag(Tab.etf)
                 }
-                .pickerStyle(SegmentedPickerStyle())
+                .pickerStyle(.segmented)
                 .frame(width: 300)
 
                 Spacer()
@@ -50,23 +52,17 @@ struct MainTabView: View {
                 // Dynamic buttons depending on view
                 switch selectedTab {
                 case .portfolio:
-                    Button("Export",systemImage: "square.and.arrow.up", action: chooseFolderAndExport)
-                    Button("Import",systemImage: "square.and.arrow.down", action: chooseFolderAndImport)
-                    Button {
-                        showingAddBond = true
-                    } label: {
+                    Button("Export", systemImage: "square.and.arrow.up", action: chooseFolderAndExport)
+                    Button("Import", systemImage: "square.and.arrow.down", action: chooseFolderAndImport)
+                    Button { showingAddBond = true } label: {
                         Label("Add Bond", systemImage: "plus")
                     }
-                    Button {
-                        showingMatured = true
-                    } label: {
+                    Button { showingMatured = true } label: {
                         Label("Matured", systemImage: "clock.arrow.circlepath")
                     }
 
                 case .cashflows:
-                    Button {
-                        recalculateAllCashFlows()
-                    } label: {
+                    Button { recalculateAllCashFlows() } label: {
                         Label("Recalculate", systemImage: "arrow.clockwise")
                     }
 
@@ -80,17 +76,24 @@ struct MainTabView: View {
                             Label("Refresh", systemImage: "arrow.clockwise")
                         }
                     }
-                    Button {
-                        showingAddETF = true
-                    } label: {
+                    Button { showingAddETF = true } label: {
                         Label("Add", systemImage: "plus")
                     }
-                    Button {
-                        showingSellETF = true
-                    } label: {
+                    Button { showingSellETF = true } label: {
                         Label("Sell", systemImage: "minus.circle")
                     }
                 }
+
+                // ← Transactions sheet button
+                Button {
+                    showingTransactions = true
+                } label: {
+                    Image(systemName: "list.bullet.rectangle")
+                        .font(.title3)
+                        .accessibilityLabel("Show All Transactions")
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 8)
             }
             .padding()
             .background(AppTheme.panelBackground)
@@ -106,6 +109,13 @@ struct MainTabView: View {
                     .background(AppTheme.panelBackground)
             }
         }
+        // Transactions sheet
+        .sheet(isPresented: $showingTransactions) {
+            AllTransactionsView()
+                .frame(minWidth: 600, minHeight: 400)
+                .environment(\.managedObjectContext, viewContext)
+        }
+        // Existing sheets
         .sheet(item: $validationSelection) { selection in
             ExportValidationView(folderURL: selection.url)
                 .environment(\.managedObjectContext, viewContext)
@@ -239,7 +249,7 @@ struct MainTabView: View {
                     try ctx.save()
                 }
                 DispatchQueue.main.async {
-                    showRecalculatedAlert = true  // ✅ Show success alert
+                    showRecalculatedAlert = true
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -268,3 +278,5 @@ struct MainTabView: View {
         }
     }
 }
+
+
