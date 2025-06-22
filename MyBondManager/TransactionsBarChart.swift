@@ -77,6 +77,8 @@ struct TransactionsBarChart: NSViewRepresentable {
     }
 
     func updateNSView(_ chart: BarChartView, context: Context) {
+        context.coordinator.granularity = granularity
+        chart.xAxis.valueFormatter = context.coordinator
         let cal   = Calendar.current
         let today = cal.startOfDay(for: Date())
 
@@ -159,6 +161,7 @@ struct TransactionsBarChart: NSViewRepresentable {
 
         // enforce one-label-per-bucket
         chart.xAxis.granularity = span
+        chart.xAxis.labelCount = allDates.count
 
         chart.data = data
         chart.notifyDataSetChanged()
@@ -169,7 +172,7 @@ struct TransactionsBarChart: NSViewRepresentable {
     }
 
     class Coordinator: NSObject, ChartViewDelegate, AxisValueFormatter {
-        let granularity: ChartGranularity
+        var granularity: ChartGranularity
         private let yearFmt  = DateFormatter()
         private let monthFmt = DateFormatter()
  //       private let weekFmt  = DateFormatter()
