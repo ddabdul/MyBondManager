@@ -27,8 +27,10 @@ struct MainTabView: View {
     @State private var showingAddETF = false
     @State private var showRecalculatedAlert = false
 
-    // ← New state for the transactions sheet
+    // Transactions sheet
     @State private var showingTransactions = false
+    // Historical chart sheet
+    @State private var showingHistoricalChart = false
 
     enum Tab: String, CaseIterable, Identifiable {
         case portfolio, cashflows, etf
@@ -82,9 +84,14 @@ struct MainTabView: View {
                     Button { showingSellETF = true } label: {
                         Label("Sell", systemImage: "minus.circle")
                     }
+                    // ← Historical chart button
+                    Button { showingHistoricalChart = true } label: {
+                        Label("History", systemImage: "chart.bar.doc.horizontal")
+                    }
+
                 }
 
-                // ← Transactions sheet button
+                // Transactions sheet button
                 Button {
                     showingTransactions = true
                 } label: {
@@ -113,6 +120,12 @@ struct MainTabView: View {
         .sheet(isPresented: $showingTransactions) {
             AllTransactionsView()
                 .frame(minWidth: 600, minHeight: 400)
+                .environment(\.managedObjectContext, viewContext)
+        }
+        // Historical chart sheet
+        .sheet(isPresented: $showingHistoricalChart) {
+            PortfolioChartView()
+                .frame(minWidth: 700, minHeight: 500)
                 .environment(\.managedObjectContext, viewContext)
         }
         // Existing sheets
@@ -278,5 +291,4 @@ struct MainTabView: View {
         }
     }
 }
-
 

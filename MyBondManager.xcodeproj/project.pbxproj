@@ -17,10 +17,10 @@
 		097331C02DBF79D30066B4F6 /* CashFlowEntity+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 097331BD2DBF79D30066B4F6 /* CashFlowEntity+CoreDataClass.swift */; };
 		09BA55FA2DFED813001A40E0 /* CapitalTransaction+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09BA55F92DFED813001A40E0 /* CapitalTransaction+CoreDataClass.swift */; };
 		09BA55FC2DFED860001A40E0 /* CapitalTransaction+CoreDataProperties.swift.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09BA55FB2DFED860001A40E0 /* CapitalTransaction+CoreDataProperties.swift.swift */; };
-		09C0E5B12E07E69B00A79F76 /* DGCharts in Frameworks */ = {isa = PBXBuildFile; productRef = 09C0E5B02E07E69B00A79F76 /* DGCharts */; };
-		09C0E5B32E07E69B00A79F76 /* DGChartsDynamic in Frameworks */ = {isa = PBXBuildFile; productRef = 09C0E5B22E07E69B00A79F76 /* DGChartsDynamic */; };
 		09C400042DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C400032DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift */; };
 		09C400052DBB947B00E0E99C /* BondEntity+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C400022DBB947B00E0E99C /* BondEntity+CoreDataClass.swift */; };
+		09C7483E2E07F0C5006D977E /* DGChartsDynamic in Frameworks */ = {isa = PBXBuildFile; productRef = 09C7483D2E07F0C5006D977E /* DGChartsDynamic */; };
+		09C7483F2E07F0C5006D977E /* DGChartsDynamic in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 09C7483D2E07F0C5006D977E /* DGChartsDynamic */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		09D2B4992DCCF105004BE3C3 /* Algorithms in Frameworks */ = {isa = PBXBuildFile; productRef = 09D2B4982DCCF105004BE3C3 /* Algorithms */; };
 /* End PBXBuildFile section */
 
@@ -33,6 +33,20 @@
 			remoteInfo = MyBondManager;
 		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		09C7483B2E07EECB006D977E /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				09C7483F2E07F0C5006D977E /* DGChartsDynamic in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		092730B12DC25AAA00FD7B65 /* ETFEntity+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ETFEntity+CoreDataClass.swift"; sourceTree = "<group>"; };
@@ -69,8 +83,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				09C0E5B12E07E69B00A79F76 /* DGCharts in Frameworks */,
-				09C0E5B32E07E69B00A79F76 /* DGChartsDynamic in Frameworks */,
+				09C7483E2E07F0C5006D977E /* DGChartsDynamic in Frameworks */,
 				09D2B4992DCCF105004BE3C3 /* Algorithms in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -102,6 +115,7 @@
 				09C400032DBB947B00E0E99C /* BondEntity+CoreDataProperties.swift */,
 				0966F6172DB3FB2600DC7CC7 /* MyBondManager */,
 				098EB4F92DBE982B008CB539 /* MyBondManagerTests */,
+				09C7483C2E07F0C5006D977E /* Frameworks */,
 				0966F6162DB3FB2600DC7CC7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -115,6 +129,13 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		09C7483C2E07F0C5006D977E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -125,6 +146,7 @@
 				0966F6112DB3FB2600DC7CC7 /* Sources */,
 				0966F6122DB3FB2600DC7CC7 /* Frameworks */,
 				0966F6132DB3FB2600DC7CC7 /* Resources */,
+				09C7483B2E07EECB006D977E /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -136,8 +158,7 @@
 			name = MyBondManager;
 			packageProductDependencies = (
 				09D2B4982DCCF105004BE3C3 /* Algorithms */,
-				09C0E5B02E07E69B00A79F76 /* DGCharts */,
-				09C0E5B22E07E69B00A79F76 /* DGChartsDynamic */,
+				09C7483D2E07F0C5006D977E /* DGChartsDynamic */,
 			);
 			productName = MyBondManager;
 			productReference = 0966F6152DB3FB2600DC7CC7 /* MyBondManager.app */;
@@ -540,12 +561,7 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		09C0E5B02E07E69B00A79F76 /* DGCharts */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 09C0E5AF2E07E69B00A79F76 /* XCRemoteSwiftPackageReference "Charts" */;
-			productName = DGCharts;
-		};
-		09C0E5B22E07E69B00A79F76 /* DGChartsDynamic */ = {
+		09C7483D2E07F0C5006D977E /* DGChartsDynamic */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 09C0E5AF2E07E69B00A79F76 /* XCRemoteSwiftPackageReference "Charts" */;
 			productName = DGChartsDynamic;
