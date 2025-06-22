@@ -193,11 +193,15 @@ struct AddBondViewAsync: View {
         entity.yieldToMaturity     = ytmValue
 
         do {
-            // 2️⃣ Generate all CashFlowEntity rows for this bond
+            //  Generate all CashFlowEntity rows for this bond
             let generator = CashFlowGenerator(context: moc)
             try generator.regenerateCashFlows(for: entity)
+            
+            //  record the capital transaction
+            let recorder = CapitalTransactionRecorder(context: moc)
+            recorder.recordBondPurchase(entity)
 
-            // 3️⃣ Persist bond + its new cash flows
+            //  Persist bond + its new cash flows + capitaltransaction
             try moc.save()
 
 
@@ -210,9 +214,4 @@ struct AddBondViewAsync: View {
     }
 }
 
-struct AddBondViewAsync_Previews: PreviewProvider {
-    static var previews: some View {
-        AddBondViewAsync()
-            .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
-    }
-}
+
