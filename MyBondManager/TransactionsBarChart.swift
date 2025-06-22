@@ -15,7 +15,7 @@ import AppKit
 enum ChartGranularity: String, CaseIterable, Identifiable {
     case yearly   = "Yearly"
     case monthly  = "Monthly"
-    case weekly   = "Weekly"
+//    case weekly   = "Weekly"
     var id: Self { self }
 }
 
@@ -27,6 +27,8 @@ private class KEuroValueFormatter: NSObject, ValueFormatter {
         dataSetIndex: Int,
         viewPortHandler: ViewPortHandler?
     ) -> String {
+        // ← this line prevents “0” from ever being drawn
+            guard value != 0 else { return "" }
         // value is in full euros; convert to thousands
         let k = value / 1_000.0
         // show one decimal if <10k, otherwise no decimals
@@ -94,8 +96,8 @@ struct TransactionsBarChart: NSViewRepresentable {
             case .monthly:
                 let comps = cal.dateComponents([.year, .month], from: txn.date)
                 bucket = cal.date(from: comps)!
-            case .weekly:
-                bucket = cal.dateInterval(of: .weekOfYear, for: txn.date)!.start
+//            case .weekly:
+//                bucket = cal.dateInterval(of: .weekOfYear, for: txn.date)!.start
             }
             if txn.amount >= 0 {
                 inflows[bucket, default: 0] += txn.amount
@@ -141,7 +143,7 @@ struct TransactionsBarChart: NSViewRepresentable {
             switch granularity {
             case .yearly:  return 45 * day
             case .monthly: return 30  * day
-            case .weekly:  return 7   * day
+//            case .weekly:  return 7   * day
             }
         }()
         data.barWidth = span * 0.4
@@ -170,14 +172,14 @@ struct TransactionsBarChart: NSViewRepresentable {
         let granularity: ChartGranularity
         private let yearFmt  = DateFormatter()
         private let monthFmt = DateFormatter()
-        private let weekFmt  = DateFormatter()
+ //       private let weekFmt  = DateFormatter()
 
         init(granularity: ChartGranularity) {
             self.granularity = granularity
             super.init()
             yearFmt.dateFormat  = "yyyy"
             monthFmt.dateFormat = "MM/yy"
-            weekFmt.dateFormat  = "dd/MM"
+//            weekFmt.dateFormat  = "dd/MM"
         }
 
         func stringForValue(_ value: Double, axis: AxisBase?) -> String {
@@ -185,7 +187,7 @@ struct TransactionsBarChart: NSViewRepresentable {
             switch granularity {
             case .yearly:  return yearFmt.string(from: date)
             case .monthly: return monthFmt.string(from: date)
-            case .weekly:  return weekFmt.string(from: date)
+ //           case .weekly:  return weekFmt.string(from: date)
             }
         }
     }
