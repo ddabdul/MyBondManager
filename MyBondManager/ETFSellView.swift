@@ -26,7 +26,8 @@ struct SellETFView: View {
     @State private var saleDate: Date = Date()
     @State private var saleShares: String = ""
     @State private var errorMessage: String?
-
+    @State private var salePrice: Double = 0.0
+    
     var body: some View {
         VStack(spacing: 0) {
             // Title Bar with Custom Styling
@@ -66,6 +67,21 @@ struct SellETFView: View {
                 // 2) Enter sale details
                 if let etf = selectedETF {
                     Section(header: Text("Sale Details")) {
+                        // Show latest available price
+                        HStack {
+                            Text("Latest Price:")
+                            Spacer()
+                            Text(String(format: "%.2f", etf.lastPrice))
+                                .foregroundColor(.secondary)
+                        }
+
+                        // Allow user to enter their own sale price
+                        HStack {
+                            TextField("Sale Price per Share", value: $salePrice, format:.currency(code:"EUR"))
+                                .foregroundColor(.secondary)
+                        }
+
+                        // Shares to sell
                         let maxShares = etf.totalShares
                         HStack {
                             TextField("Shares to Sell", text: $saleShares)
@@ -73,7 +89,8 @@ struct SellETFView: View {
                                 .foregroundColor(.secondary)
                         }
 
-    //                    DatePicker("Sale Date", selection: $saleDate, in: ...Date(), displayedComponents: .date)
+                        // Sale date picker
+                        DatePicker("Sale Date", selection: $saleDate, in: ...Date(), displayedComponents: .date)
                     }
 
                     // validation errors
@@ -122,23 +139,43 @@ struct SellETFView: View {
         }
 
         var remaining = sharesToSell
+        // sort lots oldest first
         let fifo = (etf.etftoholding as? Set<ETFHoldings>)?
             .sorted { $0.acquisitionDate < $1.acquisitionDate } ?? []
 
+        // 1️⃣ create the recorder once
+        let recorder = CapitalTransactionRecorder(context: viewContext)
+
+        // 2️⃣ iterate lots, record & remove/adjust
         for lot in fifo {
             guard remaining > 0 else { break }
+
             let available = lot.numberOfShares
+            let sellCount = min(available, remaining)
+
+            // stamp the lot so recordETFSale sees a sale
+            lot.saleDate  = saleDate
+            lot.salePrice = salePrice
+
             if available <= remaining {
+                // full‐lot sale
+                recorder.recordETFSale(from: lot)
                 remaining -= available
                 viewContext.delete(lot)
             } else {
-                lot.numberOfShares = available - remaining
+                // partial‐lot sale: temporarily shrink for correct txn.amount
+                let originalShares = lot.numberOfShares
+                lot.numberOfShares = sellCount
+                recorder.recordETFSale(from: lot)
+                // now remove sold shares from the lot
+                lot.numberOfShares = originalShares - sellCount
                 remaining = 0
             }
         }
 
+        // 3️⃣ save both your updated holdings and all the new transactions
         do {
-            try viewContext.save()
+            try recorder.save()
             viewContext.refreshAllObjects()
             dismiss()
         } catch {

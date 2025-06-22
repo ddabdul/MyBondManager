@@ -1,5 +1,5 @@
 //
-//  CapitalTransaction+CoreDataProperties.swift
+//  CapitalTransaction+CoreDataProperties
 //  MyBondManager
 //
 //  Created by Olivier on 15/06/2025.
