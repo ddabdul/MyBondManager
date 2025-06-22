@@ -214,6 +214,10 @@ struct AddHoldingView: View {
         if let latest = fetchedHeader?.price {
             etf.lastPrice = latest
         }
+        
+        //  Record the transaction
+         let recorder = CapitalTransactionRecorder(context: viewContext)
+         recorder.recordETFAcquisition(from: holding)
 
         do {
             try viewContext.save()
