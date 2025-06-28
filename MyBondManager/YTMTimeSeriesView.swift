@@ -113,12 +113,4 @@ struct YTMTimeSeriesView: View {
     }
 }
 
-@available(macOS 14.0, *)
-struct YTMTimeSeriesView_Previews: PreviewProvider {
-    static var previews: some View {
-        // supply a constant "All" for the bank filter
-        YTMTimeSeriesView(selectedDepotBank: .constant("All"))
-            .environment(\.managedObjectContext,
-                         PersistenceController.shared.container.viewContext)
-    }
-}
+
