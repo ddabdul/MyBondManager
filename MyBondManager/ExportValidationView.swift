@@ -151,6 +151,59 @@ struct ExportValidationView: View {
             print(msg)
             foundIssues.append(msg)
         }
+        
+        // ——— 3. capital_transactions.json ———————————————————
+           let txnsURL = folderURL.appendingPathComponent("capital_transactions.json")
+           do {
+                let data = try Data(contentsOf: txnsURL)
+                let jsonTxns = try decoder.decode([CapitalTransactionCodable].self, from: data)
+                let cdTxns   = try viewContext.fetch(CapitalTransaction.fetchRequest())
+        
+                let jsonById = Dictionary(uniqueKeysWithValues: jsonTxns.map { ($0.id, $0) })
+        
+               let cdById   = Dictionary(uniqueKeysWithValues: cdTxns.map {
+                    ($0.objectID.uriRepresentation().absoluteString, $0)
+                })
+        
+                //  – missing in JSON?
+                for cd in cdTxns where jsonById[cd.objectID.uriRepresentation().absoluteString] == nil {
+                    foundIssues.append(
+                        "CapitalTransaction missing from JSON: id=\(cd.objectID.uriRepresentation().absoluteString)"
+                    )
+                }
+        
+                //  – unknown in Core Data?
+                for jt in jsonTxns where cdById[jt.id] == nil {
+                    foundIssues.append("Unknown CapitalTransaction in JSON: id=\(jt.id)")
+                }
+        
+        //  – field‐by‐field checks
+                for (id, jt) in jsonById {
+                    guard let cd = cdById[id] else { continue }
+                    if cd.date != jt.date {
+                        foundIssues.append("Date mismatch for txn \(id): Core=\(cd.date) JSON=\(jt.date)")
+                    }
+                    if cd.amount != jt.amount {
+                        foundIssues.append("Amount mismatch for txn \(id): Core=\(cd.amount) JSON=\(jt.amount)")
+                    }
+                    if cd.type != jt.type {
+                        foundIssues.append("Type mismatch for txn \(id): Core=\(cd.type) JSON=\(jt.type)")
+                    }
+                    if let bond = cd.bond, jt.bondId != bond.id {
+                        foundIssues.append(
+                          "BondId mismatch for txn \(id): Core=\(bond.id) JSON=\(jt.bondId ?? UUID())"
+                        )
+                    }
+                    if let etf = cd.etf, jt.etfId != etf.id {
+                        foundIssues.append(
+                          "EtfId mismatch for txn \(id): Core=\(etf.id) JSON=\(jt.etfId ?? UUID())"
+                        )
+                    }
+                }
+            }
+            catch {
+                foundIssues.append("❌ Error validating capital_transactions.json: \(error.localizedDescription)")
+            }
 
         // Finalize
         DispatchQueue.main.async {

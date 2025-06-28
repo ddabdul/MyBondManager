@@ -1,13 +1,6 @@
-//
 // CoreDataCodables.swift
 // Shared Codable definitions for Export & Import
-//  MyBondManager
-//
-//  Created by Olivier on 03/05/2025.
-//
-
-
-
+// MyBondManager
 
 import Foundation
 
@@ -57,4 +50,13 @@ public struct ETFEntityCodable: Codable {
     public let lastPrice: Double
     public let priceHistory: [ETFPriceCodable]
     public let holdings: [ETFHoldingsCodable]
+}
+
+public struct CapitalTransactionCodable: Codable {
+    public let id: String
+    public let date: Date
+    public let amount: Double
+    public let type: String
+    public let bondId: UUID?
+    public let etfId: UUID?
 }

@@ -9,7 +9,7 @@ import CoreData
 
 // MARK: – Codable mirrors
 
-//Moved to CoreDataCodable
+// Moved to CoreDataCodable
 
 // MARK: – ExportManager
 
@@ -33,6 +33,7 @@ public class ExportManager {
         // ② Do the writes
         try exportBonds(from: context, to: folderURL)
         try exportETFs(from: context, to: folderURL)
+        try exportCapitalTransactions(from: context, to: folderURL)
     }
 
     // ─── Bonds ──────────────────────────────────────────────────────────
@@ -121,6 +122,34 @@ public class ExportManager {
         let data = try encoder.encode(codables)
 
         let fileURL = folderURL.appendingPathComponent("etfs.json", isDirectory: false)
+        try data.write(to: fileURL, options: .atomic)
+    }
+
+    // ─── Capital Transactions ───────────────────────────────────────────
+
+    private func exportCapitalTransactions(
+        from context: NSManagedObjectContext,
+        to folderURL: URL
+    ) throws {
+        let req: NSFetchRequest<CapitalTransaction> = CapitalTransaction.fetchRequest()
+        let transactions = try context.fetch(req)
+
+        let codables = transactions.map { txn in
+            CapitalTransactionCodable(
+                id: txn.objectID.uriRepresentation().absoluteString,
+                date: txn.date,
+                amount: txn.amount,
+                type: txn.type,
+                bondId: txn.bond?.id,
+                etfId: txn.etf?.id
+            )
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(codables)
+
+        let fileURL = folderURL.appendingPathComponent("capital_transactions.json", isDirectory: false)
         try data.write(to: fileURL, options: .atomic)
     }
 }
