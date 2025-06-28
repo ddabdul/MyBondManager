@@ -3,7 +3,7 @@
 //  MyBondManager
 //
 //  Created by Olivier on 22/06/2025.
-//  Updated to show totals on each bar (formatted in k.EUR) and remove tooltip.
+//  Updated to use index-based X values and display correct bucket dates on the axis.
 //
 
 import SwiftUI
@@ -15,7 +15,6 @@ import AppKit
 enum ChartGranularity: String, CaseIterable, Identifiable {
     case yearly   = "Yearly"
     case monthly  = "Monthly"
-//    case weekly   = "Weekly"
     var id: Self { self }
 }
 
@@ -28,17 +27,15 @@ private class KEuroValueFormatter: NSObject, ValueFormatter {
         viewPortHandler: ViewPortHandler?
     ) -> String {
         // ← this line prevents “0” from ever being drawn
-            guard value != 0 else { return "" }
+        guard value != 0 else { return "" }
         // value is in full euros; convert to thousands
         let k = value / 1_000.0
         // show one decimal if <10k, otherwise no decimals
-        let s: String
         if abs(k) < 10 {
-            s = String(format: "%.1f k€", k)
+            return String(format: "%.1f k€", k)
         } else {
-            s = String(format: "%.0f k€", k)
+            return String(format: "%.0f k€", k)
         }
-        return s
     }
 }
 
@@ -79,89 +76,79 @@ struct TransactionsBarChart: NSViewRepresentable {
     func updateNSView(_ chart: BarChartView, context: Context) {
         context.coordinator.granularity = granularity
         chart.xAxis.valueFormatter = context.coordinator
+
         let cal   = Calendar.current
         let today = cal.startOfDay(for: Date())
 
         // 1) filter out future txns
-        let past = transactions.filter { cal.startOfDay(for: $0.date) <= today }
+        let pastTxns = transactions.filter { cal.startOfDay(for: $0.date) <= today }
 
-        // 2) bucket inflow/outflow
-        var inflows = [Date: Double]()
+        // 2) bucket inflow/outflow by date
+        var inflows  = [Date: Double]()
         var outflows = [Date: Double]()
 
-        past.forEach { txn in
-            let bucket: Date
+        pastTxns.forEach { txn in
+            let bucketDate: Date
             switch granularity {
             case .yearly:
                 let y = cal.component(.year, from: txn.date)
-                bucket = cal.date(from: .init(year: y, month: 1, day: 1))!
+                bucketDate = cal.date(from: DateComponents(year: y, month: 1, day: 1))!
             case .monthly:
                 let comps = cal.dateComponents([.year, .month], from: txn.date)
-                bucket = cal.date(from: comps)!
-//            case .weekly:
-//                bucket = cal.dateInterval(of: .weekOfYear, for: txn.date)!.start
+                bucketDate = cal.date(from: comps)!
             }
+
             if txn.amount >= 0 {
-                inflows[bucket, default: 0] += txn.amount
+                inflows[bucketDate, default: 0] += txn.amount
             } else {
-                outflows[bucket, default: 0] += txn.amount
+                outflows[bucketDate, default: 0] += txn.amount
             }
         }
 
-        // 3) build entries
+        // 3) sort and index buckets
         let allDates = Array(Set(inflows.keys).union(outflows.keys)).sorted()
-        let inflowEntries  = allDates.map { d in
-            BarChartDataEntry(x: d.timeIntervalSince1970, y: inflows[d] ?? 0)
+        context.coordinator.bucketDates = allDates
+
+        let inflowEntries: [BarChartDataEntry] = allDates.enumerated().map { (i, date) in
+            BarChartDataEntry(x: Double(i), y: inflows[date] ?? 0)
         }
-        let outflowEntries = allDates.map { d in
-            BarChartDataEntry(x: d.timeIntervalSince1970, y: outflows[d] ?? 0)
+        let outflowEntries: [BarChartDataEntry] = allDates.enumerated().map { (i, date) in
+            BarChartDataEntry(x: Double(i), y: outflows[date] ?? 0)
         }
 
-        // 4) two data sets
+        // 4) create datasets
         let inflowSet  = BarChartDataSet(entries: inflowEntries,  label: "Inflow")
         let outflowSet = BarChartDataSet(entries: outflowEntries, label: "Outflow")
 
         inflowSet.colors  = [NSColor.systemGreen]
         outflowSet.colors = [NSColor.systemRed]
 
-        // show values on bars
         inflowSet.drawValuesEnabled  = true
         outflowSet.drawValuesEnabled = true
 
-        // use our k.EUR formatter
-        let kiloFmt = KEuroValueFormatter()
-        inflowSet.valueFormatter  = kiloFmt
-        outflowSet.valueFormatter = kiloFmt
+        let valueFormatter = KEuroValueFormatter()
+        inflowSet.valueFormatter  = valueFormatter
+        outflowSet.valueFormatter = valueFormatter
 
-        // position positive above, negative below
         inflowSet.valueTextColor  = .labelColor
         outflowSet.valueTextColor = .labelColor
 
         let data = BarChartData(dataSets: [inflowSet, outflowSet])
 
         // 5) bar width & grouping
-        let day = 24 * 60 * 60.0
-        let span: Double = {
-            switch granularity {
-            case .yearly:  return 45 * day
-            case .monthly: return 30  * day
-//            case .weekly:  return 7   * day
-            }
-        }()
+        let span = 1.0  // since X is index-based, each bucket is 1 unit apart
         data.barWidth = span * 0.4
 
-        if let first = allDates.first, let last = allDates.last {
-            let startX = first.timeIntervalSince1970 - span*0.5
-            let endX   = last.timeIntervalSince1970  + span*0.5
+        if !allDates.isEmpty {
+            let startX = -0.5
+            let endX   = Double(allDates.count) - 0.5
             chart.xAxis.axisMinimum = startX
             chart.xAxis.axisMaximum = endX
 
             data.groupBars(fromX: startX, groupSpace: span*0.2, barSpace: 0)
+            chart.xAxis.granularity = span
+            chart.xAxis.labelCount = allDates.count
         }
-
-        // enforce one-label-per-bucket
-        chart.xAxis.granularity = span
-        chart.xAxis.labelCount = allDates.count
 
         chart.data = data
         chart.notifyDataSetChanged()
@@ -173,24 +160,27 @@ struct TransactionsBarChart: NSViewRepresentable {
 
     class Coordinator: NSObject, ChartViewDelegate, AxisValueFormatter {
         var granularity: ChartGranularity
+        var bucketDates: [Date] = []     // stores the real dates for each index
+
         private let yearFmt  = DateFormatter()
         private let monthFmt = DateFormatter()
- //       private let weekFmt  = DateFormatter()
 
         init(granularity: ChartGranularity) {
             self.granularity = granularity
             super.init()
             yearFmt.dateFormat  = "yyyy"
             monthFmt.dateFormat = "MM/yy"
-//            weekFmt.dateFormat  = "dd/MM"
         }
 
         func stringForValue(_ value: Double, axis: AxisBase?) -> String {
-            let date = Date(timeIntervalSince1970: value)
+            let idx = Int(round(value))
+            guard idx >= 0, idx < bucketDates.count else { return "" }
+            let date = bucketDates[idx]
             switch granularity {
-            case .yearly:  return yearFmt.string(from: date)
-            case .monthly: return monthFmt.string(from: date)
- //           case .weekly:  return weekFmt.string(from: date)
+            case .yearly:
+                return yearFmt.string(from: date)
+            case .monthly:
+                return monthFmt.string(from: date)
             }
         }
     }
@@ -239,5 +229,3 @@ struct PortfolioChartView: View {
         }
     }
 }
-
-
