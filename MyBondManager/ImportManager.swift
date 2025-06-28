@@ -1,9 +1,7 @@
-//
 //  ImportManager.swift
 //  MyBondManager
 //  Created by Olivier on 10/05/2025.
-//  Updated 15/05/2025 – now removes deleted items from Core Data
-//
+//  Updated 28/06/2025 – now imports CapitalTransaction
 
 import Foundation
 import CoreData
@@ -13,11 +11,7 @@ import CoreData
 public class ImportManager {
     public init() {}
 
-    /// Read `bonds.json` & `etfs.json` from `folderURL`, then sync with Core Data.
-    /// - Parameters:
-    ///   - folderURL: directory containing your JSONs
-    ///   - context: an NSManagedObjectContext (use a background context for safety)
-    /// - Throws: any I/O, decoding, or Core Data error
+    /// Read `bonds.json`, `etfs.json`, & `capital_transactions.json` from `folderURL`, then sync with Core Data.
     public func importAll(
         from folderURL: URL,
         into context: NSManagedObjectContext
@@ -34,6 +28,7 @@ public class ImportManager {
             do {
                 try importBonds(from: folderURL, into: context)
                 try importETFs(from: folderURL, into: context)
+                try importCapitalTransactions(from: folderURL, into: context)
 
                 if context.hasChanges {
                     do {
@@ -78,7 +73,7 @@ public class ImportManager {
         // Track existing IDs
         let fetchAll: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
         let existingBonds = try context.fetch(fetchAll)
-        let existingIDs = Set(existingBonds.compactMap { $0.id })
+        let existingIDs = Set(existingBonds.map { $0.id })
         var jsonIDs = Set<UUID>()
 
         for jb in jsonBonds {
@@ -138,7 +133,7 @@ public class ImportManager {
         // Track existing IDs
         let fetchAll: NSFetchRequest<ETFEntity> = ETFEntity.fetchRequest()
         let existingETFs = try context.fetch(fetchAll)
-        let existingIDs = Set(existingETFs.compactMap { $0.id })
+        let existingIDs = Set(existingETFs.map { $0.id })
         var jsonIDs = Set<UUID>()
 
         for je in jsonETFs {
@@ -188,6 +183,60 @@ public class ImportManager {
         let toDeleteIDs = existingIDs.subtracting(jsonIDs)
         for etf in existingETFs where toDeleteIDs.contains(etf.id) {
             context.delete(etf)
+        }
+    }
+
+    // MARK: • Capital Transactions
+
+    private func importCapitalTransactions(
+        from folderURL: URL,
+        into context: NSManagedObjectContext
+    ) throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let url = folderURL.appendingPathComponent("capital_transactions.json")
+        let data = try Data(contentsOf: url)
+        let jsonTxns = try decoder.decode([CapitalTransactionCodable].self, from: data)
+
+        // Track existing IDs
+        let fetchAll: NSFetchRequest<CapitalTransaction> = CapitalTransaction.fetchRequest()
+        let existingTxns = try context.fetch(fetchAll)
+        _ = Set(existingTxns.map { $0.objectID.uriRepresentation().absoluteString })
+        var jsonIDs = Set<String>()
+
+        for jt in jsonTxns {
+            jsonIDs.insert(jt.id)
+
+            var cdTxn: CapitalTransaction
+            if let objID = context.persistentStoreCoordinator?
+                .managedObjectID(forURIRepresentation: URL(string: jt.id)!),
+               let existing = try? context.existingObject(with: objID) as? CapitalTransaction {
+                cdTxn = existing
+            } else {
+                cdTxn = CapitalTransaction(context: context)
+            }
+
+            cdTxn.date   = jt.date
+            cdTxn.amount = jt.amount
+            cdTxn.type   = jt.type
+
+            // Relationships
+            if let bondId = jt.bondId {
+                let reqBond: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
+                reqBond.predicate = NSPredicate(format: "id == %@", bondId as CVarArg)
+                cdTxn.bond = try context.fetch(reqBond).first
+            }
+            if let etfId = jt.etfId {
+                let reqETF: NSFetchRequest<ETFEntity> = ETFEntity.fetchRequest()
+                reqETF.predicate = NSPredicate(format: "id == %@", etfId as CVarArg)
+                cdTxn.etf = try context.fetch(reqETF).first
+            }
+        }
+
+        // Delete removed items
+        for txn in existingTxns where !jsonIDs.contains(txn.objectID.uriRepresentation().absoluteString) {
+            context.delete(txn)
         }
     }
 }
