@@ -1,117 +1,138 @@
-//  AllTransactionsView.swift
-//  MyBondManager
 //
-//  Created by Olivier on 21/06/2025.
-//  Updated to add a close button and filtering.
-//
+// AllTransactionsview;swift
+
+
+
 
 import SwiftUI
 import CoreData
 
 @available(macOS 13.0, *)
 struct AllTransactionsView: View {
-    // 1️⃣ Fetch all CapitalTransaction objects, sorted by date descending
+    // your fetch
     @FetchRequest(
-        sortDescriptors: [
-            NSSortDescriptor(keyPath: \CapitalTransaction.date, ascending: false)
-        ],
-        animation: .default
+      sortDescriptors: [NSSortDescriptor(keyPath: \CapitalTransaction.date, ascending: false)],
+      animation: .default
     )
     private var transactions: FetchedResults<CapitalTransaction>
 
     @Environment(\.managedObjectContext) private var viewContext
-    @Environment(\.dismiss) private var dismiss   // to close the sheet
+    @Environment(\.dismiss) private var dismiss
 
-    // 2️⃣ Filter state
     enum TransactionFilter: String, CaseIterable, Identifiable {
-        case past  = "Past"
-        case future = "Future"
+        case past = "Past", future = "Future"
         var id: Self { self }
     }
     @State private var filter: TransactionFilter = .past
+    @State private var selectedTransactions = Set<CapitalTransaction>()
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header with Close button
+            // MARK: – In‐sheet title bar
             HStack {
-                Button {
-                    dismiss()
-                } label: {
+                Button { dismiss() } label: {
                     Image(systemName: "xmark")
-                        .font(.headline)
-                        .padding(8)
                 }
                 .buttonStyle(.plain)
+                .padding(.leading, 8)
 
                 Spacer()
 
-                Text("Transaction History")
-                    .font(.title2)
-                    .bold()
+                Text("All Transactions")
+                    .font(.title2).bold()
+
 
                 Spacer()
 
-                // dummy spacer to balance the close button
-                Color.clear.frame(width: 32, height: 32)
+                HStack(spacing: 12) {
+                    Button(role: .destructive) {
+                        deleteSelected()
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .disabled(selectedTransactions.isEmpty)
+                }
+                .padding(.trailing, 8)
             }
-            .background(AppTheme.panelBackground)
-            .padding(.bottom, 4)
-
+            .frame(height: 36)
+            .background(AppTheme.tileBackground)
+            
             Divider()
 
-            // 3️⃣ Filter picker
+            // MARK: – Filter picker
             Picker("Show", selection: $filter) {
                 ForEach(TransactionFilter.allCases) { f in
                     Text(f.rawValue).tag(f)
                 }
             }
-            .pickerStyle(SegmentedPickerStyle())
+            .pickerStyle(.segmented)
             .padding([.horizontal, .top])
 
-            // 4️⃣ Filtered list
-            List(filteredTransactions) { txn in
-                HStack {
-                    // Date
-                    Text(txn.date, format: .dateTime.year().month().day())
-                        .frame(width: 100, alignment: .leading)
+            // MARK: – Transactions list with flexible columns
+            List(selection: $selectedTransactions) {
+                ForEach(filteredTransactions, id: \.objectID) { txn in
+                    HStack(spacing: 16) {
+                        // Date (fixed width)
+                        Text(txn.date, format: .dateTime.year().month().day())
+                            .frame(width: 100, alignment: .leading)
 
-                    // Type
-                    Text(txn.type)
+                        // Type (fixed width)
+                        Text(txn.type)
+                            .frame(width: 120, alignment: .leading)
+
+                        // Bank (fixed width)
+                        Text(
+                            txn.bond?.depotBank
+                            ?? (txn.etf != nil ? "TradeRepublic" : "—")
+                        )
                         .frame(width: 120, alignment: .leading)
 
-                    // Instrument (bond name or ETF name)
-                    Text(txn.bond?.name ?? txn.etf?.etfName ?? "—")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        // Instrument (flexible)
+                        Text(txn.bond?.name ?? txn.etf?.etfName ?? "—")
+                            // this column will take any extra space
+                            .frame(minWidth: 180,
+                                   maxWidth: .infinity,
+                                   alignment: .leading)
 
-                    // Amount, colored green/red
-                    Text(txn.amount,
-                         format: .currency(code:
-                             Locale.current.currency?.identifier ?? "EUR"))
-                        .frame(width: 100, alignment: .trailing)
-                        .foregroundColor(txn.amount >= 0 ? .green : .red)
+                        // Amount (fixed width)
+                        Text(txn.amount,
+                             format: .currency(code:
+                                Locale.current.currency?.identifier ?? "EUR"))
+                            .frame(width: 100, alignment: .trailing)
+                            .foregroundColor(txn.amount >= 0 ? .green : .red)
+                    }
+                    .padding(.vertical, 2)
+                    .tag(txn as CapitalTransaction)
                 }
-                .padding(.vertical, 2)
             }
             .listStyle(.inset(alternatesRowBackgrounds: true))
+            // let the list fill and respond to window resizes
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 600, minHeight: 400)
-        .padding(.top, 4)
+        // make the sheet/window resizable with a big minimum
+        .frame(minWidth: 900, minHeight: 600)
     }
 
-    /// Applies the selected filter to the full fetch
     private var filteredTransactions: [CapitalTransaction] {
-        let calendar = Calendar.current
-        let startOfToday = calendar.startOfDay(for: Date())
-
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
         return transactions.filter { txn in
-            let txnDay = calendar.startOfDay(for: txn.date)
-            switch filter {
-            case .past:
-                return txnDay <= startOfToday
-            case .future:
-                return txnDay >= startOfToday
+            let day = cal.startOfDay(for: txn.date)
+            return filter == .past ? (day <= today) : (day >= today)
+        }
+    }
+
+    private func deleteSelected() {
+        withAnimation {
+            for txn in selectedTransactions {
+                viewContext.delete(txn)
+            }
+            do {
+                try viewContext.save()
+                selectedTransactions.removeAll()
+            } catch {
+                print("❗️ Failed to delete:", error)
             }
         }
     }
 }
-

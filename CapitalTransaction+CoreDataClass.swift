@@ -11,3 +11,5 @@ import CoreData
 
 @objc(CapitalTransaction)
 public class CapitalTransaction: NSManagedObject { }
+
+

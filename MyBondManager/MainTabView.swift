@@ -119,7 +119,7 @@ struct MainTabView: View {
         // Transactions sheet
         .sheet(isPresented: $showingTransactions) {
             AllTransactionsView()
-                .frame(minWidth: 600, minHeight: 400)
+                .frame(minWidth: 900, minHeight: 600)
                 .environment(\.managedObjectContext, viewContext)
         }
         // Historical chart sheet
