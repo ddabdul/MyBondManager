@@ -19,6 +19,14 @@ struct BondPortfolioManagerApp: App {
         self.viewContext = context
         _notifier = StateObject(wrappedValue: LaunchNotifier(context: context))
         persistenceController.deleteEmptyETFs()
+        
+        // --- ADD THIS BLOCK ---
+        #if DEBUG
+        // Run a data integrity check to find any bonds missing a UUID.
+        checkForMissingBondUUIDs(in: context)
+        #endif
+        // ----------------------
+        
     }
 
     var body: some Scene {
