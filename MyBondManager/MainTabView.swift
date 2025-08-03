@@ -62,6 +62,10 @@ struct MainTabView: View {
                     Button { showingMatured = true } label: {
                         Label("Matured", systemImage: "clock.arrow.circlepath")
                     }
+                    // ← Historical chart button
+                    Button { showingHistoricalChart = true } label: {
+                        Label("History", systemImage: "chart.bar.doc.horizontal")
+                    }
 
                 case .cashflows:
                     Button { recalculateAllCashFlows() } label: {
@@ -84,10 +88,7 @@ struct MainTabView: View {
                     Button { showingSellETF = true } label: {
                         Label("Sell", systemImage: "minus.circle")
                     }
-                    // ← Historical chart button
-                    Button { showingHistoricalChart = true } label: {
-                        Label("History", systemImage: "chart.bar.doc.horizontal")
-                    }
+
 
                 }
 
