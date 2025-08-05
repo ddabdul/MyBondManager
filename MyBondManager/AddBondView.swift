@@ -1,43 +1,46 @@
 //
-//  MyBondManager
 //  AddBondViewAsync.swift
+//  MyBondManager
 //  Adjusted to CoreData
-//  Created by Olivier on 20/04/2025.
+//  Refactored by ChatGPT on 05/08/2025
+//
 
 import SwiftUI
 import CoreData
 
 @available(macOS 13.0, *)
 struct AddBondViewAsync: View {
-    @Environment(\.dismiss) private var dismiss: DismissAction // Explicitly specify DismissAction
+    @Environment(\.dismiss) private var dismiss: DismissAction
     @Environment(\.managedObjectContext) private var moc
     private let scraper = BondDataScraper()
 
     // MARK: – Inputs
-    @State private var isin                  = ""
-    @State private var acquisitionDate = Date()
-    @State private var parValueStr         = ""
-    @State private var acquisitionPrice = ""
-    @State private var depotBank           = ""
+    @State private var isin               = ""
+    @State private var acquisitionDate    = Date()
+    @State private var parValueStr        = ""
+    @State private var acquisitionPrice   = ""
+    @State private var depotBank          = ""
 
-    // MARK: – Scraped Data
-    @State private var name                  = ""
-    @State private var issuer                = ""
-    @State private var wkn                   = ""
-    @State private var maturityDate          = Date()
-    @State private var couponRateStr       = ""
+    // MARK: – Scraped or User-Entered Data
+    @State private var name               = ""
+    @State private var issuer             = ""
+    @State private var wkn                = ""
+    @State private var maturityDate       = Date()
+    @State private var couponRateStr      = ""
 
-    @State private var isLoading             = false
-    @State private var errorMessage          = ""
+    // MARK: – UI States
+    @State private var isLoading          = false
+    @State private var errorMessage       = ""
+    @State private var allowManualEntry   = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Title Bar with Custom Styling
+            // MARK: – Header Bar
             HStack {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundColor(.white) // Match title color
+                        .foregroundColor(.white)
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
@@ -47,34 +50,39 @@ struct AddBondViewAsync: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                Spacer()
-                    .frame(width: 30)
+                Spacer().frame(width: 30)
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
-            .background(AppTheme.tileBackground) // Use the specified background
+            .background(AppTheme.tileBackground)
 
+            // MARK: – Main Form
             Form {
                 Section("Please enter the required information") {
                     TextField("ISIN", text: $isin)
                         .onSubmit { isin = isin.uppercased() }
+
                     DatePicker("Acquisition Date", selection: $acquisitionDate, displayedComponents: .date)
                     TextField("Par Value", text: $parValueStr)
                     TextField("Acquisition Price", text: $acquisitionPrice)
                     TextField("Depot Bank", text: $depotBank)
                 }
 
-                Section("Automaticly collected") {
+                Section("Automatically collected") {
                     TextField("Bond Name", text: $name)
-                        .disabled(true)
+                        .disabled(!allowManualEntry)
+
                     TextField("Issuer", text: $issuer)
-                        .disabled(true)
+                        .disabled(!allowManualEntry)
+
                     TextField("WKN", text: $wkn)
-                        .disabled(true)
+                        .disabled(!allowManualEntry)
+
                     DatePicker("Maturity Date", selection: $maturityDate, displayedComponents: .date)
-                        .disabled(true)
+                        .disabled(!allowManualEntry)
+
                     TextField("Coupon Rate (%)", text: $couponRateStr)
-                        .disabled(true)
+                        .disabled(!allowManualEntry)
                 }
 
                 if !errorMessage.isEmpty {
@@ -85,9 +93,16 @@ struct AddBondViewAsync: View {
                     }
                 }
 
+                if allowManualEntry {
+                    Section {
+                        Text("Manual entry enabled. Please complete the bond details manually.")
+                            .foregroundColor(.orange)
+                    }
+                }
+
                 Section {
                     HStack {
-                        Spacer() // Push buttons to the right
+                        Spacer()
 
                         Button("Collect Data") {
                             startScrape()
@@ -99,18 +114,18 @@ struct AddBondViewAsync: View {
                         }
                         .keyboardShortcut(.defaultAction)
                         .disabled(
-                            isLoading || name.isEmpty || issuer.isEmpty || wkn.isEmpty ||
+                            isLoading ||
+                            name.isEmpty || issuer.isEmpty || wkn.isEmpty ||
                             parValueStr.isEmpty || acquisitionPrice.isEmpty || depotBank.isEmpty
                         )
                     }
                 }
             }
             .padding()
+
             Spacer()
         }
-        .background(AppTheme.panelBackground) // Set panelBackground for the overall background
-        // Remove the explicit frame to fit content
- //       .disabled(isLoading)
+        .background(AppTheme.panelBackground)
         .overlay(
             Group {
                 if isLoading {
@@ -125,18 +140,20 @@ struct AddBondViewAsync: View {
         )
     }
 
+    // MARK: – Scraping Logic
     private func startScrape() {
         DispatchQueue.main.async {
             isLoading = true
             errorMessage = ""
+            allowManualEntry = false
         }
 
         Task {
             do {
                 let (scrapedName, scrapedWKN) = try await scraper.fetchNameAndWKN(isin: isin)
-                let scrapedIssuer                  = try await scraper.fetchIssuer(isin: isin)
-                let dates                          = try await scraper.fetchDates(isin: isin)
-                let scrapedCoupon                  = try await scraper.fetchCouponRate(isin: isin)
+                let scrapedIssuer = try await scraper.fetchIssuer(isin: isin)
+                let dates = try await scraper.fetchDates(isin: isin)
+                let scrapedCoupon = try await scraper.fetchCouponRate(isin: isin)
 
                 DispatchQueue.main.async {
                     name            = scrapedName
@@ -145,73 +162,66 @@ struct AddBondViewAsync: View {
                     maturityDate    = dates.maturity
                     couponRateStr   = String(format: "%.2f", scrapedCoupon)
                     isLoading       = false
+                    allowManualEntry = false
                 }
             } catch {
                 DispatchQueue.main.async {
-                    errorMessage = error.localizedDescription
-                    isLoading    = false
+                    isLoading = false
+                    allowManualEntry = true
+
+                    if let urlError = error as? URLError, urlError.code == .badServerResponse {
+                        errorMessage = "No data found for ISIN \(isin). Please enter the details manually."
+                    } else if error.localizedDescription.contains("404") {
+                        errorMessage = "404 – Bond data not found. Please enter the fields manually."
+                    } else {
+                        errorMessage = error.localizedDescription
+                    }
                 }
             }
         }
     }
 
+    // MARK: – Save Logic
     private func saveBond() {
-        guard let parValue  = Double(parValueStr),
+        guard let parValue = Double(parValueStr),
               let couponRate = Double(couponRateStr),
-              let pricePaid  = Double(acquisitionPrice)
-        else {
+              let pricePaid = Double(acquisitionPrice) else {
             errorMessage = "Numeric conversion failed."
             return
         }
 
-        // Calculate YTM (unchanged)
-        let par           = parValue
-        let couponPayment = par * couponRate / 100.0
-        let years         = maturityDate.timeIntervalSince(acquisitionDate) / (365 * 24 * 3600)
-        let ytmValue: Double
-        if years > 0 {
-            let numerator   = couponPayment + (par - pricePaid) / years
-            let denominator = (par + pricePaid) / 2
-            ytmValue = (numerator / denominator) * 100.0
-        } else {
-            ytmValue = 0
-        }
+        // Yield to maturity calculation
+        let years = maturityDate.timeIntervalSince(acquisitionDate) / (365 * 24 * 3600)
+        let couponPayment = parValue * couponRate / 100.0
+        let ytmValue: Double = years > 0
+            ? ((couponPayment + (parValue - pricePaid) / years) / ((parValue + pricePaid) / 2)) * 100.0
+            : 0
 
-        // 1️⃣ Create the BondEntity
         let entity = BondEntity(context: moc)
-        entity.id                  = UUID()
-        entity.name                = name
-        entity.issuer              = issuer
-        entity.isin                = isin
-        entity.wkn                 = wkn
-        entity.parValue            = parValue
-        entity.initialPrice        = pricePaid
-        entity.couponRate          = couponRate
-        entity.depotBank           = depotBank
-        entity.acquisitionDate     = acquisitionDate
-        entity.maturityDate        = maturityDate
-        entity.yieldToMaturity     = ytmValue
+        entity.id                = UUID()
+        entity.name              = name
+        entity.issuer            = issuer
+        entity.isin              = isin
+        entity.wkn               = wkn
+        entity.parValue          = parValue
+        entity.initialPrice      = pricePaid
+        entity.couponRate        = couponRate
+        entity.depotBank         = depotBank
+        entity.acquisitionDate   = acquisitionDate
+        entity.maturityDate      = maturityDate
+        entity.yieldToMaturity   = ytmValue
 
         do {
-            //  Generate all CashFlowEntity rows for this bond
             let generator = CashFlowGenerator(context: moc)
             try generator.regenerateCashFlows(for: entity)
-            
-            //  record the capital transaction
+
             let recorder = CapitalTransactionRecorder(context: moc)
             recorder.recordBondPurchase(entity)
 
-            //  Persist bond + its new cash flows + capitaltransaction
             try moc.save()
-
-
-            // 5 Dismiss on success
             dismiss()
         } catch {
-            // Surface any CoreData or generator error
             errorMessage = "Failed to save bond or generate cash flows: \(error.localizedDescription)"
         }
     }
 }
-
-
