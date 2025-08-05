@@ -2,7 +2,7 @@
 //  AddBondViewAsync.swift
 //  MyBondManager
 //  Adjusted to CoreData
-//  Refactored by ChatGPT on 05/08/2025
+//  Refactored on 05/08/2025
 //
 
 import SwiftUI
@@ -21,7 +21,7 @@ struct AddBondViewAsync: View {
     @State private var acquisitionPrice   = ""
     @State private var depotBank          = ""
 
-    // MARK: – Scraped or User-Entered Data
+    // MARK: – Scraped or User‐Entered Data
     @State private var name               = ""
     @State private var issuer             = ""
     @State private var wkn                = ""
@@ -71,16 +71,12 @@ struct AddBondViewAsync: View {
                 Section("Automatically collected") {
                     TextField("Bond Name", text: $name)
                         .disabled(!allowManualEntry)
-
                     TextField("Issuer", text: $issuer)
                         .disabled(!allowManualEntry)
-
                     TextField("WKN", text: $wkn)
                         .disabled(!allowManualEntry)
-
                     DatePicker("Maturity Date", selection: $maturityDate, displayedComponents: .date)
                         .disabled(!allowManualEntry)
-
                     TextField("Coupon Rate (%)", text: $couponRateStr)
                         .disabled(!allowManualEntry)
                 }
@@ -126,47 +122,43 @@ struct AddBondViewAsync: View {
             Spacer()
         }
         .background(AppTheme.panelBackground)
-        .overlay(
-            Group {
-                if isLoading {
-                    Color.black.opacity(0.3).ignoresSafeArea()
-                    ProgressView("Scraping…")
-                        .padding(20)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(8)
-                        .shadow(radius: 4)
-                }
+        .overlay {
+            if isLoading {
+                Color.black.opacity(0.3).ignoresSafeArea()
+                ProgressView("Scraping…")
+                    .padding(20)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(8)
+                    .shadow(radius: 4)
             }
-        )
+        }
     }
 
-    // MARK: – Scraping Logic
+    // MARK: – Scraping Logic (unchanged from last version)
     private func startScrape() {
-        DispatchQueue.main.async {
-            isLoading = true
-            errorMessage = ""
-            allowManualEntry = false
-        }
+        isLoading = true
+        errorMessage = ""
+        allowManualEntry = false
 
         Task {
             do {
                 let (scrapedName, scrapedWKN) = try await scraper.fetchNameAndWKN(isin: isin)
-                let scrapedIssuer = try await scraper.fetchIssuer(isin: isin)
-                let dates = try await scraper.fetchDates(isin: isin)
-                let scrapedCoupon = try await scraper.fetchCouponRate(isin: isin)
+                let scrapedIssuer            = try await scraper.fetchIssuer(isin: isin)
+                let dates                    = try await scraper.fetchDates(isin: isin)
+                let scrapedCoupon            = try await scraper.fetchCouponRate(isin: isin)
 
                 DispatchQueue.main.async {
-                    name            = scrapedName
-                    wkn             = scrapedWKN
-                    issuer          = scrapedIssuer
-                    maturityDate    = dates.maturity
-                    couponRateStr   = String(format: "%.2f", scrapedCoupon)
-                    isLoading       = false
+                    name             = scrapedName
+                    wkn              = scrapedWKN
+                    issuer           = scrapedIssuer
+                    maturityDate     = dates.maturity
+                    couponRateStr    = String(format: "%.2f", scrapedCoupon)
+                    isLoading        = false
                     allowManualEntry = false
                 }
             } catch {
                 DispatchQueue.main.async {
-                    isLoading = false
+                    isLoading        = false
                     allowManualEntry = true
 
                     if let urlError = error as? URLError, urlError.code == .badServerResponse {
@@ -181,35 +173,41 @@ struct AddBondViewAsync: View {
         }
     }
 
-    // MARK: – Save Logic
+    // MARK: – Save Logic (with deferred state mutations)
     private func saveBond() {
-        guard let parValue = Double(parValueStr),
+        // Parse numeric inputs synchronously
+        guard let parValue   = Double(parValueStr),
               let couponRate = Double(couponRateStr),
-              let pricePaid = Double(acquisitionPrice) else {
-            errorMessage = "Numeric conversion failed."
+              let pricePaid  = Double(acquisitionPrice)
+        else {
+            // Defer setting errorMessage
+            DispatchQueue.main.async {
+                errorMessage = "Numeric conversion failed."
+            }
             return
         }
 
-        // Yield to maturity calculation
-        let years = maturityDate.timeIntervalSince(acquisitionDate) / (365 * 24 * 3600)
+        // Compute yield‐to‐maturity synchronously
+        let years         = maturityDate.timeIntervalSince(acquisitionDate) / (365 * 24 * 3600)
         let couponPayment = parValue * couponRate / 100.0
         let ytmValue: Double = years > 0
             ? ((couponPayment + (parValue - pricePaid) / years) / ((parValue + pricePaid) / 2)) * 100.0
             : 0
 
+        // Create and save Core Data entity
         let entity = BondEntity(context: moc)
-        entity.id                = UUID()
-        entity.name              = name
-        entity.issuer            = issuer
-        entity.isin              = isin
-        entity.wkn               = wkn
-        entity.parValue          = parValue
-        entity.initialPrice      = pricePaid
-        entity.couponRate        = couponRate
-        entity.depotBank         = depotBank
-        entity.acquisitionDate   = acquisitionDate
-        entity.maturityDate      = maturityDate
-        entity.yieldToMaturity   = ytmValue
+        entity.id              = UUID()
+        entity.name            = name
+        entity.issuer          = issuer
+        entity.isin            = isin
+        entity.wkn             = wkn
+        entity.parValue        = parValue
+        entity.initialPrice    = pricePaid
+        entity.couponRate      = couponRate
+        entity.depotBank       = depotBank
+        entity.acquisitionDate = acquisitionDate
+        entity.maturityDate    = maturityDate
+        entity.yieldToMaturity = ytmValue
 
         do {
             let generator = CashFlowGenerator(context: moc)
@@ -219,9 +217,16 @@ struct AddBondViewAsync: View {
             recorder.recordBondPurchase(entity)
 
             try moc.save()
-            dismiss()
+
+            // Defer the dismiss so SwiftUI finishes layout first
+            DispatchQueue.main.async {
+                dismiss()
+            }
         } catch {
-            errorMessage = "Failed to save bond or generate cash flows: \(error.localizedDescription)"
+            // Defer showing Core Data or generator errors
+            DispatchQueue.main.async {
+                errorMessage = "Failed to save bond or generate cash flows: \(error.localizedDescription)"
+            }
         }
     }
 }
