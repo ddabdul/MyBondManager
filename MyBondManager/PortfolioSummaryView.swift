@@ -106,7 +106,7 @@ struct PortfolioSummaryView: View {
     private var totalExpectedProfitCF: Double {
         totalInterestExpected
       + totalCapitalGainExpected
-      - totalCapitalLossExpected
+      + totalCapitalLossExpected
     }
 
     // MARK: – Weighted Average YTM
