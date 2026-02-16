@@ -102,10 +102,11 @@ struct MainTabView: View {
 
             Divider()
 
-            NavigationSplitView {
+            HSplitView {
                 PortfolioSummaryView(selectedDepotBank: $selectedDepotBank)
+                    .frame(minWidth: 260, idealWidth: 300, maxWidth: 360)
                     .background(AppTheme.panelBackground)
-            } detail: {
+
                 detailContent(for: selectedTab)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(AppTheme.panelBackground)
