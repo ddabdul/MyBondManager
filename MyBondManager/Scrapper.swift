@@ -37,7 +37,15 @@ extension ScrapError: LocalizedError {
     }
 }
 
-private struct INGInstrumentHeaderResponse: Decodable { let name: String; let wkn: String }
+private struct INGInstrumentHeaderResponse: Decodable {
+    let name: String
+    let wkn: String
+
+    private enum CodingKeys: String, CodingKey {
+        case name = "instrumentName"
+        case wkn
+    }
+}
 private struct INGBondDatesResponse: Decodable {
     struct DateInfo: Decodable { let value: String }
     let maturityDate: DateInfo
@@ -78,7 +86,7 @@ public class BondDataScraper {
     public init() {}
 
     public func fetchNameAndWKN(isin: String) async throws -> (name: String, wkn: String) {
-        guard let url = URL(string: "https://component-api.wertpapiere.ing.de/api/v1/components/instrumentheader/\(isin)?assetClass=Bond") else {
+        guard let url = URL(string: "https://component-api.wertpapiere.ing.de/api/v1/components/localheader/\(isin)") else {
             throw ScrapError.invalidURL
         }
         let (data, response) = try await URLSession.shared.data(from: url)
