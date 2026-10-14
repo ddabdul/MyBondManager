@@ -102,11 +102,10 @@ struct PortfolioSummaryView: View {
             .reduce(0) { $0 + $1.amount }
     }
 
-    /// Sum of all future interest + capital-gains – capital-loss cash-flows
+    /// Future interest and gains plus signed capital losses.
     private var totalExpectedProfitCF: Double {
-        totalInterestExpected
-      + totalCapitalGainExpected
-      - totalCapitalLossExpected
+        PortfolioCalculations.expectedReturn(interest: totalInterestExpected,
+            gains: totalCapitalGainExpected, signedLosses: totalCapitalLossExpected)
     }
 
     // MARK: – Weighted Average YTM

@@ -24,6 +24,7 @@ final class HistoricalDataRecorder {
     ///   - gainsDelta: capital gains (sale price – cost basis) or 0 if none
     ///   - date: timestamp of the event (defaults to now)
     ///   - context: your NSManagedObjectContext
+    @discardableResult
     static func recordChange(
         assetType: AssetType,
         depotBank: String? = nil,
@@ -32,7 +33,7 @@ final class HistoricalDataRecorder {
         gainsDelta: Double,
         date: Date = Date(),
         context: NSManagedObjectContext
-    ) throws {
+    ) throws -> HistoricalValuation {
         let hist = HistoricalValuation(context: context)
         hist.id               = UUID()
         hist.date             = date
@@ -42,7 +43,7 @@ final class HistoricalDataRecorder {
         hist.interestReceived = interestDelta.map { NSDecimalNumber(value: $0) }
         hist.capitalGains     = NSDecimalNumber(value: gainsDelta)
         
-        try context.save()
+        return hist
     }
     
     // MARK: – Convenience Methods
@@ -94,7 +95,7 @@ final class HistoricalDataRecorder {
         // principal outflow = –parValue
         let principalDelta = -bond.parValue
         // any capital gain = redemptionAmount – parValue
-        let gainDelta = redemptionAmount - bond.parValue
+        let gainDelta = redemptionAmount - bond.initialPrice
         
         try recordChange(
             assetType: .bond,

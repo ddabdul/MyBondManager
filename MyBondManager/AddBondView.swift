@@ -9,6 +9,8 @@ import CoreData
 
 @available(macOS 13.0, *)
 struct AddBondViewAsync: View {
+    @Environment(\.portfolioContainer) private var portfolioContainer
+    @State private var isSaving = false
     @Environment(\.dismiss) private var dismiss: DismissAction // Explicitly specify DismissAction
     @Environment(\.managedObjectContext) private var moc
     private let scraper = BondDataScraper()
@@ -99,7 +101,7 @@ struct AddBondViewAsync: View {
                         }
                         .keyboardShortcut(.defaultAction)
                         .disabled(
-                            isLoading || name.isEmpty || issuer.isEmpty || wkn.isEmpty ||
+                            isSaving || isLoading || name.isEmpty || issuer.isEmpty || wkn.isEmpty ||
                             parValueStr.isEmpty || acquisitionPrice.isEmpty || depotBank.isEmpty
                         )
                     }
@@ -156,68 +158,43 @@ struct AddBondViewAsync: View {
     }
 
     private func saveBond() {
-        guard let parValue  = Double(parValueStr),
-              let couponRate = Double(couponRateStr),
-              let pricePaid  = Double(acquisitionPrice)
-        else {
-            errorMessage = "Numeric conversion failed."
+        guard !isSaving, let container = portfolioContainer else {
+            errorMessage = "Portfolio store is unavailable."
             return
         }
-
-        // Calculate YTM (unchanged)
-        let par           = parValue
-        let couponPayment = par * couponRate / 100.0
-        let years         = maturityDate.timeIntervalSince(acquisitionDate) / (365 * 24 * 3600)
-        let ytmValue: Double
-        if years > 0 {
-            let numerator   = couponPayment + (par - pricePaid) / years
-            let denominator = (par + pricePaid) / 2
-            ytmValue = (numerator / denominator) * 100.0
-        } else {
-            ytmValue = 0
+        guard let nominal = Double(parValueStr), nominal.isFinite, nominal > 0,
+              let cost = Double(acquisitionPrice), cost.isFinite, cost > 0,
+              let rate = Double(couponRateStr), rate.isFinite, rate >= 0,
+              acquisitionDate <= maturityDate else {
+            errorMessage = "Enter positive nominal and purchase cost, a nonnegative coupon, and valid dates."
+            return
         }
-
-        // 1️⃣ Create the BondEntity
-        let entity = BondEntity(context: moc)
-        entity.id                  = UUID()
-        entity.name                = name
-        entity.issuer              = issuer
-        entity.isin                = isin
-        entity.wkn                 = wkn
-        entity.parValue            = parValue
-        entity.initialPrice        = pricePaid
-        entity.couponRate          = couponRate
-        entity.depotBank           = depotBank
-        entity.acquisitionDate     = acquisitionDate
-        entity.maturityDate        = maturityDate
-        entity.yieldToMaturity     = ytmValue
-
-        do {
-            // 2️⃣ Generate all CashFlowEntity rows for this bond
-            let generator = CashFlowGenerator(context: moc)
-            try generator.regenerateCashFlows(for: entity)
-
-            // 3️⃣ Persist bond + its new cash flows
-            try moc.save()
-            
-            // 4️⃣ Record initial history via your recorder
+        let years = maturityDate.timeIntervalSince(acquisitionDate) / (365 * 24 * 3600)
+        let ytm = years > 0 ? ((nominal * rate / 100 + (nominal - cost) / years) / ((nominal + cost) / 2)) * 100 : 0
+        let values = BondCodable(id: UUID(), name: name, isin: isin,
+            issuer: issuer, depotBank: depotBank, acquisitionDate: acquisitionDate,
+            maturityDate: maturityDate, couponRate: rate, parValue: nominal, initialPrice: cost,
+            yieldToMaturity: ytm, wkn: wkn, cashFlows: [])
+        isSaving = true; errorMessage = ""
+        Task { @MainActor in
+            defer { isSaving = false }
             do {
-                try HistoricalDataRecorder.recordBondAcquisition(
-                    bond: entity,
-                    context: moc
-                )
-                print("✅ Historical entry recorded for new bond.")
-            } catch {
-                print("⚠️ Failed to record historical entry: \(error)")
-            }
-
-            // 5 Dismiss on success
-            dismiss()
-        } catch {
-            // Surface any CoreData or generator error
-            errorMessage = "Failed to save bond or generate cash flows: \(error.localizedDescription)"
+                try await PortfolioTransaction.run(in: container) { context in
+                    let entity = BondEntity(context: context)
+                    entity.id = values.id; entity.name = values.name; entity.isin = values.isin
+                    entity.issuer = values.issuer; entity.depotBank = values.depotBank
+                    entity.acquisitionDate = values.acquisitionDate; entity.maturityDate = values.maturityDate
+                    entity.couponRate = values.couponRate; entity.parValue = values.parValue
+                    entity.initialPrice = values.initialPrice; entity.yieldToMaturity = values.yieldToMaturity
+                    entity.wkn = values.wkn
+                    try CashFlowGenerator(context: context).regenerateCashFlows(for: entity)
+                    try HistoricalDataRecorder.recordBondAcquisition(bond: entity, context: context)
+                }
+                dismiss()
+            } catch { errorMessage = "Could not save bond: \(error.localizedDescription)" }
         }
     }
+
 }
 
 struct AddBondViewAsync_Previews: PreviewProvider {

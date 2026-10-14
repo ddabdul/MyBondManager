@@ -8,20 +8,27 @@ import CoreData
 
 struct PersistenceController {
     static let shared = PersistenceController()
+    static let managedObjectModel = NSPersistentContainer(name: "MyBondManager").managedObjectModel
 
     let container: NSPersistentContainer
     let backgroundContext: NSManagedObjectContext
 
     init(inMemory: Bool = false) {
-        container = NSPersistentContainer(name: "MyBondManager")
+        container = NSPersistentContainer(name: "MyBondManager", managedObjectModel: Self.managedObjectModel)
         if inMemory {
-            container.persistentStoreDescriptions.first!.url = URL(fileURLWithPath: "/dev/null")
+            container.persistentStoreDescriptions.first!.type = NSInMemoryStoreType
+        }
+        for description in container.persistentStoreDescriptions {
+            description.shouldMigrateStoreAutomatically = true
+            description.shouldInferMappingModelAutomatically = true
         }
         container.loadPersistentStores { desc, error in
             if let error = error {
                 fatalError("Unable to load Core Data store: \(error)")
             }
         }
+
+        container.viewContext.automaticallyMergesChangesFromParent = true
 
         // configure contexts
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
@@ -48,24 +55,17 @@ struct PersistenceController {
         }
     }
 
-    /// Call this whenever you create or update a BondEntity.
-    func saveAndGenerateCashFlows(bond: BondEntity) {
-        let viewCtx = container.viewContext
-        guard viewCtx.hasChanges else { return }
-        do {
-            try viewCtx.save()
-        } catch {
-            fatalError("Failed to save viewContext: \(error)")
-        }
-
-        backgroundContext.perform {
-            let bgBond = self.backgroundContext.object(with: bond.objectID) as! BondEntity
-            do {
-                try CashFlowGenerator(context: self.backgroundContext)
-                        .regenerateCashFlows(for: bgBond)
-            } catch {
-                print("⚠️ cashflow regen failed:", error)
+    /// Legacy two-phase helper. Active forms use PortfolioTransaction for a single save.
+    @MainActor
+    func saveAndGenerateCashFlows(bond: BondEntity) async throws {
+        let viewContext = container.viewContext
+        if viewContext.hasChanges { try viewContext.save() }
+        let bondID = bond.objectID
+        try await PortfolioTransaction.run(in: container) { context in
+            guard let stored = try context.existingObject(with: bondID) as? BondEntity else {
+                throw PortfolioError("The bond no longer exists.")
             }
+            try CashFlowGenerator(context: context).regenerateCashFlows(for: stored)
         }
     }
 

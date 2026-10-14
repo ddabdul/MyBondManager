@@ -9,11 +9,14 @@ import CoreData
 
 struct EditBondView: View {
     @Environment(\.managedObjectContext) private var moc
+    @Environment(\.portfolioContainer) private var portfolioContainer
+    @State private var isSaving = false
     @Environment(\.dismiss)      private var dismiss
 
     @ObservedObject var bond: BondEntity
 
     // Local editable copy of each field
+    @State private var errorMessage = ""
     @State private var name: String
     @State private var issuer: String
     @State private var isin: String
@@ -44,6 +47,7 @@ struct EditBondView: View {
 
     var body: some View {
         Form {
+            if !errorMessage.isEmpty { Text(errorMessage).foregroundColor(.red) }
             Section("Identifiers") {
                 TextField("Name", text: $name)
                 TextField("Issuer", text: $issuer)
@@ -72,8 +76,8 @@ struct EditBondView: View {
                 }
                 Button("Save") {
                     saveChanges()
-                    dismiss()
                 }
+                .disabled(isSaving)
                 .keyboardShortcut(.defaultAction)
             }
         }
@@ -82,49 +86,48 @@ struct EditBondView: View {
     }
 
     private func saveChanges() {
-        // 1️⃣ Update text fields
-        bond.name       = name
-        bond.issuer     = issuer
-        bond.isin       = isin
-        bond.wkn        = wkn
-        bond.depotBank  = depotBank
-        bond.acquisitionDate = acquisitionDate
-        bond.maturityDate    = maturityDate
-
-        // 2️⃣ Parse numeric inputs (fallback to existing if parsing fails)
-        let parVal      = Double(parValue)     ?? bond.parValue
-        let pricePaid   = Double(initialPrice) ?? bond.initialPrice
-        let couponPct   = Double(couponRate)   ?? bond.couponRate
-
-        bond.parValue     = parVal
-        bond.initialPrice = pricePaid
-        bond.couponRate   = couponPct
-
-        // 3️⃣ Recalculate YTM
-        let couponPayment = parVal * couponPct / 100.0
-        let secondsPerYear = 365 * 24 * 3600
-        let years = maturityDate.timeIntervalSince(acquisitionDate) / Double(secondsPerYear)
-
-        let newYTM: Double
-        if years > 0 {
-            let numerator   = couponPayment + (parVal - pricePaid) / years
-            let denominator = (parVal + pricePaid) / 2
-            newYTM = (numerator / denominator) * 100.0
-        } else {
-            newYTM = 0
+        guard !isSaving, let container = portfolioContainer else {
+            errorMessage = "Portfolio store is unavailable."
+            return
         }
-        bond.yieldToMaturity = newYTM
-
-        do {
-            // 4️⃣ Regenerate cash flows with updated terms
-            let generator = CashFlowGenerator(context: moc)
-            try generator.regenerateCashFlows(for: bond)
-
-            // 5️⃣ Save everything in one shot
-            try moc.save()
-            print("[EditBondView] Saved edits and recalculated YTM (\(String(format: "%.2f", newYTM))%) + cash flows")
-        } catch {
-            print("[EditBondView] Error saving bond or regenerating cash flows: \(error)")
+        guard let nominal = Double(parValue), nominal.isFinite, nominal > 0,
+              let cost = Double(initialPrice), cost.isFinite, cost > 0,
+              let rate = Double(couponRate), rate.isFinite, rate >= 0,
+              acquisitionDate <= maturityDate else {
+            errorMessage = "Enter positive nominal and purchase cost, a nonnegative coupon, and valid dates."
+            return
+        }
+        let years = maturityDate.timeIntervalSince(acquisitionDate) / (365 * 24 * 3600)
+        let ytm = years > 0 ? ((nominal * rate / 100 + (nominal - cost) / years) / ((nominal + cost) / 2)) * 100 : 0
+        let values = BondCodable(id: bond.id, name: name, isin: isin,
+            issuer: issuer, depotBank: depotBank, acquisitionDate: acquisitionDate,
+            maturityDate: maturityDate, couponRate: rate, parValue: nominal, initialPrice: cost,
+            yieldToMaturity: ytm, wkn: wkn, cashFlows: [])
+        let bondID = bond.objectID
+        isSaving = true; errorMessage = ""
+        Task { @MainActor in
+            defer { isSaving = false }
+            do {
+                try await Self.persistChanges(bondID: bondID, values: values, in: container)
+                dismiss()
+            } catch { errorMessage = "Could not save bond: \(error.localizedDescription)" }
         }
     }
+
+    static func persistChanges(bondID: NSManagedObjectID, values: BondCodable,
+                               in container: NSPersistentContainer) async throws {
+        try await PortfolioTransaction.run(in: container) { context in
+            guard let entity = try context.existingObject(with: bondID) as? BondEntity else {
+                throw PortfolioError("The bond no longer exists.")
+            }
+            entity.id = values.id; entity.name = values.name; entity.isin = values.isin
+            entity.issuer = values.issuer; entity.depotBank = values.depotBank
+            entity.acquisitionDate = values.acquisitionDate; entity.maturityDate = values.maturityDate
+            entity.couponRate = values.couponRate; entity.parValue = values.parValue
+            entity.initialPrice = values.initialPrice; entity.yieldToMaturity = values.yieldToMaturity
+            entity.wkn = values.wkn
+            try CashFlowGenerator(context: context).regenerateCashFlows(for: entity)
+        }
+    }
+
 }

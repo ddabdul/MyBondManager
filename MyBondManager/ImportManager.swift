@@ -13,68 +13,68 @@ import CoreData
 public class ImportManager {
     public init() {}
 
-    /// Read `bonds.json` & `etfs.json` from `folderURL`, then sync with Core Data.
-    /// - Parameters:
-    ///   - folderURL: directory containing your JSONs
-    ///   - context: an NSManagedObjectContext (use a background context for safety)
-    /// - Throws: any I/O, decoding, or Core Data error
-    public func importAll(
-        from folderURL: URL,
-        into context: NSManagedObjectContext
-    ) throws {
+    public func prepare(from folderURL: URL) async throws -> PositionsPayload {
         let granted = folderURL.startAccessingSecurityScopedResource()
-        defer {
-            if granted {
-                folderURL.stopAccessingSecurityScopedResource()
+        defer { if granted { folderURL.stopAccessingSecurityScopedResource() } }
+        return try await Task.detached(priority: .userInitiated) {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let bonds = try decoder.decode([BondCodable].self,
+                from: Data(contentsOf: folderURL.appendingPathComponent("bonds.json")))
+            let etfs = try decoder.decode([ETFEntityCodable].self,
+                from: Data(contentsOf: folderURL.appendingPathComponent("etfs.json")))
+            let payload = PositionsPayload(bonds: bonds, etfs: etfs)
+            try Self.validate(payload)
+            return payload
+        }.value
+    }
+
+    public func importAll(from folderURL: URL, into container: NSPersistentContainer) async throws {
+        let payload = try await prepare(from: folderURL)
+        try await apply(payload, into: container)
+    }
+
+    public func apply(_ payload: PositionsPayload, into container: NSPersistentContainer) async throws {
+        try Self.validate(payload)
+        try await PortfolioTransaction.run(in: container) { context in
+            try self.importBonds(payload.bonds, into: context)
+            try self.importETFs(payload.etfs, into: context)
+        }
+    }
+
+    static func validate(_ payload: PositionsPayload) throws {
+        guard Set(payload.bonds.map(\.id)).count == payload.bonds.count,
+              Set(payload.etfs.map(\.id)).count == payload.etfs.count else {
+            throw PortfolioError("The positions files contain duplicate identifiers.")
+        }
+        for bond in payload.bonds {
+            guard bond.parValue.isFinite, bond.parValue > 0,
+                  bond.initialPrice.isFinite, bond.initialPrice > 0,
+                  bond.couponRate.isFinite, bond.couponRate >= 0,
+                  bond.yieldToMaturity.isFinite, bond.acquisitionDate <= bond.maturityDate,
+                  bond.cashFlows.allSatisfy({ $0.amount.isFinite && CashFlowEntity.Nature(rawValue: $0.nature) != nil }) else {
+                throw PortfolioError("Invalid financial values in bond \(bond.name).")
             }
         }
-
-        var caught: Error?
-        context.performAndWait {
-            do {
-                try importBonds(from: folderURL, into: context)
-                try importETFs(from: folderURL, into: context)
-
-                if context.hasChanges {
-                    do {
-                        try context.save()
-                    } catch let error as NSError {
-                        if let details = error.userInfo[NSDetailedErrorsKey] as? [NSError] {
-                            for validationError in details {
-                                let obj   = validationError.userInfo[NSValidationObjectErrorKey] ?? "<unknown object>"
-                                let key   = validationError.userInfo[NSValidationKeyErrorKey]      ?? "<unknown key>"
-                                let value = validationError.userInfo[NSValidationValueErrorKey]    ?? "<no value>"
-                                print("❗️ Validation error on \(obj): \(key) = \(value) → \(validationError.localizedDescription)")
-                            }
-                        } else {
-                            print("❗️ Save error: \(error), \(error.userInfo)")
-                        }
-                        throw error
-                    }
-                }
-            } catch {
-                caught = error
+        for etf in payload.etfs {
+            guard !ETFPurchase.normalizedISIN(etf.isin).isEmpty,
+                  etf.lastPrice.isFinite, etf.lastPrice > 0,
+                  Set(etf.holdings.map(\.id)).count == etf.holdings.count,
+                  Set(etf.priceHistory.map(\.id)).count == etf.priceHistory.count,
+                  etf.holdings.allSatisfy({ $0.etfId == etf.id && $0.numberOfShares > 0
+                      && $0.acquisitionPrice.isFinite && $0.acquisitionPrice > 0 }),
+                  etf.priceHistory.allSatisfy({ $0.etfId == etf.id && $0.price.isFinite && $0.price > 0 }) else {
+                throw PortfolioError("Invalid holdings, prices or identifiers in ETF \(etf.etfName).")
             }
-        }
-
-        if let error = caught {
-            throw error
         }
     }
 
     // MARK: • Bonds
 
     private func importBonds(
-        from folderURL: URL,
+        _ jsonBonds: [BondCodable],
         into context: NSManagedObjectContext
     ) throws {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        let url = folderURL.appendingPathComponent("bonds.json")
-        let data = try Data(contentsOf: url)
-        let jsonBonds = try decoder.decode([BondCodable].self, from: data)
-
         // Track existing IDs
         let fetchAll: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
         let existingBonds = try context.fetch(fetchAll)
@@ -125,16 +125,9 @@ public class ImportManager {
     // MARK: • ETFs
 
     private func importETFs(
-        from folderURL: URL,
+        _ jsonETFs: [ETFEntityCodable],
         into context: NSManagedObjectContext
     ) throws {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        let url = folderURL.appendingPathComponent("etfs.json")
-        let data = try Data(contentsOf: url)
-        let jsonETFs = try decoder.decode([ETFEntityCodable].self, from: data)
-
         // Track existing IDs
         let fetchAll: NSFetchRequest<ETFEntity> = ETFEntity.fetchRequest()
         let existingETFs = try context.fetch(fetchAll)

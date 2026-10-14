@@ -90,9 +90,5 @@ struct CashFlowGenerator {
         profitCF.natureEnum = .expectedProfit
         profitCF.bond   = bond
 
-        // 7) Persist
-        if context.hasChanges {
-            try context.save()
-        }
     }
 }

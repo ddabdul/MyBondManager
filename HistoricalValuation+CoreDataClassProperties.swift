@@ -16,6 +16,7 @@ extension HistoricalValuation {
         return NSFetchRequest<HistoricalValuation>(entityName: "HistoricalValuation")
     }
 
+    @NSManaged public var eventKey: String?
     @NSManaged public var id: UUID
     @NSManaged public var date: Date
     @NSManaged public var assetType: String // "Bond" or "ETF"
