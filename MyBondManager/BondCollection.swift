@@ -5,8 +5,13 @@ struct BondDetails: Sendable {
     let name: String
     let wkn: String
     let issuer: String
-    let maturityDate: Date
-    let couponRate: Double
+    let maturityDate: Date?
+    let couponRate: Double?
+    let terms: BondTerms?
+    init(name: String, wkn: String, issuer: String, maturityDate: Date?, couponRate: Double?, terms: BondTerms? = nil) {
+        self.name = name; self.wkn = wkn; self.issuer = issuer
+        self.maturityDate = maturityDate; self.couponRate = couponRate; self.terms = terms
+    }
 }
 
 @MainActor
@@ -25,13 +30,7 @@ final class BondCollection: ObservableObject {
     private let fetch: (String) async throws -> BondDetails
 
     init(fetch: @escaping (String) async throws -> BondDetails = { isin in
-        let scraper = BondDataScraper()
-        let header = try await scraper.fetchNameAndWKN(isin: isin)
-        let issuer = try await scraper.fetchIssuer(isin: isin)
-        let dates = try await scraper.fetchDates(isin: isin)
-        let rate = try await scraper.fetchCouponRate(isin: isin)
-        return BondDetails(name: header.name, wkn: header.wkn, issuer: issuer,
-            maturityDate: dates.maturity, couponRate: rate)
+        try await BondDataScraper().fetchDetails(isin: isin)
     }) { self.fetch = fetch }
 
     func collect() async {
@@ -46,7 +45,7 @@ final class BondCollection: ObservableObject {
             guard [result.name, result.wkn, result.issuer].allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
                 throw PortfolioError("The provider returned incomplete bond details. Collect the data again before saving.")
             }
-            guard result.couponRate.isFinite, result.couponRate >= 0 else {
+            if let rate = result.couponRate, !rate.isFinite || rate < 0 {
                 throw PortfolioError("The provider returned an invalid coupon rate.")
             }
             details = result

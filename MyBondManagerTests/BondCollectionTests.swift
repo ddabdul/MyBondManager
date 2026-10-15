@@ -34,6 +34,20 @@ final class BondCollectionTests: XCTestCase {
         XCTAssertFalse(collection.isLoading)
     }
 
+    func testSameISINLatestRequestWinsWhenResponsesReverse() async throws {
+        var continuations: [CheckedContinuation<BondDetails, Error>] = []
+        let collection = BondCollection(fetch: { _ in try await withCheckedThrowingContinuation { continuations.append($0) } })
+        collection.isin = "DE0000000001"
+        let first = Task { await collection.collect() }
+        while continuations.count < 1 { await Task.yield() }
+        let second = Task { await collection.collect() }
+        while continuations.count < 2 { await Task.yield() }
+        continuations[1].resume(returning: details(rate: 4.25)); await second.value
+        continuations[0].resume(returning: details(rate: 1.25)); await first.value
+        XCTAssertEqual(collection.details?.couponRate, 4.25)
+        XCTAssertFalse(collection.isLoading)
+    }
+
     func testCollectedCouponPrecisionSurvivesStorageAndGeneration() async throws {
         let fixture = details()
         let collection = BondCollection(fetch: { _ in fixture })
@@ -41,7 +55,7 @@ final class BondCollectionTests: XCTestCase {
         await collection.collect()
         let container = try TestPortfolio.make()
         let bond = TestPortfolio.bond(in: container.viewContext, cost: 100000, par: 100000)
-        bond.couponRate = try XCTUnwrap(collection.details).couponRate
+        bond.couponRate = try XCTUnwrap(collection.details?.couponRate)
         try CashFlowGenerator(context: container.viewContext).regenerateCashFlows(for: bond)
         try container.viewContext.save()
         let reader = container.newBackgroundContext()

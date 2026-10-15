@@ -64,9 +64,10 @@ struct AddBondViewAsync: View {
                         .disabled(true)
                     TextField("WKN", text: .constant(collection.details?.wkn ?? ""))
                         .disabled(true)
-                    DatePicker("Maturity Date", selection: .constant(collection.details?.maturityDate ?? Date()), displayedComponents: .date)
-                        .disabled(true)
-                    TextField("Coupon Rate (%)", text: .constant(collection.details.map { String($0.couponRate) } ?? ""))
+                    if let maturity = collection.details?.maturityDate {
+                        DatePicker("Maturity Date", selection: .constant(maturity), displayedComponents: .date).disabled(true)
+                    } else { Text("Maturity date needs review.").foregroundStyle(.secondary) }
+                    TextField("Coupon Rate (%)", text: .constant(collection.details?.couponRate.map { String($0) } ?? ""))
                         .disabled(true)
                 }
 
@@ -128,15 +129,14 @@ struct AddBondViewAsync: View {
             return
         }
         guard let details = collection.details,
+              let rate = details.couponRate, let maturityDate = details.maturityDate,
               let nominal = Double(parValueStr), nominal.isFinite, nominal > 0,
               let cost = Double(acquisitionPrice), cost.isFinite, cost > 0,
-              details.couponRate.isFinite, details.couponRate >= 0,
-              acquisitionDate <= details.maturityDate else {
+              rate.isFinite, rate >= 0,
+              acquisitionDate <= maturityDate else {
             errorMessage = "Enter positive nominal and purchase cost, a nonnegative coupon, and valid dates."
             return
         }
-        let rate = details.couponRate
-        let maturityDate = details.maturityDate
         let years = maturityDate.timeIntervalSince(acquisitionDate) / (365 * 24 * 3600)
         let ytm = years > 0 ? ((nominal * rate / 100 + (nominal - cost) / years) / ((nominal + cost) / 2)) * 100 : 0
         let values = BondCodable(id: UUID(), name: details.name, isin: ETFPurchase.normalizedISIN(collection.isin),

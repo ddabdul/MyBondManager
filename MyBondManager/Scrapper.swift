@@ -143,3 +143,108 @@ public class BondDataScraper {
         return rate
     }
 }
+
+private enum INGTermScalar: Decodable {
+    case string(String), number(Double), boolean(Bool)
+    init(from decoder: Decoder) throws {
+        let box = try decoder.singleValueContainer()
+        if let value = try? box.decode(Bool.self) { self = .boolean(value) }
+        else if let value = try? box.decode(Double.self) { self = .number(value) }
+        else { self = .string(try box.decode(String.self)) }
+    }
+    var text: String? { if case .string(let value) = self { return value }; return nil }
+    func number() throws -> Double {
+        let value: Double?
+        switch self { case .number(let v): value = v; case .string(let v): value = Double(v); case .boolean: value = nil }
+        guard let value, value.isFinite else { throw PortfolioError("ING supplied an invalid numeric term.") }
+        return value
+    }
+    func boolean() throws -> Bool? {
+        switch self {
+        case .boolean(let v): return v
+        case .string(let v):
+            switch v.lowercased() { case "ja", "true": return true; case "nein", "false": return false; default: return nil }
+        case .number: throw PortfolioError("ING supplied an invalid boolean term.")
+        }
+    }
+}
+private struct INGTermValue: Decodable { let value: INGTermScalar? }
+private struct INGRichDates: Decodable {
+    let maturityDate: INGTermValue?
+    let issueDate: INGTermValue?
+    let interestStartDate: INGTermValue?
+    let interestPaymentDate: INGTermValue?
+}
+private struct INGRichMaster: Decodable {
+    let issuerCompanyName: INGTermValue?
+    let currencyIsoCode: INGTermValue?
+    let isBondCallableBeforeMaturity: INGTermValue?
+}
+private struct INGRichRates: Decodable {
+    struct Row: Decodable { let id: String; let fieldValue: INGTermValue? }
+    let interest: INGTermScalar?
+    let interestPaymentPeriod: INGTermScalar?
+    let isZeroBond: INGTermScalar?
+    let redemptionPayment: INGTermScalar?
+    let data: [Row]?
+    func field(_ id: String) -> INGTermScalar? { data?.first { $0.id == id }?.fieldValue?.value }
+}
+extension BondDataScraper {
+    func fetchDetails(isin: String, observedAt: Date = Date()) async throws -> BondDetails {
+        let normalized = ETFPurchase.normalizedISIN(isin)
+        guard !normalized.isEmpty, normalized.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) }) else {
+            throw ScrapError.invalidURL
+        }
+        let header: INGInstrumentHeaderResponse = try await fetchTermsComponent("components/localheader", isin: normalized)
+        let master: INGRichMaster = try await fetchTermsComponent("bond/masterdata", isin: normalized)
+        let dates: INGRichDates = try await fetchTermsComponent("bond/dates", isin: normalized)
+        let rates: INGRichRates = try await fetchTermsComponent("bond/interestrates", isin: normalized)
+        var terms = BondTerms()
+        terms.isin = normalized; terms.collectedAt = observedAt; terms.checkpointObservedOn = MarketDay(date: observedAt)
+        terms.currency = master.currencyIsoCode?.value?.text
+        terms.callable = try master.isBondCallableBeforeMaturity?.value?.boolean()
+        terms.couponRate = try rates.field("InterestRate")?.number()
+        terms.redemptionPercent = try (rates.redemptionPayment ?? rates.field("RedemptionPayment"))?.number()
+        if let rate = terms.couponRate, rate < 0 { throw PortfolioError("ING supplied a negative coupon rate.") }
+        if let redemption = terms.redemptionPercent, redemption <= 0 { throw PortfolioError("ING supplied a nonpositive redemption percentage.") }
+        terms.rawStructure = (rates.interest ?? rates.field("Interest"))?.text
+        terms.rawFrequency = (rates.interestPaymentPeriod ?? rates.field("InterestPaymentPeriod"))?.text
+        if let period = terms.rawFrequency { terms.frequency = ["Jährlich":1, "Halbjährlich":2, "Vierteljährlich":4][period] }
+        let zero = try (rates.isZeroBond ?? rates.field("IsZeroBond"))?.boolean()
+        if zero == true {
+            terms.structure = .zero
+            if let rate = terms.couponRate, rate != 0 { terms.restrictions.append("Zero-coupon flag contradicts supplied coupon.") }
+        } else if terms.rawStructure == "Fest" { terms.structure = .fixed }
+        else if let raw = terms.rawStructure { terms.restrictions.append("Unsupported interest structure: " + raw) }
+        for marker in ["floating", "variabel", "inflation", "index", "perpetual", "ewig", "amort", "ex-coupon"] {
+            if (header.name + " " + (terms.rawStructure ?? "")).localizedCaseInsensitiveContains(marker) { terms.restrictions.append(marker) }
+        }
+        terms.maturity = try instrumentDay(dates.maturityDate)
+        terms.issueDay = try instrumentDay(dates.issueDate)
+        terms.accrualStart = try instrumentDay(dates.interestStartDate)
+        terms.nextCoupon = try instrumentDay(dates.interestPaymentDate)
+        return BondDetails(name: header.name, wkn: header.wkn, issuer: master.issuerCompanyName?.value?.text ?? "",
+            maturityDate: terms.maturity?.instant, couponRate: terms.couponRate, terms: terms)
+    }
+    private func fetchTermsComponent<T: Decodable>(_ component: String, isin: String) async throws -> T {
+        let query = component == "bond/masterdata" ? "?assetClass=Bond" : ""
+        guard let url = URL(string: "https://component-api.wertpapiere.ing.de/api/v1/\(component)/\(isin)\(query)") else { throw ScrapError.invalidURL }
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse else { throw ScrapError.noData }
+        guard (200...299).contains(http.statusCode) else { throw ScrapError.httpError(http.statusCode) }
+        return try decoder.decode(T.self, from: data)
+    }
+    private func instrumentDay(_ info: INGTermValue?) throws -> MarketDay? {
+        guard let scalar = info?.value else { return nil }
+        guard let raw = scalar.text else { throw ScrapError.dateParsingError("Expected an instrument calendar date.") }
+        let day = try MarketDay(String(raw.prefix(10)))
+        if raw.count != 10 {
+            let iso = ISO8601DateFormatter()
+            let fractional = ISO8601DateFormatter(); fractional.formatOptions.insert(.withFractionalSeconds)
+            guard raw.dropFirst(10).first == "T", iso.date(from: raw) != nil || fractional.date(from: raw) != nil else {
+                throw ScrapError.dateParsingError("Invalid instrument date: " + raw)
+            }
+        }
+        return day
+    }
+}
