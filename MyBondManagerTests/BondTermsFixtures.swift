@@ -1,0 +1,16 @@
+import Foundation
+@testable import MyBondManager
+
+enum BondTermsFixtures {
+    static func fixed(frequency: Int = 2, maturity: String = "2027-01-15", next: String = "2026-07-15") throws -> BondTerms {
+        var terms = BondTerms()
+        terms.isin = "DE0000000001"; terms.currency = "EUR"; terms.structure = .fixed
+        terms.frequency = frequency; terms.couponRate = 3.375
+        terms.accrualStart = try MarketDay("2026-01-15")
+        terms.maturity = try MarketDay(maturity); terms.nextCoupon = try MarketDay(next)
+        terms.checkpointObservedOn = try MarketDay("2026-02-01")
+        terms.callable = false; terms.redemptionPercent = 100; terms.roll = .dayOfMonth
+        terms.collectedAt = TestPortfolio.date("2026-02-01T12:00:00Z")
+        return terms
+    }
+}
