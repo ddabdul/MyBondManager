@@ -19,17 +19,13 @@ struct MaturedBondsView: View {
         sortDescriptors: [
             NSSortDescriptor(keyPath: \BondEntity.maturityDate, ascending: true)
         ],
-        predicate: NSPredicate(
-            format: "maturityDate < %@",
-            Self.startOfToday as NSDate
-        ),
         animation: .default
     )
     private var bondEntities: FetchedResults<BondEntity>
 
     /// Summaries grouped by ISIN
     private var summaries: [BondSummary] {
-        Dictionary(grouping: bondEntities, by: \.isin)
+        Dictionary(grouping: bondEntities.filter { !BondEligibility.isActive($0, on: MarketDay(date: Date())) }, by: \.isin)
             .map { isin, entities in
                 let first = entities[0]
                 return BondSummary(

@@ -3,14 +3,14 @@ import CoreData
 enum CashFlowSelection {
     static func predicate(searchText: String, nature: CashFlowEntity.Nature?, bank: String,
                           start: Date, end: Date, now: Date = Date(),
-                          calendar: Calendar = .current) -> NSPredicate {
+                          calendar: Calendar = MarketDay.calendar) -> NSPredicate {
         let firstDay = calendar.startOfDay(for: start)
         let lastDay = calendar.startOfDay(for: end)
         guard let afterLastDay = calendar.date(byAdding: .day, value: 1, to: lastDay) else {
             return NSPredicate(value: false)
         }
         var predicates = [
-            NSPredicate(format: "bond.maturityDate >= %@", calendar.startOfDay(for: now) as NSDate),
+            NSPredicate(format: "bond.termsReady == YES AND generatedFromTerms == YES"),
             NSPredicate(format: "date >= %@ AND date < %@", firstDay as NSDate, afterLastDay as NSDate),
             NSPredicate(format: "nature != %@", CashFlowEntity.Nature.expectedProfit.rawValue)
         ]
@@ -27,17 +27,15 @@ enum CashFlowSelection {
     }
 
     static func nextCoupon(in bonds: [BondEntity], now: Date = Date(),
-                           calendar: Calendar = .current) -> NextCoupon? {
-        let today = calendar.startOfDay(for: now)
-        let flows = bonds.flatMap { bond in
-            bond.cashFlowsArray.filter {
-                $0.nature == CashFlowEntity.Nature.interest.rawValue && $0.amount > 0
-                    && $0.date >= today && $0.date >= bond.acquisitionDate && $0.date <= bond.maturityDate
-            }
+                           calendar: Calendar = MarketDay.calendar) -> NextCoupon? {
+        let today = MarketDay(date: now)
+        guard let first = BondEligibility.nextCoupon(bonds, on: today) else { return nil }
+        let nextDay = MarketDay(date: first.date)
+        let flows = bonds.flatMap { bond -> [CashFlowEntity] in
+            do { return try BondEligibility.flows(bond, from: nextDay, through: nextDay).filter { $0.natureEnum == .interest && $0.amount > 0 } }
+            catch { NSLog("Cannot validate coupon group: %@", error.localizedDescription); return [] }
         }
-        guard let nextDay = flows.map({ calendar.startOfDay(for: $0.date) }).min() else { return nil }
-        let payments = flows.filter { calendar.isDate($0.date, inSameDayAs: nextDay) }
-        return NextCoupon(date: nextDay, amount: payments.reduce(0) { $0 + $1.amount },
-            payer: payments.count == 1 ? (payments.first?.bond?.name ?? "-") : "Multiple")
+        return NextCoupon(date: nextDay.instant, amount: flows.reduce(0) { $0 + $1.amount },
+            payer: flows.count == 1 ? (first.bond?.name ?? "-") : "Multiple")
     }
 }

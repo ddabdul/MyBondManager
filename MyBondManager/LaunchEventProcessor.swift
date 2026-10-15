@@ -26,7 +26,7 @@ enum LaunchEventProcessor {
                 record.eventKey = payment.identity
                 let kind = payment.kind == .maturity ? "Matured" : "Coupon"
                 let amount = Formatters.currency.string(from: NSNumber(value: payment.amount)) ?? String(payment.amount)
-                messages.append((date, "\(bond.name) at \(bond.depotBank): \(kind) \(amount) on \(Formatters.mediumDate.string(from: date))"))
+                messages.append((date, "\(bond.name) at \(bond.depotBank): \(kind) \(amount) on \(Formatters.marketMediumDate.string(from: date))"))
             }
         }
         return messages.sorted { $0.0 < $1.0 }.map { $0.1 }

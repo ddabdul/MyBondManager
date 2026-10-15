@@ -71,7 +71,7 @@ struct YearGroup: Identifiable {
                         let totalMonth = mes.reduce(0) { $0 + $1.amount }
                         return MonthGroup(
                             id:     period,
-                            label:  Formatters.monthYear.string(from: period),
+                            label:  Formatters.marketMonthYear.string(from: period),
                             total:  totalMonth,
                             events: mes.sorted { $0.date < $1.date }
                         )

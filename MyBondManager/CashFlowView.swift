@@ -35,7 +35,12 @@ struct CashFlowView: View {
 
     // — Build year/month groups
     private var yearGroups: [YearGroup] {
-        YearGroup.build(from: Array(cashFlows), calendar: .current)
+        let bonds = Set(cashFlows.compactMap(\.bond))
+        let allowed = Set(bonds.flatMap { bond -> [CashFlowEntity] in
+            do { return try BondEligibility.flows(bond, from: MarketDay(date: startDate), through: MarketDay(date: endDate)) }
+            catch { NSLog("Cannot validate cash-flow view: %@", error.localizedDescription); return [] }
+        }.map(\.objectID))
+        return YearGroup.build(from: cashFlows.filter { allowed.contains($0.objectID) }, calendar: MarketDay.calendar)
     }
 
     var body: some View {
@@ -288,7 +293,7 @@ fileprivate struct BondCardView: View {
     private var total: Double { events.reduce(0) { $0 + $1.amount } }
     private var depotBank: String { events.first?.depotBank ?? "–" }
     private var date: String {
-        Formatters.mediumDate.string(from: events.first?.date ?? Date())
+        Formatters.marketMediumDate.string(from: events.first?.date ?? Date())
     }
 
     private let order: [CashFlowEntity.Nature] = [.principal, .capitalGains, .interest]
