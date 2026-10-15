@@ -29,13 +29,29 @@ enum PositionsTransferValidation {
         }
         return issues
     }
+    static func bondIssues(_ transfer: PreparedBondTransfer, context: NSManagedObjectContext) throws -> [String] {
+        try BondTransfer.validate(transfer)
+        let stored = try BondTransfer.snapshot(from: context)
+        var issues: [String] = []
+        if try stored.bonds.map(normalized).sorted() != transfer.bonds.map(normalized).sorted() {
+            issues.append("Bond fields or cash flows differ.")
+        }
+        if let native = transfer.native {
+            let encoder = BondTransfer.encoder(), decoder = BondTransfer.decoder()
+            let current = try decoder.decode([BondTermsEntry].self, from: encoder.encode(stored.native!.bonds))
+            let byID: (BondTermsEntry, BondTermsEntry) -> Bool = { $0.id.uuidString < $1.id.uuidString }
+            if current.sorted(by: byID) != native.bonds.sorted(by: byID) { issues.append("Native bond terms or provenance differ.") }
+        }
+        return issues
+    }
+
     private static func encoded<T: Encodable>(_ value: T) throws -> String {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = .sortedKeys
         return try encoder.encode(value).base64EncodedString()
     }
-    private static func normalized(_ bond: BondCodable) throws -> String {
+    static func normalized(_ bond: BondCodable) throws -> String {
         // Nested rows are multisets; serialization normalizes dates to ISO-8601 seconds.
         let flows = try bond.cashFlows.map { try encoded($0) }.sorted()
         let fields = BondCodable(id: bond.id, name: bond.name, isin: bond.isin,

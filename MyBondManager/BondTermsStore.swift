@@ -87,6 +87,28 @@ enum BondTermsStore {
     static func projectedPayments(_ bond: BondEntity, from day: MarketDay) throws -> [BondPayment] {
         try validatedPreview(bond, from: day)?.payments ?? []
     }
+    static func captureLegacyAliases(_ bond: BondEntity, maturity: MarketDay? = nil,
+                                     legacyDateZone: String? = nil) throws -> [String: [String]] {
+        let zoneID = legacyDateZone ?? bond.termsLegacyDateZone ?? TimeZone.current.identifier
+        guard let zone = TimeZone(identifier: zoneID) else { throw PortfolioError("Invalid local legacy date time zone.") }
+        var calendar = MarketDay.calendar; calendar.timeZone = zone
+        var aliases = try legacyAliases(bond)
+        func retain(_ identity: String, _ date: Date, kind: String) {
+            let oldKey = "\(bond.id.uuidString)|\(kind)|\(Int(date.timeIntervalSince1970))"
+            aliases[identity] = Array(Set((aliases[identity] ?? []) + [oldKey])).sorted()
+        }
+        for flow in bond.cashFlowsArray where flow.natureEnum == .interest {
+            let identity = flow.eventIdentity ?? "\(bond.id.uuidString)|interest|\(MarketDay(date: flow.date, calendar: calendar).rawValue)"
+            retain(identity, flow.date, kind: "interest")
+        }
+        let prefix = bond.id.uuidString + "|maturity|"
+        let target = prefix + (maturity ?? MarketDay(date: bond.maturityDate, calendar: calendar)).rawValue
+        var priorKeys = Set(aliases[target] ?? [])
+        for (identity, keys) in aliases where identity.hasPrefix(prefix) { priorKeys.formUnion(keys); priorKeys.insert(identity) }
+        aliases[target] = priorKeys.sorted()
+        retain(target, bond.maturityDate, kind: "maturity")
+        return aliases
+    }
     static func historyIssue(for bond: BondEntity, payments: [BondPayment], before: Date,
                              context: NSManagedObjectContext) throws -> String? {
         let request = HistoricalValuation.fetchRequest()
@@ -105,9 +127,8 @@ enum BondTermsStore {
     }
     static func replaceProjections(for bond: BondEntity, terms: BondTerms, preview: BondSchedulePreview,
         now: Date, acquisitionDay: MarketDay, legacyDateZone: String, context: NSManagedObjectContext) throws {
-        guard let zone = TimeZone(identifier: legacyDateZone) else { throw PortfolioError("Invalid legacy date time zone.") }
+        guard TimeZone(identifier: legacyDateZone) != nil else { throw PortfolioError("Invalid legacy date time zone.") }
         let day = MarketDay(date: now)
-        var calendar = MarketDay.calendar; calendar.timeZone = zone
         let trade = BondTrade(id: bond.id, isin: ETFPurchase.normalizedISIN(bond.isin), nominal: bond.parValue,
             cost: bond.initialPrice, acquisitionDay: acquisitionDay, bank: bond.depotBank)
         let verified = try BondSchedule.preview(trade: trade, terms: terms, from: day)
@@ -119,17 +140,7 @@ enum BondTermsStore {
         if let issue = try historyIssue(for: bond, payments: verified.payments, before: now, context: context) {
             bond.termsReady = false; bond.termsIssue = issue; return
         }
-        var aliases = try legacyAliases(bond)
-        func retain(_ identity: String, _ date: Date, kind: String) {
-            let oldKey = "\(bond.id.uuidString)|\(kind)|\(Int(date.timeIntervalSince1970))"
-            aliases[identity] = Array(Set((aliases[identity] ?? []) + [oldKey])).sorted()
-        }
-        for flow in bond.cashFlowsArray where flow.natureEnum == .interest {
-            let identity = flow.eventIdentity ?? "\(bond.id.uuidString)|interest|\(MarketDay(date: flow.date, calendar: calendar).rawValue)"
-            retain(identity, flow.date, kind: "interest")
-        }
-        let oldMaturity = terms.maturity!
-        retain("\(bond.id.uuidString)|maturity|\(oldMaturity.rawValue)", bond.maturityDate, kind: "maturity")
+        let aliases = try captureLegacyAliases(bond, maturity: terms.maturity, legacyDateZone: legacyDateZone)
         let prior = try read(bond)
         if bond.eventsActivateAfter == nil || prior?.approvedAt != terms.approvedAt { bond.eventsActivateAfter = now }
         for flow in bond.cashFlowsArray where MarketDay(date: flow.date) >= day { context.delete(flow) }
