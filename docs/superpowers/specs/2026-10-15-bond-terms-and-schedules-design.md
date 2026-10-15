@@ -1,6 +1,6 @@
 # EUR bond terms and regular payment schedules
 
-Status: design discussed and approved in chat; this written specification awaits user review. No application implementation is authorized by this document alone.
+Status: design approved in chat; the user authorized the writing-plans stage on 2026-10-15 after receiving this specification. No application implementation is authorized by this document alone.
 
 ## Purpose
 
