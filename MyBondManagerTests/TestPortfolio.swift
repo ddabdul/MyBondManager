@@ -45,3 +45,22 @@ enum TestPortfolio {
         return holding
     }
 }
+
+extension TestPortfolio {
+    static func legacyBond(in context: NSManagedObjectContext, cost: Double = 1100, par: Double = 1000) -> BondEntity {
+        bond(in: context, cost: cost, par: par)
+    }
+    static func readyBond(in context: NSManagedObjectContext, terms: BondTerms, now: Date,
+                          nominal: Double = 1000, cost: Double = 900) throws -> BondEntity {
+        let bond = bond(in: context, cost: cost, par: nominal)
+        bond.acquisitionDate = date("2026-02-01T00:00:00Z")
+        var approved = terms; approved.approvedAt = terms.approvedAt ?? now
+        let day = try MarketDay("2026-02-01")
+        let trade = BondTrade(id: bond.id, isin: bond.isin, nominal: nominal, cost: cost, acquisitionDay: day, bank: bond.depotBank)
+        let preview = try BondSchedule.preview(trade: trade, terms: approved, from: MarketDay(date: now))
+        guard preview.assessment.supported else { throw PortfolioError(preview.assessment.reasons.joined(separator: "\n")) }
+        try BondTermsStore.replaceProjections(for: bond, terms: approved, preview: preview, now: now,
+            acquisitionDay: day, legacyDateZone: "Europe/Berlin", context: context)
+        return bond
+    }
+}

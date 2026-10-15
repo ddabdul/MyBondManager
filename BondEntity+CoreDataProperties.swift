@@ -26,6 +26,17 @@ extension BondEntity {
     @NSManaged public var wkn: String
     @NSManaged public var yieldToMaturity: Double
 
+    @NSManaged public var termsData: Data?
+    @NSManaged public var termsDraftData: Data?
+    @NSManaged public var termsReady: Bool
+    @NSManaged public var termsIssue: String?
+    @NSManaged public var termsAcquisitionDay: String?
+    @NSManaged public var termsLegacyDateZone: String?
+    @NSManaged public var termsEffectiveFrom: String?
+    @NSManaged public var eventsActivateAfter: Date?
+    @NSManaged public var redemptionPaymentDate: Date?
+    @NSManaged public var legacyEventAliasesData: Data?
+
     // Use Set<> instead of NSSet
     @NSManaged public var cashFlows: Set<CashFlowEntity>?
 }

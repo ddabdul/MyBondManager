@@ -11,6 +11,10 @@ extension CashFlowEntity {
         NSFetchRequest<CashFlowEntity>(entityName: "CashFlowEntity")
     }
 
+    @NSManaged public var contractualDay: String?
+    @NSManaged public var eventIdentity: String?
+    @NSManaged public var generatedFromTerms: Bool
+
     // MARK: – Stored Properties (must match your .xcdatamodeld exactly)
     @NSManaged public var date: Date
     @NSManaged public var amount: Double
