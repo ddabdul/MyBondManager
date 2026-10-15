@@ -21,7 +21,7 @@ extension CashFlowEntity {
     @NSManaged public var bond: BondEntity?
 
     // MARK: – Typed Nature Enum
-    public enum Nature: String, CaseIterable {
+    public enum Nature: String, CaseIterable, Codable, Sendable {
         case interest
         case principal
         case capitalGains

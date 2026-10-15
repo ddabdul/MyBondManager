@@ -14,3 +14,10 @@ enum BondTermsFixtures {
         return terms
     }
 }
+
+extension BondTermsFixtures {
+    static func trade(cost: Double = 100000) throws -> BondTrade {
+        BondTrade(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, isin: "DE0000000001",
+            nominal: 100000, cost: cost, acquisitionDay: try MarketDay("2026-02-01"), bank: "Bank")
+    }
+}
