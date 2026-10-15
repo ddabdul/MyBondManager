@@ -29,7 +29,6 @@ struct BondPortfolioManagerApp: App {
         let updater = ETFPriceUpdater(container: persistenceController.container)
         _priceUpdater = StateObject(wrappedValue: updater)
         if !isTesting { persistenceController.deleteEmptyETFs() }
- //       runHistoricalSnapshotOnce(context: context)
     }
 
     var body: some Scene {
@@ -75,18 +74,4 @@ struct BondPortfolioManagerApp: App {
         .defaultSize(width: 1200, height: 800)
     }
 
-    /// Runs a one-time snapshot of the current portfolio if not yet done
-//    private func runHistoricalSnapshotOnce(context: NSManagedObjectContext) {
-//        let key = "didRunInitialSnapshot"
-//        let hasRun = UserDefaults.standard.bool(forKey: key)
-//        guard !hasRun else { return }
-
- //       do {
- //           try HistoricalSnapshotService.snapshotCurrentPortfolio(context: context)
- //           UserDefaults.standard.set(true, forKey: key)
- //           print("✅ Initial historical snapshot recorded.")
- //       } catch {
- //           print("❌ Snapshot error: \(error)")
- //       }
- //   }
 }

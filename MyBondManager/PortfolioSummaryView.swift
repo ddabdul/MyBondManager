@@ -126,41 +126,13 @@ struct PortfolioSummaryView: View {
         filteredBonds.min { $0.maturityDate < $1.maturityDate }
     }
 
-    private func nextCouponDate(for bond: BondEntity) -> Date? {
-        let cal = Calendar.current
-        let comps = cal.dateComponents([.month, .day], from: bond.maturityDate)
-        let candidate = DateComponents(
-            year:  cal.component(.year, from: Date()),
-            month: comps.month,
-            day:   comps.day
-        )
-        guard let thisYear = cal.date(from: candidate) else { return nil }
-        return thisYear < Date()
-            ? cal.date(byAdding: .year, value: 1, to: thisYear)
-            : thisYear
-    }
-
     private var nextCouponInfo: String {
-        guard
-            let date = filteredBonds
-                .compactMap(nextCouponDate(for:))
-                .min()
-        else { return "–" }
-
-        let bonds = filteredBonds.filter { nextCouponDate(for: $0) == date }
-        let payer = bonds.count == 1
-            ? bonds.first!.name
-            : (bonds.isEmpty ? "–" : "Multiple")
-        let totalAmt = bonds.reduce(0) { sum, b in
-            sum + b.parValue * (b.couponRate / 100)
-        }
-        let totalStr = Formatters.currency
-            .string(from: NSNumber(value: totalAmt)) ?? "–"
-
+        guard let coupon = CashFlowSelection.nextCoupon(in: filteredBonds) else { return "–" }
+        let amount = Formatters.currency.string(from: NSNumber(value: coupon.amount)) ?? "–"
         return """
-        Payer: \(payer)
-        Date:  \(Formatters.mediumDate.string(from: date))
-        Total: \(totalStr)
+        Payer: \(coupon.payer)
+        Date:  \(Formatters.mediumDate.string(from: coupon.date))
+        Total: \(amount)
         """
     }
 

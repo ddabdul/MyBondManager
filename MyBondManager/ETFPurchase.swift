@@ -24,12 +24,14 @@ enum ETFPurchase {
             guard let existing = try context.existingObject(with: existingID) as? ETFEntity else {
                 throw PortfolioError("The selected ETF no longer exists.")
             }
+            try HistoricalDataRecorder.validateETFTransactionDate(isin: existing.isin, date: date, context: context)
             etf = existing
         } else {
             let normalized = normalizedISIN(isin)
             guard !normalized.isEmpty, let header, header.price.isFinite, header.price > 0 else {
                 throw PortfolioError("Fetch valid instrument data before saving.")
             }
+            try HistoricalDataRecorder.validateETFTransactionDate(isin: normalized, date: date, context: context)
             let matches = try context.fetch(ETFEntity.fetchRequest()).filter {
                 normalizedISIN($0.isin) == normalized
             }

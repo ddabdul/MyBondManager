@@ -9,79 +9,6 @@ import CoreData
 
 // MARK: – Model types & builder
 
-fileprivate struct CouponEvent: Identifiable {
-    let id = UUID()
-    let bondName: String
-    let depotBank: String
-    let date: Date
-    let amount: Double
-    let nature: CashFlowEntity.Nature
-}
-
-fileprivate struct MonthGroup: Identifiable {
-    let id: Date
-    let label: String      // "MM/yy"
-    let total: Double      // excludes capitalLoss
-    let events: [CouponEvent]
-}
-
-fileprivate struct YearGroup: Identifiable {
-    let id: Int
-    let label: String      // "YYYY"
-    let total: Double      // excludes capitalLoss
-    let months: [MonthGroup]
-
-    static func build(
-        from cashFlows: [CashFlowEntity],
-        calendar: Calendar
-    ) -> [YearGroup] {
-        let events = cashFlows.compactMap { cf -> CouponEvent? in
-            guard cf.natureEnum != .capitalLoss else { return nil }
-            return CouponEvent(
-                bondName:  cf.bond?.name      ?? "–",
-                depotBank: cf.bond?.depotBank ?? "–",
-                date:      cf.date,
-                amount:    cf.amount,
-                nature:    cf.natureEnum
-            )
-        }
-
-        let byYear = Dictionary(grouping: events) {
-            calendar.component(.year, from: $0.date)
-        }
-
-        return byYear
-            .map { year, evts in
-                let totalYear = evts.reduce(0) { $0 + $1.amount }
-
-                let byMonth = Dictionary(grouping: evts) { evt in
-                    let comps = calendar.dateComponents([.year, .month], from: evt.date)
-                    return calendar.date(from: comps)!
-                }
-
-                let monthGroups = byMonth
-                    .map { period, mes in
-                        let totalMonth = mes.reduce(0) { $0 + $1.amount }
-                        return MonthGroup(
-                            id:     period,
-                            label:  Formatters.monthYear.string(from: period),
-                            total:  totalMonth,
-                            events: mes.sorted { $0.date < $1.date }
-                        )
-                    }
-                    .sorted { $0.id < $1.id }
-
-                return YearGroup(
-                    id:     year,
-                    label:  String(year),
-                    total:  totalYear,
-                    months: monthGroups
-                )
-            }
-            .sorted { $0.id < $1.id }
-    }
-}
-
 // MARK: – CashFlowView
 
 struct CashFlowView: View {
@@ -97,7 +24,9 @@ struct CashFlowView: View {
     @State private var endDate   = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
 
     // — Core Data fetched array
-    @State private var cashFlowsArray: [CashFlowEntity] = []
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)],
+                  predicate: NSPredicate(value: false), animation: .default)
+    private var cashFlows: FetchedResults<CashFlowEntity>
 
     // — Pickable natures
     private let natures: [CashFlowEntity.Nature] = [
@@ -106,7 +35,7 @@ struct CashFlowView: View {
 
     // — Build year/month groups
     private var yearGroups: [YearGroup] {
-        YearGroup.build(from: cashFlowsArray, calendar: .current)
+        YearGroup.build(from: Array(cashFlows), calendar: .current)
     }
 
     var body: some View {
@@ -187,42 +116,8 @@ struct CashFlowView: View {
     // MARK: – Fetch Logic
 
     private func fetchCashFlows() {
-        let req: NSFetchRequest<CashFlowEntity> = CashFlowEntity.fetchRequest()
-        var predicates: [NSPredicate] = [
-            NSPredicate(format: "bond.maturityDate >= %@", Date() as NSDate),
-            NSPredicate(format: "date >= %@",              startDate as NSDate),
-            NSPredicate(format: "date <= %@",              endDate   as NSDate),
-            NSPredicate(format: "nature != %@",             CashFlowEntity.Nature.expectedProfit.rawValue)
-        ]
-
-        if !searchText.isEmpty {
-            predicates.append(
-                NSPredicate(format: "bond.name CONTAINS[cd] %@", searchText)
-            )
-        }
-        if let nat = selectedNature {
-            predicates.append(
-                NSPredicate(format: "nature == %@", nat.rawValue)
-            )
-        }
-        // Filter by selected depot bank:
-        if selectedDepotBank != "All" {
-            predicates.append(
-                NSPredicate(format: "bond.depotBank == %@", selectedDepotBank)
-            )
-        }
-
-        req.predicate       = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
-        req.sortDescriptors = [
-            NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)
-        ]
-
-        do {
-            cashFlowsArray = try moc.fetch(req)
-        } catch {
-            print("❗️ Failed to fetch filtered cash-flows:", error)
-            cashFlowsArray = []
-        }
+        cashFlows.nsPredicate = CashFlowSelection.predicate(searchText: searchText, nature: selectedNature,
+            bank: selectedDepotBank, start: startDate, end: endDate)
     }
 }
 
@@ -369,15 +264,8 @@ fileprivate struct MonthBlock: View {
             }
 
             if stage == 2 {
-                let byBond = Dictionary(grouping: monthGroup.events) { $0.bondName }
-                let sortedBonds = byBond
-                    .map { (name: $0.key, events: $0.value) }
-                    .sorted { lhs, rhs in
-                        lhs.events.first!.date < rhs.events.first!.date
-                    }
-
                 VStack(spacing: 6) {
-                    ForEach(sortedBonds, id: \.name) { entry in
+                    ForEach(monthGroup.bondGroups) { entry in
                         BondCardView(bondName: entry.name, events: entry.events)
                     }
                 }

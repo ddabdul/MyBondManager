@@ -6,6 +6,7 @@ enum ETFSale {
         guard shares > 0, executionPrice.isFinite, executionPrice > 0, date <= Date() else {
             throw PortfolioError("Enter positive shares, a valid execution price and a sale date no later than today.")
         }
+        try HistoricalDataRecorder.validateETFTransactionDate(isin: etf.isin, date: date, context: context)
         let lots = (etf.etftoholding as? Set<ETFHoldings> ?? []).sorted {
             if $0.acquisitionDate != $1.acquisitionDate { return $0.acquisitionDate < $1.acquisitionDate }
             return $0.objectID.uriRepresentation().absoluteString < $1.objectID.uriRepresentation().absoluteString

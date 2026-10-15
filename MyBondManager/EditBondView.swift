@@ -120,6 +120,20 @@ struct EditBondView: View {
             guard let entity = try context.existingObject(with: bondID) as? BondEntity else {
                 throw PortfolioError("The bond no longer exists.")
             }
+            guard entity.id == values.id else { throw PortfolioError("The bond identity cannot be changed.") }
+            let financialChange = entity.parValue != values.parValue || entity.initialPrice != values.initialPrice
+                || entity.couponRate != values.couponRate || entity.depotBank != values.depotBank
+                || entity.acquisitionDate != values.acquisitionDate || entity.maturityDate != values.maturityDate
+            if financialChange {
+                let history = HistoricalValuation.fetchRequest()
+                history.predicate = NSPredicate(format:
+                    "assetType == %@ AND (eventKey BEGINSWITH %@ OR eventKey == nil OR eventKey == '')",
+                    AssetType.bond.rawValue, entity.id.uuidString + "|")
+                history.fetchLimit = 1
+                guard try context.count(for: history) == 0 else {
+                    throw PortfolioError("Financial values, dates and bank cannot be changed while related or unlinked legacy bond history exists. Descriptive fields can still be edited; history corrections need a separate reconciliation.")
+                }
+            }
             entity.id = values.id; entity.name = values.name; entity.isin = values.isin
             entity.issuer = values.issuer; entity.depotBank = values.depotBank
             entity.acquisitionDate = values.acquisitionDate; entity.maturityDate = values.maturityDate

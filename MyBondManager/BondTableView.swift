@@ -210,11 +210,14 @@ struct BondTableView: View {
 struct BondSummaryDetailView: View {
     let summary: BondSummary
     @Environment(\.managedObjectContext) private var moc
+    @Environment(\.portfolioContainer) private var portfolioContainer
     @Environment(\.dismiss) private var dismiss
 
     @State private var editingBond: BondEntity?
     @State private var showDeleteAlert = false
     @State private var bondToDelete: BondEntity?
+    @State private var isDeleting = false
+    @State private var deletionError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -240,6 +243,7 @@ struct BondSummaryDetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if let deletionError { Text(deletionError).foregroundColor(.red) }
                     Divider()
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -290,6 +294,7 @@ struct BondSummaryDetailView: View {
                 .padding()
             }
         }
+        .disabled(isDeleting)
         .frame(minWidth: 400, minHeight: 300)
         .popover(item: $editingBond, arrowEdge: .top) { bond in
             EditBondView(bond: bond)
@@ -299,15 +304,28 @@ struct BondSummaryDetailView: View {
         }
         .alert("Delete this record?", isPresented: $showDeleteAlert, presenting: bondToDelete) { bond in
             Button("Delete", role: .destructive) {
-                dismiss()
-                DispatchQueue.main.async {
-                    moc.delete(bond)
-                    try? moc.save()
-                }
+                deleteBond(bond)
             }
             Button("Cancel", role: .cancel) {}
         } message: { bond in
             Text("This will permanently remove the bond acquired on \(Formatters.shortDate.string(from: bond.acquisitionDate)).")
+        }
+    }
+
+    private func deleteBond(_ bond: BondEntity) {
+        guard !isDeleting else { return }
+        guard let container = portfolioContainer else {
+            deletionError = "Portfolio store is unavailable."
+            return
+        }
+        let id = bond.objectID
+        isDeleting = true; deletionError = nil
+        Task { @MainActor in
+            defer { isDeleting = false }
+            do {
+                try await PortfolioTransaction.run(in: container) { try BondDeletion.stage(ids: [id], context: $0) }
+                dismiss()
+            } catch { deletionError = "Could not delete bond: \(error.localizedDescription)" }
         }
     }
 }

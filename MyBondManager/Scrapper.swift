@@ -75,6 +75,7 @@ private struct INGBondInterestRatesResponse: Decodable {
 
 @available(macOS 13.0, *)
 public class BondDataScraper {
+    private let session: URLSession
     private let decoder = JSONDecoder()
     private let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -83,13 +84,13 @@ public class BondDataScraper {
         return f
     }()
 
-    public init() {}
+    public init(session: URLSession = .shared) { self.session = session }
 
     public func fetchNameAndWKN(isin: String) async throws -> (name: String, wkn: String) {
         guard let url = URL(string: "https://component-api.wertpapiere.ing.de/api/v1/components/localheader/\(isin)") else {
             throw ScrapError.invalidURL
         }
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw ScrapError.httpError(http.statusCode)
         }
@@ -101,7 +102,7 @@ public class BondDataScraper {
         guard let url = URL(string: "https://component-api.wertpapiere.ing.de/api/v1/bond/masterdata/\(isin)?assetClass=Bond") else {
             throw ScrapError.invalidURL
         }
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw ScrapError.httpError(http.statusCode)
         }
@@ -113,13 +114,15 @@ public class BondDataScraper {
         guard let url = URL(string: "https://component-api.wertpapiere.ing.de/api/v1/bond/dates/\(isin)") else {
             throw ScrapError.invalidURL
         }
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw ScrapError.httpError(http.statusCode)
         }
         let decoded = try decoder.decode(INGBondDatesResponse.self, from: data)
-        guard let issue = dateFormatter.date(from: String(decoded.issueDate.value.split(separator: "T").first!)),
-              let maturity = dateFormatter.date(from: String(decoded.maturityDate.value.split(separator: "T").first!)) else {
+        guard let issuePart = decoded.issueDate.value.split(separator: "T").first,
+              let maturityPart = decoded.maturityDate.value.split(separator: "T").first,
+              let issue = dateFormatter.date(from: String(issuePart)),
+              let maturity = dateFormatter.date(from: String(maturityPart)) else {
             throw ScrapError.dateParsingError("Invalid date format")
         }
         return (issue, maturity)
@@ -129,7 +132,7 @@ public class BondDataScraper {
         guard let url = URL(string: "https://component-api.wertpapiere.ing.de/api/v1/bond/interestrates/\(isin)") else {
             throw ScrapError.invalidURL
         }
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw ScrapError.httpError(http.statusCode)
         }

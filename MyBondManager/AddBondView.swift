@@ -13,24 +13,15 @@ struct AddBondViewAsync: View {
     @State private var isSaving = false
     @Environment(\.dismiss) private var dismiss: DismissAction // Explicitly specify DismissAction
     @Environment(\.managedObjectContext) private var moc
-    private let scraper = BondDataScraper()
+    @StateObject private var collection = BondCollection()
 
     // MARK: – Inputs
-    @State private var isin                  = ""
     @State private var acquisitionDate = Date()
     @State private var parValueStr         = ""
     @State private var acquisitionPrice = ""
     @State private var depotBank           = ""
 
-    // MARK: – Scraped Data
-    @State private var name                  = ""
-    @State private var issuer                = ""
-    @State private var wkn                   = ""
-    @State private var maturityDate          = Date()
-    @State private var couponRateStr       = ""
-
-    @State private var isLoading             = false
-    @State private var errorMessage          = ""
+    @State private var errorMessage = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -58,8 +49,8 @@ struct AddBondViewAsync: View {
 
             Form {
                 Section("Please enter the required information") {
-                    TextField("ISIN", text: $isin)
-                        .onSubmit { isin = isin.uppercased() }
+                    TextField("ISIN", text: $collection.isin)
+                        .onSubmit { collection.isin = ETFPurchase.normalizedISIN(collection.isin) }
                     DatePicker("Acquisition Date", selection: $acquisitionDate, displayedComponents: .date)
                     TextField("Par Value", text: $parValueStr)
                     TextField("Acquisition Price", text: $acquisitionPrice)
@@ -67,21 +58,21 @@ struct AddBondViewAsync: View {
                 }
 
                 Section("Automaticly collected") {
-                    TextField("Bond Name", text: $name)
+                    TextField("Bond Name", text: .constant(collection.details?.name ?? ""))
                         .disabled(true)
-                    TextField("Issuer", text: $issuer)
+                    TextField("Issuer", text: .constant(collection.details?.issuer ?? ""))
                         .disabled(true)
-                    TextField("WKN", text: $wkn)
+                    TextField("WKN", text: .constant(collection.details?.wkn ?? ""))
                         .disabled(true)
-                    DatePicker("Maturity Date", selection: $maturityDate, displayedComponents: .date)
+                    DatePicker("Maturity Date", selection: .constant(collection.details?.maturityDate ?? Date()), displayedComponents: .date)
                         .disabled(true)
-                    TextField("Coupon Rate (%)", text: $couponRateStr)
+                    TextField("Coupon Rate (%)", text: .constant(collection.details.map { String($0.couponRate) } ?? ""))
                         .disabled(true)
                 }
 
-                if !errorMessage.isEmpty {
+                if !errorMessage.isEmpty || !collection.errorMessage.isEmpty {
                     Section {
-                        Text(errorMessage)
+                        Text(errorMessage.isEmpty ? collection.errorMessage : errorMessage)
                             .foregroundColor(.red)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -94,14 +85,14 @@ struct AddBondViewAsync: View {
                         Button("Collect Data") {
                             startScrape()
                         }
-                        .disabled(isLoading || isin.isEmpty)
+                        .disabled(collection.isLoading || collection.isin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                         Button("Save") {
                             saveBond()
                         }
                         .keyboardShortcut(.defaultAction)
                         .disabled(
-                            isSaving || isLoading || name.isEmpty || issuer.isEmpty || wkn.isEmpty ||
+                            isSaving || collection.isLoading || collection.details == nil ||
                             parValueStr.isEmpty || acquisitionPrice.isEmpty || depotBank.isEmpty
                         )
                     }
@@ -112,10 +103,9 @@ struct AddBondViewAsync: View {
         }
         .background(AppTheme.panelBackground) // Set panelBackground for the overall background
         // Remove the explicit frame to fit content
- //       .disabled(isLoading)
         .overlay(
             Group {
-                if isLoading {
+                if collection.isLoading {
                     Color.black.opacity(0.3).ignoresSafeArea()
                     ProgressView("Scraping…")
                         .padding(20)
@@ -128,33 +118,8 @@ struct AddBondViewAsync: View {
     }
 
     private func startScrape() {
-        DispatchQueue.main.async {
-            isLoading = true
-            errorMessage = ""
-        }
-
-        Task {
-            do {
-                let (scrapedName, scrapedWKN) = try await scraper.fetchNameAndWKN(isin: isin)
-                let scrapedIssuer                  = try await scraper.fetchIssuer(isin: isin)
-                let dates                          = try await scraper.fetchDates(isin: isin)
-                let scrapedCoupon                  = try await scraper.fetchCouponRate(isin: isin)
-
-                DispatchQueue.main.async {
-                    name            = scrapedName
-                    wkn             = scrapedWKN
-                    issuer          = scrapedIssuer
-                    maturityDate    = dates.maturity
-                    couponRateStr   = String(format: "%.2f", scrapedCoupon)
-                    isLoading       = false
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    errorMessage = error.localizedDescription
-                    isLoading    = false
-                }
-            }
-        }
+        errorMessage = ""
+        Task { await collection.collect() }
     }
 
     private func saveBond() {
@@ -162,19 +127,22 @@ struct AddBondViewAsync: View {
             errorMessage = "Portfolio store is unavailable."
             return
         }
-        guard let nominal = Double(parValueStr), nominal.isFinite, nominal > 0,
+        guard let details = collection.details,
+              let nominal = Double(parValueStr), nominal.isFinite, nominal > 0,
               let cost = Double(acquisitionPrice), cost.isFinite, cost > 0,
-              let rate = Double(couponRateStr), rate.isFinite, rate >= 0,
-              acquisitionDate <= maturityDate else {
+              details.couponRate.isFinite, details.couponRate >= 0,
+              acquisitionDate <= details.maturityDate else {
             errorMessage = "Enter positive nominal and purchase cost, a nonnegative coupon, and valid dates."
             return
         }
+        let rate = details.couponRate
+        let maturityDate = details.maturityDate
         let years = maturityDate.timeIntervalSince(acquisitionDate) / (365 * 24 * 3600)
         let ytm = years > 0 ? ((nominal * rate / 100 + (nominal - cost) / years) / ((nominal + cost) / 2)) * 100 : 0
-        let values = BondCodable(id: UUID(), name: name, isin: isin,
-            issuer: issuer, depotBank: depotBank, acquisitionDate: acquisitionDate,
+        let values = BondCodable(id: UUID(), name: details.name, isin: ETFPurchase.normalizedISIN(collection.isin),
+            issuer: details.issuer, depotBank: depotBank, acquisitionDate: acquisitionDate,
             maturityDate: maturityDate, couponRate: rate, parValue: nominal, initialPrice: cost,
-            yieldToMaturity: ytm, wkn: wkn, cashFlows: [])
+            yieldToMaturity: ytm, wkn: details.wkn, cashFlows: [])
         isSaving = true; errorMessage = ""
         Task { @MainActor in
             defer { isSaving = false }

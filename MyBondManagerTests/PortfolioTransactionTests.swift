@@ -63,6 +63,31 @@ final class PortfolioTransactionTests: XCTestCase {
         await fulfillment(of: [merged], timeout: 5)
         XCTAssertEqual(bond.cashFlowsArray.count, 1)
     }
+
+    func testRecalculationReplacesLoadedCashFlowRows() async throws {
+        let container = try TestPortfolio.make()
+        let context = container.viewContext
+        let bond = TestPortfolio.bond(in: context)
+        bond.couponRate = 3.375
+        try CashFlowGenerator(context: context).regenerateCashFlows(for: bond)
+        try context.save()
+        let oldIDs = Set(bond.cashFlowsArray.map(\.objectID))
+        XCTAssertFalse(oldIDs.isEmpty)
+        let merged = expectation(description: "Regenerated cash flows merge")
+        let token = NotificationCenter.default.addObserver(forName: .NSManagedObjectContextDidMergeChangesObjectIDs,
+            object: context, queue: .main) { _ in merged.fulfill() }
+        defer { NotificationCenter.default.removeObserver(token) }
+        let id = bond.objectID
+        try await PortfolioTransaction.run(in: container) { operation in
+            let stored = try XCTUnwrap(operation.existingObject(with: id) as? BondEntity)
+            try CashFlowGenerator(context: operation).regenerateCashFlows(for: stored)
+        }
+        await fulfillment(of: [merged], timeout: 5)
+        let rows = bond.cashFlowsArray
+        XCTAssertEqual(rows.count, oldIDs.count)
+        XCTAssertTrue(oldIDs.isDisjoint(with: Set(rows.map(\.objectID))))
+        XCTAssertTrue(rows.filter { $0.natureEnum == .interest }.allSatisfy { $0.amount == 33.75 })
+    }
     func testEditFormPersistenceActionUsesInjectedContainer() async throws {
         let container = try TestPortfolio.make()
         let bond = TestPortfolio.bond(in: container.viewContext, cost: 900)

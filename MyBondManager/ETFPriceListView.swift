@@ -5,7 +5,6 @@
 
 import SwiftUI
 import CoreData
-import Algorithms    // for the “sorted(using:)” extension
 
 @available(macOS 13.0, *)
 struct ETFPriceListView: View {

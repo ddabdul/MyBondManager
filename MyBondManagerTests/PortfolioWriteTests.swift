@@ -4,6 +4,26 @@ import CoreData
 
 @MainActor
 final class PortfolioWriteTests: XCTestCase {
+    func testFinancialEditCannotContradictAcquisitionHistory() async throws {
+        let container = try TestPortfolio.make()
+        let context = container.viewContext
+        let bond = TestPortfolio.bond(in: context, cost: 900)
+        try HistoricalDataRecorder.recordBondAcquisition(bond: bond, context: context)
+        try context.save()
+        let original = try XCTUnwrap(ExportManager.snapshot(from: context).bonds.first)
+        let changed = BondCodable(id: original.id, name: original.name, isin: original.isin,
+            issuer: original.issuer, depotBank: original.depotBank, acquisitionDate: original.acquisitionDate,
+            maturityDate: original.maturityDate, couponRate: original.couponRate, parValue: 2000,
+            initialPrice: 1800, yieldToMaturity: 0, wkn: original.wkn, cashFlows: [])
+        do {
+            try await EditBondView.persistChanges(bondID: bond.objectID, values: changed, in: container)
+            XCTFail("Expected history protection")
+        } catch {}
+        let reader = container.newBackgroundContext()
+        let nominal = try await reader.perform { try reader.fetch(BondEntity.fetchRequest()).first?.parValue }
+        XCTAssertEqual(nominal, 1000)
+    }
+
     func testRecorderAndGeneratorDoNotSaveTheirCallerContext() throws {
         let container = try TestPortfolio.make()
         let context = container.viewContext
