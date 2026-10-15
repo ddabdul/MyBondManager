@@ -21,3 +21,11 @@ extension BondTermsFixtures {
             nominal: 100000, cost: cost, acquisitionDay: try MarketDay("2026-02-01"), bank: "Bank")
     }
 }
+
+extension BondTermsFixtures {
+    static func details() throws -> BondDetails {
+        let terms = try fixed()
+        return BondDetails(name: "EUR note", wkn: "TEST01", issuer: "Issuer", maturityDate: terms.maturity?.instant,
+            couponRate: terms.couponRate, terms: terms)
+    }
+}
