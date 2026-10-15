@@ -4,6 +4,23 @@ import CoreData
 
 @MainActor
 final class PositionsTransferTests: XCTestCase {
+    func testExportFolderShowsLocalDateAndPreservesRepeatedExports() async throws {
+        let container = try TestPortfolio.make()
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = try await ExportManager().exportAll(to: root, from: container.viewContext)
+        let second = try await ExportManager().exportAll(to: root, from: container.viewContext)
+        for folder in [first, second] {
+            XCTAssertNotNil(folder.lastPathComponent.range(
+                of: #"^positions-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(-\d+)?$"#,
+                options: .regularExpression))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("bonds.json").path))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("etfs.json").path))
+        }
+        XCTAssertNotEqual(first, second)
+    }
+
     func testExportDoesNotOverwritePreviouslyPublishedFiles() async throws {
         let container = try TestPortfolio.make()
         _ = TestPortfolio.bond(in: container.viewContext)

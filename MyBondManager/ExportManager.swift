@@ -30,7 +30,17 @@ public class ExportManager {
             let etfs = try encoder.encode(snapshot.etfs)
             let identifier = UUID().uuidString
             let staging = folderURL.appendingPathComponent(".positions-" + identifier)
-            let published = folderURL.appendingPathComponent("positions-" + identifier)
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+            let name = "positions-" + formatter.string(from: Date())
+            var published = folderURL.appendingPathComponent(name)
+            var suffix = 2
+            while FileManager.default.fileExists(atPath: published.path) {
+                published = folderURL.appendingPathComponent("\(name)-\(suffix)")
+                suffix += 1
+            }
             try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
             do {
                 try self.write(bonds, staging.appendingPathComponent("bonds.json"))

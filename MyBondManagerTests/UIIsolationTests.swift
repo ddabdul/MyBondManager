@@ -28,7 +28,9 @@ final class UIIsolationTests: XCTestCase {
         let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let image = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-        try image.write(to: URL(fileURLWithPath: "/tmp/mybond-portfolio-preview.png"))
+        let preview = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+        defer { try? FileManager.default.removeItem(at: preview) }
+        try image.write(to: preview)
         XCTAssertGreaterThan(image.count, 1000)
     }
 }

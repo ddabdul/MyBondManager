@@ -1,6 +1,6 @@
 # Current Positions Transfer
 
-Export Positions creates a new `positions-<UUID>` directory in the selected folder. The directory contains `bonds.json` and `etfs.json`, using the existing JSON layout. Both files are written before the directory is published; an error leaves older exports intact.
+Export Positions creates a new directory named with the local export date and time, such as `positions-2026-10-15_14-30-05`, in the selected folder. If the name already exists, a numeric suffix is added (`-2`, `-3`, etc.). The directory contains `bonds.json` and `etfs.json`, using the existing JSON layout. Both files are written before the directory is published; an error leaves older exports intact.
 
 The files contain current bond records and their projected cash flows, plus ETF holdings and price history. **They do not contain historical acquisition, coupon, maturity, or sale records. This is not a complete backup.**
 
