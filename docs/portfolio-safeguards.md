@@ -1,25 +1,39 @@
 # Portfolio safeguards
 
-QuantLib remains deferred. Bond calculations retain the annual coupon schedule and approximate yield formula.
+QuantLib remains parked. The app supports reviewed regular EUR fixed-rate annual, semiannual and quarterly schedules, plus zero-coupon redemption. Yield remains an explicitly labeled Estimated YTM, using actual redemption rather than an exact pricing/yield solver.
 
-## Bond entry and changes
+## First review and subsequent refreshes
 
-Collected bond details belong to the normalized ISIN requested. Changing the ISIN clears them, and late responses cannot restore obsolete details. Coupon rates retain their full precision when stored and used for cash flows.
+The additive V3 migration retains positions, existing cash-flow rows and financial history. Existing bonds initially need review: their invested capital remains visible, while unverified payments are omitted from forecasts and automatic recording. No ING collection runs during schema migration or normal launch.
 
-Financial values, acquisition/maturity dates, and bank cannot be changed when identified history for that bond exists. Descriptive corrections remain available. Older history did not identify its bond, so any unlinked legacy bond history conservatively protects financial changes to all bonds. The save error explains this restriction. Bonds with no related or ambiguous history remain editable.
+Open **Review Terms**, select unresolved holdings, and choose **Collect missing terms**. Each selected ISIN is fetched once per collection batch; separate purchases retain their own trade values, draft, approval and readiness. Successful drafts survive another ISIN's failure and resume after reopening. Collect missing terms skips saved drafts; **Refresh selected from ING** explicitly requests another collection. Confirmed overrides and known unsupported restrictions are retained.
 
-New bond acquisitions identify the bond through the existing optional history event key. Existing history is never rewritten automatically. A future correction/reconciliation feature is needed for financial changes that would affect recorded history.
+Inspect current versus proposed coupon/maturity, the acquisition-day interpretation, terms and dated payments. Correct fields as needed, choose **Save draft and preview**, then **Apply Selected Terms**. Missing values remain missing. An incomplete holding can remain Needs review; no annual frequency or callable status is invented. A changed holding or a preview spanning midnight requires a fresh preview. Applying a selected batch uses one isolated transaction; a failed member or save rolls back the batch and retains the drafts.
 
-## ETF transaction dates
+New entry can save a holding as Needs review once its required purchase/coupon/maturity values are supplied, or save reviewed supported terms with approval. Ordinary trade edits with no protected history invalidate approval and retain terms as an unapproved draft. Instrument changes with related history remain blocked.
 
-Enter purchases and sales in chronological day order for each ISIN. A purchase or sale dated before a recorded sale is rejected before holdings change. This prevents later entry of a backdated trade from assigning gains to the wrong period.
+## Supported terms and conventions
 
-New sale-history rows identify the normalized ISIN through the existing event key. Their cutoff survives removing an empty ETF and re-entering it, or replacing positions by import. Earlier unlinked legacy sales impose a conservative date cutoff across all ETFs because the original instrument cannot be determined safely. Transactions on the same local calendar day are allowed; these forms record transaction days, not intraday execution ordering.
+Readiness requires validated EUR terms, a supported structure, finite financial values, positive redemption percentage and known callable status. Fixed schedules also require supported frequency, regular accrual boundaries and a consistent next-coupon checkpoint. An aged checkpoint is compared with its original observation day. Ambiguous month-end rolls and irregular periods need review; floating, indexed, perpetual and amortizing structures are outside this phase.
 
-## Deletion and cash-flow display
+The approved defaults are Actual/Actual (ICMA), TARGET and Following, each marked assumed until confirmed. These are application defaults, not universal terms for every Eurobond. Other conventions can be retained explicitly, but do not produce Ready forecasts in this version. Known unsupported provider restrictions cannot be erased by changing a structure label.
 
-Bond deletions use one isolated save, cascade to projected cash flows, and retain historical records. A failed deletion leaves the database intact and reports an error instead of appearing to succeed.
+Contractual accrual boundaries remain unadjusted. Coupons for a regular period equal nominal times annual coupon rate divided by frequency; buying within the period does not prorate the next coupon by ownership days. Payment delay adds no interest. Redemption equals nominal times redemption percentage divided by 100. Zero-coupon bonds produce no coupon events, regardless of incidental provider frequency/date fields. Callable bonds use contractual maturity with an **Early redemption is not modeled** warning.
 
-Cash-flow filters include entire selected days, including bonds maturing today. The screen observes inserted and deleted cash flows, so recalculation replaces its displayed rows. Cards group by position identity, keeping identically named positions at different banks separate. Next Coupon uses positive persisted interest payments bounded by acquisition and maturity; zero coupons and dates after redemption cannot become the next payment.
+## Forecasts, dates and financial history
 
-Positions JSON remains unchanged. It is still a transfer of current positions, not a full backup, and it does not carry the history used by these safeguards to a new installation.
+Instrument days use explicit calendar dates and Europe/Berlin payment instants. TARGET weekends/holidays move payments forward. Contractual maturity and redemption payment are distinct: an approved holding remains active through its adjusted redemption day, including a delayed final coupon. Cash-flow filters include whole selected market days. Next Coupon and Next Redemption use approved validated payments; missing yield estimates are excluded from the weighted yield.
+
+Unresolved holdings remain visible with their capital and exclusion count. Grouped holdings retain every purchase and indicate mixed readiness. Legacy unverified rows remain stored but are not forecast. Analytical expected-profit and signed-loss rows are not additional cash receipts.
+
+Terms approval/recalculation preserves past-day cash-flow values and every recorded historical row. Trade nominal, cost, acquisition instant and bank are not rewritten by terms approval. Ordinary edits to instrument identity, financial values, dates or bank are blocked when related keyed or ambiguous unlinked bond history exists; descriptive corrections remain available.
+
+Economic payment keys use holding UUID, event kind and contractual day. Safe aliases retain exact local legacy keys before projections/import replacement; old rows and keys are not rewritten. Recalculation retains approval and activation. Approval or native import activates automatic recording prospectively at the actual local operation instant: past and earlier-today payments are never claimed as newly received. A failed event save cannot advance the launch checkpoint.
+
+Ambiguous unlinked legacy receipts overlapping a revised payment window require history review rather than automatic attribution or a possible duplicate. Historical reconciliation remains a separate feature; this phase does not repair old records.
+
+## ETF transaction dates and deletion
+
+ETF behavior is unchanged. Enter purchases and sales in chronological local-day order per ISIN. Recorded keyed sale cutoffs survive deletion/import; older unlinked sales conservatively protect all ETFs. Same-day transactions are allowed. Daily ETF history stores the latest successful quote for that local day, and sale history uses entered execution price/date.
+
+Bond deletion is isolated and atomic, cascades projected rows and preserves history. A failed save leaves persisted data intact. Current-position transfers are not history backups; see [positions-transfer.md](positions-transfer.md).

@@ -1,15 +1,35 @@
-# Current Positions Transfer
+# Current positions transfer
 
-Export Positions creates a new directory named with the local export date and time, such as `positions-2026-10-15_14-30-05`, in the selected folder. If the name already exists, a numeric suffix is added (`-2`, `-3`, etc.). The directory contains `bonds.json` and `etfs.json`, using the existing JSON layout. Both files are written before the directory is published; an error leaves older exports intact.
+Both export actions create a new local-time directory such as `positions-2026-10-15_14-30-05`, adding `-2`, `-3`, etc. for collisions. Files are staged together and the directory is published only after every write succeeds. Failed writes preserve previous exports. Save pending portfolio changes before exporting.
 
-The files contain current bond records and their projected cash flows, plus ETF holdings and price history. **They do not contain historical acquisition, coupon, maturity, or sale records. This is not a complete backup.**
+## Bonds for the webapp and another Mac
 
-Import Positions decodes and validates both files before asking for replacement confirmation. Confirmation shows the counts from that prepared payload. After confirmation, the same payload replaces all current bond and ETF positions; changes to the files while the dialog is open do not change what is applied. Cancelling changes nothing. Empty arrays intentionally clear that category.
+Choose **Export > Export Bonds (webapp + Mac)**. The folder contains exactly:
 
-Existing destination history is retained unchanged. Import does not restore, reconstruct, or replay history. As a result, retained history can describe positions that are no longer present. Live launch processing continues from its existing checkpoint.
+- `bonds.json`: the existing webapp root array and legacy position/cash-flow schema, including whole-second ISO-8601 dates. No native fields were added.
+- `bond-terms.json`: version-1 native terms linked by holding UUID and normalized ISIN, including convention provenance, approval or incomplete draft state, acquisition-day interpretation and source projection boundary. Its SHA-256 digest binds it to the exact companion `bonds.json` bytes.
 
-The original two-file format remains readable by selecting its containing folder. Duplicate identifiers, invalid financial values, mismatched ETF child identifiers, or a missing file cause an explicit error before replacement. A failed database save discards that operation, leaving persisted positions unchanged.
+Keep both files together for Mac-to-Mac reading. The webapp can continue reading `bonds.json` alone. Approved rows reflect regular frequency, actual redemption and adjusted payment dates. Needs review holdings remain in that file with an empty `cashFlows` array; the Mac reports the count of excluded schedules. The legacy file cannot communicate native readiness or call warnings to the webapp.
 
-Export validation compares all serialized position fields, nested cash flows, holdings, and prices. Array ordering and restored Core Data object IDs do not affect matching. Dates are compared at the whole-second precision of the ISO-8601 export format; duplicate nested rows remain significant.
+**Neither bond file contains financial acquisition/coupon/redemption/sale history, historical event keys, local deduplication aliases or a launch checkpoint. This is a current-position transfer, not a complete backup.** Projected cash-flow rows are not proof that a payment was received.
 
-Daily ETF history now records the latest successful quote for each local calendar day, rather than an average. Sale history uses the execution price and date entered in the sale form. Existing historical records are not recalculated by these changes.
+Calendar instrument dates in native JSON are `YYYY-MM-DD`; legacy dates remain ISO-8601 instants. Payment dates are materialized in Europe/Berlin. Schema compatibility is tested, but the external webapp is outside this repository: its actual rendering of time zones, nonannual coupons and adjusted payments still needs a representative consumer check.
+
+## Import bonds
+
+Choose **Import > Import Bonds** and select the containing folder. Files are read and validated once before confirmation. Confirmation shows incoming and removed counts, replacement scope, native/legacy status and unresolved count. Confirming applies that same frozen payload; subsequent file changes do not change it. If destination holding identities changed since the prompt, replacement must be reviewed again.
+
+- Both files valid: replace the bond category atomically. Supported approved terms can be reused without another ING collection; incomplete/unsupported drafts stay Needs review.
+- Only `bonds.json`: accept the old format without requiring `etfs.json`; imported bonds need review. Existing same-UUID approval is cleared rather than silently reused.
+- Sidecar present but malformed, unsupported version, wrong digest, duplicate/missing/extra identity, inconsistent financial values or mismatched approved schedule/yield: reject the complete import. There is no silent fallback to legacy mode.
+- Empty bond array: intentionally remove all bond positions after the explicit replacement confirmation.
+
+Bond-only import never changes ETFs, holdings or ETF prices. Destination financial history stays unchanged even when its position is removed. Native import establishes a new local prospective activation boundary and retains the destination launch checkpoint. It does not replay source history or earlier-today payments. Safe destination aliases for the same economic holding are retained; they are never read from the sidecar. Native trade/identity conflicts with local keyed history are rejected. Ambiguous overlapping unlinked receipts require history review.
+
+A failed database save rolls back bonds, terms and projections together. Native validation compares both representations, nested flow multisets and provenance without relying on array order or Core Data object IDs.
+
+## Existing all-positions workflow
+
+**Export All Positions / Import All Positions** remain available and keep the original pair `bonds.json` plus `etfs.json`. Both are required by that import mode, which replaces both categories after confirmation; empty arrays clear their category. It remains a legacy positions transfer and does not restore approved native bond terms. Use the bond-only two-file export for those terms.
+
+Existing financial history remains unchanged. Local event aliases may be retained for safe same-identity deduplication, but approval is not retained for replaced legacy bonds. ETF holdings, quote history and their transfer schema keep their existing behavior. Export validation compares all serialized position fields and nested values, normalizing dates to legacy ISO-8601 second precision; duplicate nested rows remain significant.

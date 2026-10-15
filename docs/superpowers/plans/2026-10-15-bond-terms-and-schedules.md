@@ -137,7 +137,7 @@ struct TermsAssessment: Equatable, Sendable {
 }
 ```
 
-- [ ] **Step 1: Write date and missing-value tests.** Use independently specified days, not a date formatter also used by production:
+- [x] **Step 1: Write date and missing-value tests.** Use independently specified days, not a date formatter also used by production:
 
 ```swift
 func testInvalidDaysAndOffsetPreservation() throws {
@@ -157,8 +157,8 @@ func testAnchorDoesNotDriftAfterFebruary() throws {
 }
 ```
 
-- [ ] **Step 2: Run the failing tests.** Run the full test command with `-only-testing:MyBondManagerTests/MarketDayTests -only-testing:MyBondManagerTests/BondTermsTests` before `test`, logging to `/tmp/mybond-terms-types-red.log`. Missing new symbols are expected at this initial API gate; repair test typos before proceeding.
-- [ ] **Step 3: Implement strict date and value types.** Parse exactly ten ASCII characters with separators at positions 4/7, construct Gregorian components, and round-trip the components to reject normalized invalid dates. Encode/decode as a single string. Use `DateComponents(year:month:day:)` in the explicit calendar, not UTC slicing of an instant. Month arithmetic always starts from the original anchor plus an offset; clamp against the destination month's day range. Reject out-of-range arithmetic with `PortfolioError`, never return today's date. Add `Equatable` to the enums used by `BondTerms` and keep missing fields nil.
+- [x] **Step 2: Run the failing tests.** Run the full test command with `-only-testing:MyBondManagerTests/MarketDayTests -only-testing:MyBondManagerTests/BondTermsTests` before `test`, logging to `/tmp/mybond-terms-types-red.log`. Missing new symbols are expected at this initial API gate; repair test typos before proceeding.
+- [x] **Step 3: Implement strict date and value types.** Parse exactly ten ASCII characters with separators at positions 4/7, construct Gregorian components, and round-trip the components to reject normalized invalid dates. Encode/decode as a single string. Use `DateComponents(year:month:day:)` in the explicit calendar, not UTC slicing of an instant. Month arithmetic always starts from the original anchor plus an offset; clamp against the destination month's day range. Reject out-of-range arithmetic with `PortfolioError`, never return today's date. Add `Equatable` to the enums used by `BondTerms` and keep missing fields nil.
 
 ```swift
 var calendar = Calendar(identifier: .gregorian)
@@ -169,8 +169,8 @@ let container = try decoder.singleValueContainer()
 self = try MarketDay(container.decode(String.self))
 ```
 
-- [ ] **Step 4: Add cross-zone round trips.** Materialize `2026-03-29` and `2026-10-25` around DST, encode to native day strings, and assert the exact same raw values while a separate calendar is set to America/Los_Angeles or Asia/Nicosia. Do not mutate global time-zone defaults in concurrent tests. Run targeted tests, then the full suite.
-- [ ] **Step 5: Commit this unit.** Stage the five named files only; commit `feat: define EUR bond terms and market dates`.
+- [x] **Step 4: Add cross-zone round trips.** Materialize `2026-03-29` and `2026-10-25` around DST, encode to native day strings, and assert the exact same raw values while a separate calendar is set to America/Los_Angeles or Asia/Nicosia. Do not mutate global time-zone defaults in concurrent tests. Run targeted tests, then the full suite.
+- [x] **Step 5: Commit this unit.** Stage the five named files only; commit `feat: define EUR bond terms and market dates`.
 
 ## Task 2: TARGET business days and payment adjustment
 
@@ -178,7 +178,7 @@ self = try MarketDay(container.decode(String.self))
 
 **Interfaces:** Consumes `MarketDay`. Produces `TargetCalendar.isBusinessDay(_ day: MarketDay) -> Bool` and `TargetCalendar.following(_ day: MarketDay) throws -> MarketDay`.
 
-- [ ] **Step 1: Write hand-checked holiday tests.** Include multiple consecutive closures and no substitute holiday when Christmas falls on a weekend:
+- [x] **Step 1: Write hand-checked holiday tests.** Include multiple consecutive closures and no substitute holiday when Christmas falls on a weekend:
 
 ```swift
 func testFollowingKeepsAmountsIndependentAndCrossesHolidays() throws {
@@ -196,8 +196,8 @@ func testFollowingKeepsAmountsIndependentAndCrossesHolidays() throws {
 }
 ```
 
-- [ ] **Step 2: Run targeted RED.** Use `-only-testing:MyBondManagerTests/TargetCalendarTests` and `/tmp/mybond-target-red.log`; missing calendar API or incorrect literal dates must fail.
-- [ ] **Step 3: Implement only TARGET rules.** Weekends; January 1 and December 25; from 2000 also Good Friday, Easter Monday, May 1 and December 26; December 31 of 1998, 1999 and 2001. Compute Gregorian Easter with the integer Gregorian computus and validate its date; bound supported adjustment years to 1900...2199 with a clear error. Following advances one calendar day until open, with a 14-day safety bound that throws on exhaustion. This is a small calendar, not a general scheduling framework. Reference for the rules, not a new dependency: `https://github.com/lballabio/QuantLib/blob/master/ql/time/calendars/target.cpp`.
+- [x] **Step 2: Run targeted RED.** Use `-only-testing:MyBondManagerTests/TargetCalendarTests` and `/tmp/mybond-target-red.log`; missing calendar API or incorrect literal dates must fail.
+- [x] **Step 3: Implement only TARGET rules.** Weekends; January 1 and December 25; from 2000 also Good Friday, Easter Monday, May 1 and December 26; December 31 of 1998, 1999 and 2001. Compute Gregorian Easter with the integer Gregorian computus and validate its date; bound supported adjustment years to 1900...2199 with a clear error. Following advances one calendar day until open, with a 14-day safety bound that throws on exhaustion. This is a small calendar, not a general scheduling framework. Reference for the rules, not a new dependency: `https://github.com/lballabio/QuantLib/blob/master/ql/time/calendars/target.cpp`.
 
 ```swift
 for offset in 0..<14 {
@@ -207,8 +207,8 @@ for offset in 0..<14 {
 throw PortfolioError("No TARGET payment day could be determined.")
 ```
 
-- [ ] **Step 4: Test historic exceptions separately.** Assert 1999 Good Friday follows the pre-2000 rule, 2001-12-31 is closed, 2002-12-31 is open, and ordinary weekdays do not move. Run targeted tests and the full suite.
-- [ ] **Step 5: Commit.** Stage these two files; commit `feat: add explicit TARGET payment adjustment`.
+- [x] **Step 4: Test historic exceptions separately.** Assert 1999 Good Friday follows the pre-2000 rule, 2001-12-31 is closed, 2002-12-31 is open, and ordinary weekdays do not move. Run targeted tests and the full suite.
+- [x] **Step 5: Commit.** Stage these two files; commit `feat: add explicit TARGET payment adjustment`.
 
 ## Task 3: Pure regular schedule and eligibility assessment
 
@@ -252,7 +252,7 @@ enum BondSchedule {
 }
 ```
 
-- [ ] **Step 1: Add deterministic schedule fixtures and tests.** `BondTermsFixtures.fixed(frequency: Int = 2, maturity: String = "2027-01-15", next: String = "2026-07-15") throws -> BondTerms` returns EUR/fixed/3.375%, accrual `2026-01-15`, callable false, redemption 100, explicit day-of-month roll, checkpoint observed `2026-02-01`, collected at `2026-02-01T12:00:00Z`, approved nil, default conventions. `BondTermsFixtures.trade(cost: Double = 100000) throws -> BondTrade` uses a fixed UUID `00000000-0000-0000-0000-000000000001`, ISIN `DE0000000001`, nominal 100000, acquisition `2026-02-01`, bank `Bank`.
+- [x] **Step 1: Add deterministic schedule fixtures and tests.** `BondTermsFixtures.fixed(frequency: Int = 2, maturity: String = "2027-01-15", next: String = "2026-07-15") throws -> BondTerms` returns EUR/fixed/3.375%, accrual `2026-01-15`, callable false, redemption 100, explicit day-of-month roll, checkpoint observed `2026-02-01`, collected at `2026-02-01T12:00:00Z`, approved nil, default conventions. `BondTermsFixtures.trade(cost: Double = 100000) throws -> BondTrade` uses a fixed UUID `00000000-0000-0000-0000-000000000001`, ISIN `DE0000000001`, nominal 100000, acquisition `2026-02-01`, bank `Bank`.
 
 ```swift
 func testSemiannualBuyerReceivesFullNextCoupon() throws {
@@ -275,8 +275,8 @@ func testHolidayFinalCouponAndRedemptionMoveTogetherWithoutExtraInterest() throw
 }
 ```
 
-- [ ] **Step 2: Run RED.** Use `-only-testing:MyBondManagerTests/BondScheduleTests`, log `/tmp/mybond-schedule-red.log`. Tests must fail until amount/frequency/holiday logic exists.
-- [ ] **Step 3: Implement validation and anchored generation.** Reject invalid trade numbers as errors. Unsupported/missing terms return named assessment reasons and empty payments/flows. Readiness requires EUR; fixed or zero; finite nonnegative rate; positive redemption; known callable flag; supported convention values; maturity not before acquisition; no retained unsupported restrictions. Fixed also requires frequency 1/2/4, accrual start and checkpoint; zero ignores frequency/checkpoint and requires zero rate. Support Actual/Actual(ICMA), TARGET and Following in this phase; other overrides are retained but need review.
+- [x] **Step 2: Run RED.** Use `-only-testing:MyBondManagerTests/BondScheduleTests`, log `/tmp/mybond-schedule-red.log`. Tests must fail until amount/frequency/holiday logic exists.
+- [x] **Step 3: Implement validation and anchored generation.** Reject invalid trade numbers as errors. Unsupported/missing terms return named assessment reasons and empty payments/flows. Readiness requires EUR; fixed or zero; finite nonnegative rate; positive redemption; known callable flag; supported convention values; maturity not before acquisition; no retained unsupported restrictions. Fixed also requires frequency 1/2/4, accrual start and checkpoint; zero ignores frequency/checkpoint and requires zero rate. Support Actual/Actual(ICMA), TARGET and Following in this phase; other overrides are retained but need review.
 
 Generate contractual boundaries backward from maturity using offsets `0, -12/frequency, -2*12/frequency` against the original maturity anchor, not iterative clamped dates. Cap at 1200 periods and fail with a reason on inconsistent/range overflow. Accrual start must be a boundary; otherwise identify a short/long period. If end-of-month and day-of-month rules produce different eligible dates and roll is unspecified, require explicit confirmation. Validate the next checkpoint against the first contractual boundary on/after `checkpointObservedOn`, not against today's date; an aged response is not itself a malformed schedule. Persist collection time to explain an aged checkpoint in review.
 
@@ -296,8 +296,8 @@ let estimate: Double? = years > 0
 
 `estimate` is `Double?`: undefined duration produces nil, never a displayed zero estimate. This pure result is the sole source of derived yield for approved terms; do not retain ING yield or the previous stored estimate after a terms change.
 
-- [ ] **Step 4: Add literal coverage for all branches.** Annual 3375, quarterly 843.75; zero produces only redemption; 95% redemption yields 95000 and loss -5000 at cost 100000 with cash total 95000; 105% at cost 100000 yields principal 100000 plus gain 5000. Test first/last stubs, ambiguous February roll, unknown frequency, unknown callable, non-EUR, floating/perpetual restrictions, unsupported convention, negative/nonfinite numbers, next checkpoint before/after allowed range, DST and a response reviewed after its checkpoint date. Callable true adds a warning, not exclusion. No test compares an expected value computed with the schedule builder itself. Run full suite.
-- [ ] **Step 5: Commit.** Commit `feat: calculate supported regular EUR bond schedules` with the named files.
+- [x] **Step 4: Add literal coverage for all branches.** Annual 3375, quarterly 843.75; zero produces only redemption; 95% redemption yields 95000 and loss -5000 at cost 100000 with cash total 95000; 105% at cost 100000 yields principal 100000 plus gain 5000. Test first/last stubs, ambiguous February roll, unknown frequency, unknown callable, non-EUR, floating/perpetual restrictions, unsupported convention, negative/nonfinite numbers, next checkpoint before/after allowed range, DST and a response reviewed after its checkpoint date. Callable true adds a warning, not exclusion. No test compares an expected value computed with the schedule builder itself. Run full suite.
+- [x] **Step 5: Commit.** Commit `feat: calculate supported regular EUR bond schedules` with the named files.
 
 ## Task 4: Additive storage, fresh serialized writes, and migration fixtures
 
@@ -305,7 +305,7 @@ let estimate: Double? = years > 0
 
 **Interfaces:** Consumes Tasks 1-3. Produces `BondBaseline.capture(_ bond: BondEntity) -> BondBaseline`, `BondTermsStore.read(_ bond: BondEntity) throws -> BondTerms?`, `trade(_ bond: BondEntity) throws -> BondTrade`, `stageDraft(_ draft: BondTermsDraft, for bond: BondEntity) throws`, `readDraft(_ bond: BondEntity) throws -> BondTermsDraft?`, `clear(_ bond: BondEntity)`, `isReady(_ bond: BondEntity) -> Bool`, and `replaceProjections(for:terms:preview:now:acquisitionDay:legacyDateZone:context:) throws -> Void` with parameters `(BondEntity, BondTerms, BondSchedulePreview, Date, MarketDay, String, NSManagedObjectContext)` respectively. `BondBaseline` is a Codable/Equatable/Sendable snapshot of UUID, normalized ISIN, name/issuer/WKN, bank, original acquisition/maturity instants, nominal, cost, rate and current terms bytes. `BondTermsDraft` is Codable/Equatable/Sendable with `baseline: BondBaseline`, `trade: BondTrade`, `legacyDateZone: String`, `proposed: BondTerms`, `previewDay: MarketDay`; it intentionally excludes derived preview rows so resumption recalculates with the same pure engine.
 
-- [ ] **Step 1: Write migration/readiness and isolated-write tests.** Extend the existing disposable SQLite migration test to load each named source model (`MyBondManager.mom`, `MyBondManagerV2.mom`), insert a bond, one flow and a history record with raw NSManagedObject setters, close/reopen with the new current model, and assert unchanged original values/counts plus absent terms and readiness false. Add an in-memory test whose older stored rows survive while `read` returns nil.
+- [x] **Step 1: Write migration/readiness and isolated-write tests.** Extend the existing disposable SQLite migration test to load each named source model (`MyBondManager.mom`, `MyBondManagerV2.mom`), insert a bond, one flow and a history record with raw NSManagedObject setters, close/reopen with the new current model, and assert unchanged original values/counts plus absent terms and readiness false. Add an in-memory test whose older stored rows survive while `read` returns nil.
 
 ```swift
 func testLegacyPositionRemainsStoredButUnapproved() throws {
@@ -321,8 +321,8 @@ func testLegacyPositionRemainsStoredButUnapproved() throws {
 }
 ```
 
-- [ ] **Step 2: Run RED.** Target `BondTermsStorageTests` and `PersistenceMigrationTests`; absent mappings/current-model fields are expected failures, never point tests at the production store.
-- [ ] **Step 3: Add V3 metadata without editing older models.** Copy V2 to V3 and add exactly these optional fields plus the two false-default booleans. Add matching @NSManaged declarations and switch `.xccurrentversion` to V3:
+- [x] **Step 2: Run RED.** Target `BondTermsStorageTests` and `PersistenceMigrationTests`; absent mappings/current-model fields are expected failures, never point tests at the production store.
+- [x] **Step 3: Add V3 metadata without editing older models.** Copy V2 to V3 and add exactly these optional fields plus the two false-default booleans. Add matching @NSManaged declarations and switch `.xccurrentversion` to V3:
 
 | Entity | Name / Core Data type |
 | --- | --- |
@@ -384,8 +384,8 @@ func testApprovedRedemptionReplacesTheStoredYieldEstimate() throws {
 
 Also seed a stale stored yield before reapproval with a changed redemption, then assert replacement; run regeneration twice and assert the same number without changing approval or activation. Task 8 verifies detail/weighted-summary inputs; Task 9 verifies exported values and native round trips against this result.
 
-- [ ] **Step 4: Test aliases, corrupt metadata and serialization.** Before changing production behavior, add a test with one writer paused after reading a stored value and a second writer attempting an increment. Release the first, then assert final value increased twice; the second must not read the original value. Use test-owned expectations/semaphores only on background queues and a bounded timeout. Also assert failure releases the lock and preserves an unrelated main-context draft. For alias capture, map each legacy interest flow's calendar date using `termsLegacyDateZone` (or the review's explicit legacy display zone before first approval) to the new contractual identity, retaining the exact old `UUID|interest|Int(oldDate.timeIntervalSince1970)` key. Map legacy maturity similarly. Merge prior aliases, including already generated rows; never erase them on a second recalculation. No alias table is transferred to a different Mac. Run all migration/storage/transaction tests, then full suite.
-- [ ] **Step 5: Commit.** Commit `feat: persist optional bond terms with safe write isolation`. Activation/eligibility switches are not exposed in the live UI until Tasks 7-10, so this task does not silently disable legacy behavior mid-branch.
+- [x] **Step 4: Test aliases, corrupt metadata and serialization.** Before changing production behavior, add a test with one writer paused after reading a stored value and a second writer attempting an increment. Release the first, then assert final value increased twice; the second must not read the original value. Use test-owned expectations/semaphores only on background queues and a bounded timeout. Also assert failure releases the lock and preserves an unrelated main-context draft. For alias capture, map each legacy interest flow's calendar date using `termsLegacyDateZone` (or the review's explicit legacy display zone before first approval) to the new contractual identity, retaining the exact old `UUID|interest|Int(oldDate.timeIntervalSince1970)` key. Map legacy maturity similarly. Merge prior aliases, including already generated rows; never erase them on a second recalculation. No alias table is transferred to a different Mac. Run all migration/storage/transaction tests, then full suite.
+- [x] **Step 5: Commit.** Commit `feat: persist optional bond terms with safe write isolation`. Activation/eligibility switches are not exposed in the live UI until Tasks 7-10, so this task does not silently disable legacy behavior mid-branch.
 
 ## Task 5: Decode richer ING terms without inventing missing data
 
@@ -411,7 +411,7 @@ struct BondDetails: Sendable {
 
 Add `BondDataScraper.fetchDetails(isin: String, observedAt: Date = Date()) async throws -> BondDetails`. Preserve existing complete-data scraper method signatures for callers that explicitly require complete data. `BondCollection` retains its request guard and injectable async fetch but uses `fetchDetails` by default. Missing coupon/maturity is a successful partial collection; supplied invalid values still throw. Optional legacy display mirrors must agree with the corresponding supplied terms; no fallback to zero or today's date. Existing holdings display baseline values separately, without copying them into absent provider terms. Adapt `AddBondView` and `BondCollectionTests` in this task so optional handling compiles immediately: blank missing inputs, optional binding before arithmetic, and explicit validation before building nonoptional `BondCodable`. New entry requires user-confirmed valid coupon/maturity position fields to save a holding; it can retain its incomplete form meanwhile, and missing other support terms may still save the holding as Needs review.
 
-- [ ] **Step 1: Write literal response-fixture tests.** Reuse a URLProtocol fake with a path-indexed response map and no live network. A single `INGBondFixtures.responses` test constant holds these independent bodies:
+- [x] **Step 1: Write literal response-fixture tests.** Reuse a URLProtocol fake with a path-indexed response map and no live network. A single `INGBondFixtures.responses` test constant holds these independent bodies:
 
 ```swift
 let dates = #"{"issueDate":{"value":"2026-02-02T00:00:00+01:00"},"interestStartDate":{"value":"2026-01-15T00:00:00+01:00"},"maturityDate":{"value":"2027-01-15T00:00:00+01:00"},"interestPaymentDate":{"value":"2026-07-15T00:00:00+02:00"}}"#
@@ -435,8 +435,8 @@ func testKeepsCouponFrequencyAccrualAndCalendarDate() async throws {
 }
 ```
 
-- [ ] **Step 2: Run RED.** Target `INGBondTermsTests` and `BondCollectionTests`, log `/tmp/mybond-ing-terms-red.log`. The old decoder cannot supply these new terms.
-- [ ] **Step 3: Implement endpoint DTOs and mappings.** Decode value wrappers as optional values where ING can omit a field. Map `Jährlich`/`Halbjährlich`/`Vierteljährlich` to 1/2/4; retain raw unknown values. Recognize `Fest` as fixed; a true `isZeroBond` selects zero only if rate is zero. Preserve provider-indicated floating/indexed/perpetual/amortizing restrictions; a manually changed structure label cannot erase them. Missing metadata yields incomplete terms, while malformed JSON/nonfinite financial fields or malformed supplied date strings produce explicit errors. Validate the exact leading YYYY-MM-DD part of ING dates and its optional ISO suffix; an empty supplied date cannot trap. Keep original issue and accrual dates distinct. The optional header name can help identify a restriction but never proves support. Never use `Yield`, `duration` or `yieldPopupContent` as exact bond-pricing inputs.
+- [x] **Step 2: Run RED.** Target `INGBondTermsTests` and `BondCollectionTests`, log `/tmp/mybond-ing-terms-red.log`. The old decoder cannot supply these new terms.
+- [x] **Step 3: Implement endpoint DTOs and mappings.** Decode value wrappers as optional values where ING can omit a field. Map `Jährlich`/`Halbjährlich`/`Vierteljährlich` to 1/2/4; retain raw unknown values. Recognize `Fest` as fixed; a true `isZeroBond` selects zero only if rate is zero. Preserve provider-indicated floating/indexed/perpetual/amortizing restrictions; a manually changed structure label cannot erase them. Missing metadata yields incomplete terms, while malformed JSON/nonfinite financial fields or malformed supplied date strings produce explicit errors. Validate the exact leading YYYY-MM-DD part of ING dates and its optional ISO suffix; an empty supplied date cannot trap. Keep original issue and accrual dates distinct. The optional header name can help identify a restriction but never proves support. Never use `Yield`, `duration` or `yieldPopupContent` as exact bond-pricing inputs.
 
 ```swift
 let frequency = ["Jährlich": 1, "Halbjährlich": 2, "Vierteljährlich": 4][rawPeriod]
@@ -461,8 +461,8 @@ details = result
 ```
 
 Add independent missing-rate and missing-maturity response variants to the literal fixture map by omitting the actual field, not substituting zero/empty dates. Assert collection succeeds, the corresponding `BondDetails` and `BondTerms` fields remain nil, and preview reports the named missing term.
-- [ ] **Step 4: Test unknowns and stale responses.** Missing `callable` stays nil; missing frequency stays nil; unknown periods stay unsupported. A zero bond with a nominal next-interest date still produces no coupons. Test empty dates, 31 February, differing issue/accrual years, numeric-string rates, non-EUR, rate/type contradictions, stale response after ISIN change, and two requests for the same ISIN completing in reverse order. Run full suite.
-- [ ] **Step 5: Commit.** Commit `feat: retain ING bond instrument terms and provenance` with the named production/test files only.
+- [x] **Step 4: Test unknowns and stale responses.** Missing `callable` stays nil; missing frequency stays nil; unknown periods stay unsupported. A zero bond with a nominal next-interest date still produces no coupons. Test empty dates, 31 February, differing issue/accrual years, numeric-string rates, non-EUR, rate/type contradictions, stale response after ISIN change, and two requests for the same ISIN completing in reverse order. Run full suite.
+- [x] **Step 5: Commit.** Commit `feat: retain ING bond instrument terms and provenance` with the named production/test files only.
 
 ## Task 6: Resumable review and atomic forward approval
 
@@ -470,7 +470,7 @@ Add independent missing-rate and missing-maturity response variants to the liter
 
 **Interfaces:** Produces the following service/model contract. `BondTermsReview` is @MainActor ObservableObject with `@Published private(set) var drafts: [UUID: BondTermsDraft]`, `errors: [String: String]`, `isWorking: Bool`; init takes `container: NSPersistentContainer`, `fetch: @escaping (String) async throws -> BondDetails` and `now: @escaping () -> Date = Date.init`. Methods: `load() async throws`, `collect(ids: [UUID]) async`, `edit(_ draft: BondTermsDraft) async throws`, `preview(_ draft: BondTermsDraft) throws -> BondSchedulePreview`, `apply(ids: [UUID]) async throws`, `saveNew(values: BondCodable, terms: BondTerms, legacyDateZone: String) async throws -> UUID`. Add `CashFlowGenerator.regenerateCashFlows(for: BondEntity, now: Date)`; the existing overload delegates using Date().
 
-- [ ] **Step 1: Write stateful service tests.** Create two purchases with the same ISIN and a third different ISIN whose fixture fetch throws. Count the real fake-boundary fetches, assert two network-boundary calls rather than three, and assert both successful purchase drafts survive the third error. Restart `BondTermsReview` against the same in-memory store and assert drafts/resolved state reload without fetching.
+- [x] **Step 1: Write stateful service tests.** Create two purchases with the same ISIN and a third different ISIN whose fixture fetch throws. Count the real fake-boundary fetches, assert two network-boundary calls rather than three, and assert both successful purchase drafts survive the third error. Restart `BondTermsReview` against the same in-memory store and assert drafts/resolved state reload without fetching.
 
 ```swift
 func testApprovalPreservesTradeAndHistoryAndRejectsStaleReview() async throws {
@@ -536,8 +536,8 @@ func testMissingProviderTermsPersistUntilExplicitCorrection() async throws {
 }
 ```
 
-- [ ] **Step 2: Run RED.** Target `BondTermsReviewTests`, log `/tmp/mybond-review-red.log`. The absent service or stale-write acceptance should fail.
-- [ ] **Step 3: Implement load/collect/edit/preview/apply.** Snapshot UUIDs and trade baselines on the view context queue, fetch sequentially once per normalized ISIN, and write resulting drafts in isolated transactions. Deduplicate request identities and reject stale/late results. Manual refresh merges confirmed overrides from the existing terms into the proposed draft; present provider differences, never silently replace a confirmed override. Persist successful drafts independently of other failed fetches.
+- [x] **Step 2: Run RED.** Target `BondTermsReviewTests`, log `/tmp/mybond-review-red.log`. The absent service or stale-write acceptance should fail.
+- [x] **Step 3: Implement load/collect/edit/preview/apply.** Snapshot UUIDs and trade baselines on the view context queue, fetch sequentially once per normalized ISIN, and write resulting drafts in isolated transactions. Deduplicate request identities and reject stale/late results. Manual refresh merges confirmed overrides from the existing terms into the proposed draft; present provider differences, never silently replace a confirmed override. Persist successful drafts independently of other failed fetches.
 
 At approval, freeze the selected drafts before awaiting. Re-resolve each UUID exactly once, reject duplicate/missing identities, compare every baseline financial/instrument field and existing terms bytes, and require `previewDay == MarketDay(date: now())`; if the day changed, rebuild the preview and request confirmation rather than silently change the frozen approval. Revalidate support and use the same schedule preview; unsupported drafts can be saved as Needs review but cannot be falsely approved. Stage all selected valid approvals in one `PortfolioTransaction.run`; a failed member rolls back the selected batch only. Preserve original historical records byte-for-byte, all trade inputs and the launch checkpoint. New terms may update the reviewed instrument rate/maturity, the derived yield from the same preview, projections and native metadata; ordinary EditBondView historical trade guards remain enforced.
 
@@ -568,8 +568,8 @@ try await PortfolioTransaction.run(in: container) { context in
 ```
 
 `saveNew` stages a new bond, records acquisition once, stores reviewed terms or an incomplete draft, and creates Ready projections only when approved supported terms exist. Required nonoptional position coupon/maturity values must come from an explicit valid provider/user entry; reject saving when these are still absent, with field-specific form errors. Missing other support terms may still save a holding as Needs review. Existing-holding drafts with missing provider coupon/maturity are persisted independently of these position fields and can be corrected later. No new purchase may silently run the annual fallback. Recalculation uses stored terms and updates the derived yield with its new preview; it does not change `approvedAt`, activation time or reset aliases. Existing frozen imported/fixture profiles are validated through the same engine.
-- [ ] **Step 4: Pin failure/partial/time behavior.** Test deleted holding, duplicate UUIDs, changed bank/rate/maturity/cost/terms bytes, a failed save in the second selected bond, persisted partial review, unknown restrictions not erased by manual labels, confirmation overrides preserved, midnight while review open, and no network work on load/recalculate. Assert an approved future schedule differs while past flow values/history remain unchanged. Run full suite; adapt the old loaded-relationship regeneration test to create an explicit Ready fixture rather than bypass readiness globally.
-- [ ] **Step 5: Commit.** Commit `feat: review and approve bond terms without rewriting history`.
+- [x] **Step 4: Pin failure/partial/time behavior.** Test deleted holding, duplicate UUIDs, changed bank/rate/maturity/cost/terms bytes, a failed save in the second selected bond, persisted partial review, unknown restrictions not erased by manual labels, confirmation overrides preserved, midnight while review open, and no network work on load/recalculate. Assert an approved future schedule differs while past flow values/history remain unchanged. Run full suite; adapt the old loaded-relationship regeneration test to create an explicit Ready fixture rather than bypass readiness globally.
+- [x] **Step 5: Commit.** Commit `feat: review and approve bond terms without rewriting history`.
 
 ## Task 7: Stable prospective event recording and final adjusted payment
 
@@ -577,7 +577,7 @@ try await PortfolioTransaction.run(in: container) { context in
 
 **Interfaces:** Consumes stored approved profiles, generated payment identities and local aliases. Preserve `LaunchEventProcessor.stage(context:since:until:) throws -> [String]` and notifier's checkpoint contract. Add `BondTermsStore.legacyAliases(_ bond: BondEntity) throws -> [String: [String]]`; `BondTermsStore.projectedPayments(_ bond: BondEntity, from: MarketDay) throws -> [BondPayment]` recomputes from saved supported terms without network.
 
-- [ ] **Step 1: Write the weekend/legacy replay test.** Use an annual fixed bond maturing contractual `2027-01-01` with redemption 105%, nominal 1000 and cost 900. Apply on `2026-12-30T12:00:00Z`; seed a historical maturity row with the old exact timestamp key for original Jan 1 and save. Processing through Jan 4 must not create a second redemption. A separate unrecorded bond must record on Jan 4, not Jan 1, with invested delta -1000 and realized gain 150.
+- [x] **Step 1: Write the weekend/legacy replay test.** Use an annual fixed bond maturing contractual `2027-01-01` with redemption 105%, nominal 1000 and cost 900. Apply on `2026-12-30T12:00:00Z`; seed a historical maturity row with the old exact timestamp key for original Jan 1 and save. Processing through Jan 4 must not create a second redemption. A separate unrecorded bond must record on Jan 4, not Jan 1, with invested delta -1000 and realized gain 150.
 
 ```swift
 func testAdjustedMaturityUsesActualRedemptionAndNeverRunsEarly() async throws {
@@ -600,8 +600,8 @@ func testAdjustedMaturityUsesActualRedemptionAndNeverRunsEarly() async throws {
 ```
 
 The Task 4 `readyBond` factory calls the real preview/application operation with these final trade values; never mutate them after approval to manufacture the event expectation.
-- [ ] **Step 2: Run RED.** Target `BondTermsEventTests` and existing launch tests. The old processor records at contractual maturity with nominal rather than actual redemption and has no readiness gate; these should be behavioral failures.
-- [ ] **Step 3: Implement payment-driven processing.** Skip Needs review bonds; validate saved profiles. Recompute real payment candidates from stored terms, restrict to `(since, until]` and `paymentDay.instant > eventsActivateAfter`. Interest must respect contractual eligibility, not `paymentDate <= contractualMaturity`. Maturity uses adjusted redemption and actual redemption amount, with nominal invested-capital removal. Ignore analytical gain/loss/profit rows for event counting.
+- [x] **Step 2: Run RED.** Target `BondTermsEventTests` and existing launch tests. The old processor records at contractual maturity with nominal rather than actual redemption and has no readiness gate; these should be behavioral failures.
+- [x] **Step 3: Implement payment-driven processing.** Skip Needs review bonds; validate saved profiles. Recompute real payment candidates from stored terms, restrict to `(since, until]` and `paymentDay.instant > eventsActivateAfter`. Interest must respect contractual eligibility, not `paymentDate <= contractualMaturity`. Maturity uses adjusted redemption and actual redemption amount, with nominal invested-capital removal. Ignore analytical gain/loss/profit rows for event counting.
 
 Before recording each candidate, check both its stable identity and every compatible legacy key captured before projection replacement. Legacy aliases only identify the same contractual event; never treat an unrelated payment in the same year or with the same amount as a match. Keep existing rows and keys unchanged.
 
@@ -620,8 +620,8 @@ record.eventKey = payment.identity
 ```
 
 For unkeyed legacy bond history, automatic attribution to one holding is unsafe. Before enabling prospective events on approval, detect ambiguous pre-activation records that could overlap the revised payment's contractual/adjusted window; mark that holding Needs review with a history-reconciliation reason instead of guessing, rewriting a row or posting a possible duplicate. This preserves the spec's no-silent-repair rule.
-- [ ] **Step 4: Add hard replay tests.** Repeat an interval; recalculate twice; reopen a loaded store; approve after an earlier-today payment; import approved terms on another Mac; and fail the save after staging two payments. Assert no earlier-today/source-history replay, checkpoint unchanged on failure, one final coupon plus one redemption after success, aliases retained through recalculation, and an unknown-history ambiguity does not create another entry. Run a test that queues approval against launch writing through the same transaction serialization; the operation order must remain consistent.
-- [ ] **Step 5: Run full suite and commit.** Update only tests whose old date/readiness assumptions genuinely changed, retaining old-key fixtures for compatibility. Commit `fix: record approved payments by stable contractual identity`.
+- [x] **Step 4: Add hard replay tests.** Repeat an interval; recalculate twice; reopen a loaded store; approve after an earlier-today payment; import approved terms on another Mac; and fail the save after staging two payments. Assert no earlier-today/source-history replay, checkpoint unchanged on failure, one final coupon plus one redemption after success, aliases retained through recalculation, and an unknown-history ambiguity does not create another entry. Run a test that queues approval against launch writing through the same transaction serialization; the operation order must remain consistent.
+- [x] **Step 5: Run full suite and commit.** Update only tests whose old date/readiness assumptions genuinely changed, retaining old-key fixtures for compatibility. Commit `fix: record approved payments by stable contractual identity`.
 
 ## Task 8: Consistent readiness and adjusted maturity across consumers
 
@@ -629,7 +629,7 @@ For unkeyed legacy bond history, automatic attribution to one holding is unsafe.
 
 **Interfaces:** Consumes `BondTermsStore.isReady(_:)`, `MarketDay` and `BondSchedule`. Produces `BondEligibility.isActive(_ bond: BondEntity, on: MarketDay) -> Bool`, `BondEligibility.includes(_ flow: CashFlowEntity, from: MarketDay, through: MarketDay) -> Bool`, `BondEligibility.excludedCount(_ bonds: [BondEntity], on: MarketDay) -> Int`, and `BondEligibility.nextCoupon(_ bonds: [BondEntity], on: MarketDay) -> CashFlowEntity?`. Calls stay on the owning managed-object context. Readiness requires supported approved terms and current trade/profile consistency, not the cached flag alone.
 
-- [ ] **Step 1: Add consumer regressions.** An unresolved holding stays active and contributes capital; its stored old projections contribute nothing to forecast totals. A Ready bond whose contractual maturity is Jan 1 and payment is Jan 4 stays active through Jan 4 and becomes matured Jan 5.
+- [x] **Step 1: Add consumer regressions.** An unresolved holding stays active and contributes capital; its stored old projections contribute nothing to forecast totals. A Ready bond whose contractual maturity is Jan 1 and payment is Jan 4 stays active through Jan 4 and becomes matured Jan 5.
 
 ```swift
 func testUnreviewedHoldingKeepsCapitalButHasNoNextCoupon() throws {
@@ -649,8 +649,8 @@ func testUnreviewedHoldingKeepsCapitalButHasNoNextCoupon() throws {
 }
 ```
 
-- [ ] **Step 2: Run RED.** Run `BondEligibilityTests` and `CashFlowPresentationTests` using the targeted runner below. Expect missing policy methods, then incorrect old maturity/readiness behavior.
-- [ ] **Step 3: Implement the shared policy and wire every consumer.** Keep unresolved legacy holdings active according to their displayed contractual maturity until corrected. Ready holdings use validated adjusted redemption. Include payment day itself in active holdings; strict following-day maturity matches existing whole-day presentation. Forecast selection requires Ready ownership, an eligible nature, the requested market-day range, and generated metadata consistent with the saved profile.
+- [x] **Step 2: Run RED.** Run `BondEligibilityTests` and `CashFlowPresentationTests` using the targeted runner below. Expect missing policy methods, then incorrect old maturity/readiness behavior.
+- [x] **Step 3: Implement the shared policy and wire every consumer.** Keep unresolved legacy holdings active according to their displayed contractual maturity until corrected. Ready holdings use validated adjusted redemption. Include payment day itself in active holdings; strict following-day maturity matches existing whole-day presentation. Forecast selection requires Ready ownership, an eligible nature, the requested market-day range, and generated metadata consistent with the saved profile.
 
 ```swift
 static func isActive(_ bond: BondEntity, on day: MarketDay) -> Bool {
@@ -660,8 +660,8 @@ static func isActive(_ bond: BondEntity, on day: MarketDay) -> Bool {
 ```
 
 Implement private `isReadyPaymentDay(_ bond: BondEntity) -> MarketDay?` inside `BondEligibility`: return the stored `redemptionPaymentDate` converted through `MarketDay` only when `BondTermsStore.isReady(bond)` succeeds; otherwise return nil. Use context-safe fetches broad enough to include delayed final payments, then apply the shared policy. Replace every `maturityDate >= today` shortcut in bond/cash-flow consumers; do not impose a contractual-maturity ceiling on the final adjusted coupon. Keep expected-profit analytical rows out of cash totals. Totals use invested cost/nominal for all active holdings, expected cash/profit and Estimated YTM from Ready holdings only. Do not show a zero yield as an available estimate when nothing is eligible. Groups with mixed readiness retain both purchases and show their unresolved count. Next coupon searches positive eligible interest payments; next redemption uses adjusted redemption. All date comparisons use market days rather than device-midnight predicates.
-- [ ] **Step 4: Pin summary, grouped and maturity boundaries.** Add a Ready/unresolved mixed-ISIN group; zero-coupon bond; Jan 1/Jan 4/Jan 5 states; a final delayed coupon; gain/loss decomposition; a device time zone west of UTC; and a no-eligible-yield case. In `PortfolioCalculationsTests`, assert capital includes both purchases while forecast totals include the Ready one only. For the 105% redemption fixture in Task 4, assert the detail yield input equals `BondTermsStore.estimatedYTM` and the weighted-summary numerator uses that new persisted estimate; unresolved/nil estimates contribute neither numerator nor denominator. In `CashFlowPresentationTests`, fetch through the real selection path and assert the Jan 4 final payment survives. Run the targeted tests and full suite.
-- [ ] **Step 5: Commit.** Commit `fix: apply bond readiness and payment dates across forecasts`.
+- [x] **Step 4: Pin summary, grouped and maturity boundaries.** Add a Ready/unresolved mixed-ISIN group; zero-coupon bond; Jan 1/Jan 4/Jan 5 states; a final delayed coupon; gain/loss decomposition; a device time zone west of UTC; and a no-eligible-yield case. In `PortfolioCalculationsTests`, assert capital includes both purchases while forecast totals include the Ready one only. For the 105% redemption fixture in Task 4, assert the detail yield input equals `BondTermsStore.estimatedYTM` and the weighted-summary numerator uses that new persisted estimate; unresolved/nil estimates contribute neither numerator nor denominator. In `CashFlowPresentationTests`, fetch through the real selection path and assert the Jan 4 final payment survives. Run the targeted tests and full suite.
+- [x] **Step 5: Commit.** Commit `fix: apply bond readiness and payment dates across forecasts`.
 
 ## Task 9: Frozen legacy JSON and atomic native bond transfer
 
@@ -702,7 +702,7 @@ enum BondTransfer {
 
 Add `ExportManager.exportBonds(to:from:) async throws -> URL`; `ImportManager.prepareBonds(from: URL) async throws -> PreparedBondTransfer`; `ImportManager.applyBonds(_ transfer: PreparedBondTransfer, into: NSPersistentContainer, now: Date = Date()) async throws`; and `PositionsTransferValidation.bondIssues(_ transfer: PreparedBondTransfer, context: NSManagedObjectContext) throws -> [String]`. Preserve existing all-positions public signatures.
 
-- [ ] **Step 1: Freeze the legacy shape with a literal fixture.** Put the following UTF-8 string in `BondTransferTests.swift`, decode using the existing ISO-8601 strategy, and assert round-trip JSON object key sets, value types, nature strings and whole-second date strings. Do not generate the expected fixture with the new encoder.
+- [x] **Step 1: Freeze the legacy shape with a literal fixture.** Put the following UTF-8 string in `BondTransferTests.swift`, decode using the existing ISO-8601 strategy, and assert round-trip JSON object key sets, value types, nature strings and whole-second date strings. Do not generate the expected fixture with the new encoder.
 
 ```swift
 let legacyBondJSON = Data(#"[{"id":"00000000-0000-0000-0000-000000000001","name":"Example EUR","isin":"DE0000000001","issuer":"Example","depotBank":"Bank","acquisitionDate":"2026-02-01T00:00:00Z","maturityDate":"2027-01-15T00:00:00Z","couponRate":3.375,"parValue":100000,"initialPrice":99000,"yieldToMaturity":4.4,"wkn":"ABC123","cashFlows":[{"date":"2026-07-15T00:00:00Z","amount":1687.5,"nature":"interest"}]}]"#.utf8)
@@ -727,7 +727,7 @@ func testSidecarDigestIsBoundToExactCompanionBytes() throws {
 ```
 
 The literal `interest` matches the current `Nature` contract. Assert the exact 13 bond keys and 3 flow keys listed in the spec; order is irrelevant. Ready export uses approved eligible projections; unresolved export has the same position fields and `cashFlows: []`.
-- [ ] **Step 2: Run RED.** Run `BondTransferTests`, `PositionsTransferTests` and `ImportManagerTests`. Missing codec/import methods must fail before implementation; retain original malformed/nested/rollback tests.
+- [x] **Step 2: Run RED.** Run `BondTransferTests`, `PositionsTransferTests` and `ImportManagerTests`. Missing codec/import methods must fail before implementation; retain original malformed/nested/rollback tests.
 
 Include a real native yield round trip as a separate regression, so passing the schedule unit test cannot hide an unwired export/import:
 
@@ -755,18 +755,18 @@ func testNativeRoundTripKeepsTheApprovedDerivedYield() async throws {
 ```
 
 Run this new test RED before wiring persisted/exported yield and GREEN after the full path is integrated. Annotate this test class `@MainActor` for view-context fixture setup.
-- [ ] **Step 3: Implement codec validation before mutations.** Use `CryptoKit.SHA256.hash(data:)`. Validate the exact digest before approval and require version 1; valid UUIDs/unique normalized identities; exactly one native entry for each bond; no missing/extra entries; financial finiteness and allowed values; strict date/provenance/enumeration decoding. Match UUID and normalized ISIN together. Preserve separate purchases sharing an ISIN. Validate a Ready claim by nonnil `approvedAt`, supported engine assessment, matching rate/maturity/acquisition, actual redemption and legacy decomposition. Require `projectionFrom` for an approved entry and compare its legacy rows on/after that day with the regenerated schedule multiset from that same day; older retained rows are individually validated legacy data, not evidence of an approved projection. Compare `projectionFrom` against approval time and reject inconsistent boundaries. Compare legacy instant strings at ISO-8601 second precision; compare instrument days canonically. An incomplete/unapproved/known-unsupported entry is valid Needs review, with no exported payments, even if its optional terms are absent. A corrupted approved claim is an error, not a downgraded success.
+- [x] **Step 3: Implement codec validation before mutations.** Use `CryptoKit.SHA256.hash(data:)`. Validate the exact digest before approval and require version 1; valid UUIDs/unique normalized identities; exactly one native entry for each bond; no missing/extra entries; financial finiteness and allowed values; strict date/provenance/enumeration decoding. Match UUID and normalized ISIN together. Preserve separate purchases sharing an ISIN. Validate a Ready claim by nonnil `approvedAt`, supported engine assessment, matching rate/maturity/acquisition, actual redemption and legacy decomposition. Require `projectionFrom` for an approved entry and compare its legacy rows on/after that day with the regenerated schedule multiset from that same day; older retained rows are individually validated legacy data, not evidence of an approved projection. Compare `projectionFrom` against approval time and reject inconsistent boundaries. Compare legacy instant strings at ISO-8601 second precision; compare instrument days canonically. An incomplete/unapproved/known-unsupported entry is valid Needs review, with no exported payments, even if its optional terms are absent. A corrupted approved claim is an error, not a downgraded success.
 
 Refactor the existing export publication code into private `publish(files: [(name: String, data: Data)], to: URL, now: Date) throws -> URL` inside `ExportManager`, reusing security-scoped access, `.positions-UUID` staging, local-time `positions-yyyy-MM-dd_HH-mm-ss` naming, `-2` collision suffixes and injected writes. Both public exports capture values on their context queue before detached file work. Bond export publishes exactly `bonds.json` and `bond-terms.json`; all-positions export retains `bonds.json` and `etfs.json`. Both suppress unverified bond cash flows and report their exclusion count in the caller. Encode only after reading a saved consistent snapshot; reject a context with pending changes instead of exporting mixed saved/unsaved state.
 
 Expose `ExportManager.snapshotBonds(from:)` internally and share its readiness-aware legacy projection with `BondTransfer.snapshot` and validation. Native snapshot obtains bonds and entries from the same fetch/context operation. Avoid fetching the same mutable context in two separate awaits.
-- [ ] **Step 4: Implement frozen category replacement.** `prepareBonds` reads companion bytes once under security-scoped access; only a genuinely missing sidecar means legacy mode. Permission/read/decode/digest errors must surface. Revalidate the value payload in `applyBonds`, then perform one isolated transaction: replace bonds by UUID, delete absent bonds/projections using existing category-replacement behavior, preserve history, clear all previous native metadata before applying incoming metadata, and preserve every ETF/price/holding. Empty `bonds: []` intentionally replaces the bond category with empty. The existing deletion path does not prohibit removing a position with recorded history: retain historical rows unchanged after removal and test that explicitly. Do not invent a new removal prohibition.
+- [x] **Step 4: Implement frozen category replacement.** `prepareBonds` reads companion bytes once under security-scoped access; only a genuinely missing sidecar means legacy mode. Permission/read/decode/digest errors must surface. Revalidate the value payload in `applyBonds`, then perform one isolated transaction: replace bonds by UUID, delete absent bonds/projections using existing category-replacement behavior, preserve history, clear all previous native metadata before applying incoming metadata, and preserve every ETF/price/holding. Empty `bonds: []` intentionally replaces the bond category with empty. The existing deletion path does not prohibit removing a position with recorded history: retain historical rows unchanged after removal and test that explicitly. Do not invent a new removal prohibition.
 
 Approved native entries regenerate through the same engine and store writer; establish `eventsActivateAfter = now` locally. Imported source aliases/checkpoints cannot exist in this schema. Preserve destination aliases for the same UUID/ISIN where their local recorded event identity can be safely proven, and reject identity conflicts with local history. Existing all-positions legacy import must explicitly clear native metadata even when updating an existing UUID. Build one internal bond replacement operation shared by both import scopes; keep ETF replacement exclusive to all-positions mode. Validation compares expected exported projections, not hidden old unresolved storage rows; nested arrays remain multisets and Core Data object IDs remain irrelevant.
 
 For approved entries, legacy `yieldToMaturity` must equal the pure preview estimate (or numeric zero when that optional estimate is unavailable), using tolerance `1e-10 * max(1, abs(expected))`. Reject an inconsistent claimed-approved yield; import then recalculates and persists the destination result through the writer rather than retaining a stale serialized number. Needs review legacy imports retain their legacy numeric field for schema compatibility while all native yield presentation/weighting excludes them. No new JSON keys are introduced.
-- [ ] **Step 5: Pin transfer failure and reuse boundaries.** Test ready fixed/zero/callable round trips without network; unresolved nil and unsupported terms; duplicate UUID, repeated ISIN purchases, extra/missing sidecar IDs, unsupported version, invalid calendar day, wrong zone, NaN/negative redemption, corrupted approved schedule, changed cost/rate and same IDs/different bytes. Test a frozen confirmation payload after disk files change; legacy replacement of a Ready same-UUID bond; empty replacement with preserved ETFs; removal retaining historical rows; failed second file write preserving previous exports; failed save rolling back bonds/terms while ETF and history stay unchanged; fresh destination activation without source-event replay. Run targeted and full suites.
-- [ ] **Step 6: Commit.** Commit `feat: transfer native bond terms beside unchanged legacy JSON`.
+- [x] **Step 5: Pin transfer failure and reuse boundaries.** Test ready fixed/zero/callable round trips without network; unresolved nil and unsupported terms; duplicate UUID, repeated ISIN purchases, extra/missing sidecar IDs, unsupported version, invalid calendar day, wrong zone, NaN/negative redemption, corrupted approved schedule, changed cost/rate and same IDs/different bytes. Test a frozen confirmation payload after disk files change; legacy replacement of a Ready same-UUID bond; empty replacement with preserved ETFs; removal retaining historical rows; failed second file write preserving previous exports; failed save rolling back bonds/terms while ETF and history stay unchanged; fresh destination activation without source-event replay. Run targeted and full suites.
+- [x] **Step 6: Commit.** Commit `feat: transfer native bond terms beside unchanged legacy JSON`.
 
 ## Task 10: Review, entry and transfer UI with explicit exclusions
 
@@ -774,7 +774,7 @@ For approved entries, legacy `yieldToMaturity` must equal the pure preview estim
 
 **Interfaces:** Consumes `BondTermsReview` and Task 9 frozen payload APIs. Produces `BondTermsReviewView(review: BondTermsReview)` and `BondTermsFields(terms: Binding<BondTerms>)`. Keep the service instance tied to the app-selected container and inject it into sheets; never construct a second production container in a view. Add `BondTermsPresentation` in `BondTermsFields.swift` with `status(assessment: TermsAssessment, approved: Bool) -> String`, `exclusions(_ count: Int) -> String?`, and `callWarning(_ terms: BondTerms) -> String?` as pure functions for tested copy.
 
-- [ ] **Step 1: Test the visible contract.** Pin empty/partial/Ready status, exclusions, and call warning before wiring views.
+- [x] **Step 1: Test the visible contract.** Pin empty/partial/Ready status, exclusions, and call warning before wiring views.
 
 ```swift
 func testUnresolvedPaymentsAreExplicitlyExcluded() {
@@ -788,8 +788,8 @@ func testUnresolvedPaymentsAreExplicitlyExcluded() {
 }
 ```
 
-- [ ] **Step 2: Run RED.** Run `BondTermsPresentationTests` and `UIIsolationTests`. Expect missing presentation contract; retain selected-container guarantees.
-- [ ] **Step 3: Implement fields and resumable review.** Bind corrections to `BondTerms` with supported frequency/structure/date/redemption/convention fields; retain unknown source labels and restrictions read-only. Display assumed/confirmed provenance and mark user corrections confirmed. Distinguish contractual maturity from redemption payment. Show old/proposed terms, dated payments, missing-field errors and call warning per purchase. Dates bind through explicit `MarketDay` conversion, never device-zone offset guessing. Show dates interpreted from legacy values and require confirmation when proposed days differ.
+- [x] **Step 2: Run RED.** Run `BondTermsPresentationTests` and `UIIsolationTests`. Expect missing presentation contract; retain selected-container guarantees.
+- [x] **Step 3: Implement fields and resumable review.** Bind corrections to `BondTerms` with supported frequency/structure/date/redemption/convention fields; retain unknown source labels and restrictions read-only. Display assumed/confirmed provenance and mark user corrections confirmed. Distinguish contractual maturity from redemption payment. Show old/proposed terms, dated payments, missing-field errors and call warning per purchase. Dates bind through explicit `MarketDay` conversion, never device-zone offset guessing. Show dates interpreted from legacy values and require confirmation when proposed days differ.
 
 ```swift
 static func exclusions(_ count: Int) -> String? {
@@ -800,9 +800,9 @@ static func exclusions(_ count: Int) -> String? {
 ```
 
 Use one initial review explanation, a persistent unresolved count/action and resumable drafts. Loading or normal launches never start a fetch. A user-initiated Collect action fetches unresolved selected ISINs, while Refresh explicitly proposes changes for approved holdings. Disable duplicate in-flight actions. Apply uses the frozen selection, surfaces stale/partial/save errors and refreshes views only after successful save. Separate Save as Needs review from Apply approved terms; do not call unsupported terms approved. No source edit may erase discovered restrictions to make a fixed label pass.
-- [ ] **Step 4: Wire entry and transfer without changing ETF flows.** New-bond save goes through `saveNew`, with incomplete purchases visible but excluded. Detail/ordinary edit retains existing historical financial-edit protection; terms changes open the controlled review. Label every yield surface Estimated YTM. Add Export Bonds and Import Bonds actions alongside existing all-positions transfer. Export result explains number of excluded schedules and both files' purpose. Import confirmation shows actual incoming/removed bond counts, native/legacy status, unresolved count and that bonds will be replaced; only the confirmation applies the already frozen payload. Legacy all-positions confirmation explains loss of approved terms. Sidecar failures show an actionable error before confirmation; no fallback button silently discards an invalid sidecar. Empty imports state explicitly that all bond positions will be removed. Preserve current controls/styles.
-- [ ] **Step 5: Verify UI state and run suites.** Extend `UIIsolationTests` with an in-memory container carrying both Ready and unresolved holdings and an ETF. Test copy/status derivation, import confirmation counts, no apply before confirmation, no fetch at startup/load, selected-container writes and errors that retain pending drafts. Open a dedicated in-memory SwiftUI preview for regular semiannual, callable, zero and incomplete holdings; inspect before/after review, delayed maturity, and both import modes. Record interactive checks actually performed. Run targeted and full suites.
-- [ ] **Step 6: Commit.** Commit `feat: expose bond terms review and bond-only transfer controls`.
+- [x] **Step 4: Wire entry and transfer without changing ETF flows.** New-bond save goes through `saveNew`, with incomplete purchases visible but excluded. Detail/ordinary edit retains existing historical financial-edit protection; terms changes open the controlled review. Label every yield surface Estimated YTM. Add Export Bonds and Import Bonds actions alongside existing all-positions transfer. Export result explains number of excluded schedules and both files' purpose. Import confirmation shows actual incoming/removed bond counts, native/legacy status, unresolved count and that bonds will be replaced; only the confirmation applies the already frozen payload. Legacy all-positions confirmation explains loss of approved terms. Sidecar failures show an actionable error before confirmation; no fallback button silently discards an invalid sidecar. Empty imports state explicitly that all bond positions will be removed. Preserve current controls/styles.
+- [x] **Step 5: Verify UI state and run suites.** Extend `UIIsolationTests` with an in-memory container carrying both Ready and unresolved holdings and an ETF. Test copy/status derivation, import confirmation counts, no apply before confirmation, no fetch at startup/load, selected-container writes and errors that retain pending drafts. Open a dedicated in-memory SwiftUI preview for regular semiannual, callable, zero and incomplete holdings; inspect before/after review, delayed maturity, and both import modes. Record interactive checks actually performed. Run targeted and full suites.
+- [x] **Step 6: Commit.** Commit `feat: expose bond terms review and bond-only transfer controls`.
 
 ## Task 11: Document, verify and independently review the complete change
 
@@ -892,3 +892,14 @@ Planning checks completed against the approved specification:
 This is one coupled feature: readiness, payment identity and transfer validation depend on the same terms/schedule contracts. Keep these tasks in order, and do not expose the review/import UI until the underlying safety gates are integrated. Each numbered task owns its regression cycle and commit; its steps may require multiple short edits to finish the listed independent cases.
 
 Before implementation, the human reviews this written plan and selects Native or Subagent-driven execution. Recommended: Native, because these tasks share tightly coupled storage, date and identity interfaces; one implementer can keep those contracts aligned, followed by an independent whole-branch review. QuantLib, historical repair and exact yield remain excluded.
+
+
+## Execution evidence
+
+Native execution was authorized by the user's executing-plans invocation. Tasks 1-10 are implemented and committed on `codex/bond-terms-schedules`, in the managed isolated worktree. Task 11 final verification and independent review are in progress.
+
+- Baseline: 62 tests passed.
+- Latest implementation suite: 121 tests passed, zero failures. `/tmp/mybond-ui-full-green.log` and the task-specific logs record the executed tests.
+- Migration tests exercised both original and V2 SQLite stores upgrading to V3, retaining positions, cash flows and history.
+- Synthetic in-memory portfolio/review renders inspected through XCTest attachments in `/tmp/mybond-bond-terms-ui-final`; no production store opened.
+- External webapp rendering, broker-statement parity and real user-data migration/interactive modal clicks have not been performed.

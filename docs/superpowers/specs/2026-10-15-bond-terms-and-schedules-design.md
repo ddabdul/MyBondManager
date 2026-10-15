@@ -1,6 +1,6 @@
 # EUR bond terms and regular payment schedules
 
-Status: design approved in chat; the user authorized the writing-plans stage on 2026-10-15 after receiving this specification. No application implementation is authorized by this document alone.
+Status: design and reviewed implementation plan approved; Native execution authorized by the user on 2026-10-15. Implementation is on the isolated codex/bond-terms-schedules branch; final review evidence is recorded in the plan.
 
 ## Purpose
 
