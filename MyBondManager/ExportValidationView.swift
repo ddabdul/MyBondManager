@@ -9,6 +9,9 @@ import CoreData
 
 struct ExportValidationView: View {
     let folderURL: URL
+    var bondOnly = false
+    var excludedSchedules = 0
+    @State private var nativeExclusions: Int?
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
 
@@ -23,6 +26,11 @@ struct ExportValidationView: View {
                 .font(.title2)
                 .foregroundColor(isValid ? .green : .red)
 
+            if let warning = BondTermsPresentation.exclusions(nativeExclusions ?? excludedSchedules) { Text(warning).foregroundStyle(.orange) }
+            Text(bondOnly ? "bonds.json keeps the webapp format. Keep bond-terms.json beside it for Mac-to-Mac reading. Neither file contains financial history."
+                 : "Legacy positions transfer. Use Export Bonds to include approved native terms for another Mac.")
+                .font(.caption).foregroundStyle(.secondary)
+            Text("External webapp rendering has not been checked here.").font(.caption).foregroundStyle(.secondary)
             Divider()
 
             // Issue list or “no issues”
@@ -61,10 +69,15 @@ struct ExportValidationView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let payload = try await ImportManager().prepare(from: folderURL)
-            issues = try await viewContext.perform {
-                try PositionsTransferValidation.issues(bonds: payload.bonds,
-                    etfs: payload.etfs, context: viewContext)
+            if bondOnly {
+                let payload = try await ImportManager().prepareBonds(from: folderURL)
+                nativeExclusions = payload.unresolvedCount
+                issues = try await viewContext.perform { try PositionsTransferValidation.bondIssues(payload, context: viewContext) }
+            } else {
+                let payload = try await ImportManager().prepare(from: folderURL)
+                issues = try await viewContext.perform {
+                    try PositionsTransferValidation.issues(bonds: payload.bonds, etfs: payload.etfs, context: viewContext)
+                }
             }
             isValid = issues.isEmpty
         } catch {

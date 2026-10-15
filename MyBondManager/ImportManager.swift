@@ -203,11 +203,14 @@ extension ImportManager {
             return try BondTransfer.prepare(bonds: bonds, sidecar: sidecar)
         }.value
     }
-    func applyBonds(_ transfer: PreparedBondTransfer, into container: NSPersistentContainer, now: Date = Date()) async throws {
+    func applyBonds(_ transfer: PreparedBondTransfer, into container: NSPersistentContainer, now: Date = Date(), expectedDestinationIDs: Set<UUID>? = nil) async throws {
         try BondTransfer.validate(transfer)
         try await PortfolioTransaction.run(in: container) { context in
             var aliases: [UUID: Data] = [:]
             let existing = try context.fetch(BondEntity.fetchRequest())
+            if let expectedDestinationIDs, Set(existing.map(\.id)) != expectedDestinationIDs {
+                throw PortfolioError("Bond positions changed after confirmation. Review the replacement again.")
+            }
             for old in existing {
                 guard let incoming = transfer.bonds.first(where: { $0.id == old.id }) else { continue }
                 let history = HistoricalValuation.fetchRequest()

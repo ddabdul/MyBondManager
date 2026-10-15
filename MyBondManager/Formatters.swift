@@ -35,6 +35,12 @@ enum Formatters {
         return formatter
     }
 
+    static let paymentCurrency: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency; formatter.currencyCode = "EUR"
+        formatter.minimumFractionDigits = 2; formatter.maximumFractionDigits = 6
+        return formatter
+    }()
     // MARK: – Dates
     /// “Mar 12, 2025”
     static let mediumDate: DateFormatter = {

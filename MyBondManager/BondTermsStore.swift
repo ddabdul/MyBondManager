@@ -55,6 +55,8 @@ enum BondTermsStore {
     }
     static func stageDraft(_ draft: BondTermsDraft, for bond: BondEntity) throws {
         bond.termsDraftData = try encode(draft)
+        if bond.termsAcquisitionDay == nil { bond.termsAcquisitionDay = draft.trade.acquisitionDay.rawValue }
+        if bond.termsLegacyDateZone == nil { bond.termsLegacyDateZone = draft.legacyDateZone }
     }
     static func readDraft(_ bond: BondEntity) throws -> BondTermsDraft? {
         try bond.termsDraftData.map { try decode(BondTermsDraft.self, $0) }

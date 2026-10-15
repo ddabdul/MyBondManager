@@ -9,6 +9,8 @@ import AppKit
 
 private struct FolderSelection: Identifiable {
     let url: URL
+    var bondOnly = false
+    var excludedCount = 0
     var id: URL { url }
 }
 
@@ -32,6 +34,15 @@ struct MainTabView: View {
     @State private var showingSellETF = false
     @State private var showingAddETF = false
     @State private var showRecalculatedAlert = false  // ✅ New alert state
+
+    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.name, ascending: true)]) private var allBonds: FetchedResults<BondEntity>
+    @State private var reviewModel: BondTermsReview?
+    @State private var showingTermsReview = false
+    @State private var pendingBondImport: PreparedBondTransfer?
+    @State private var expectedBondIDs: Set<UUID> = []
+    @State private var showingBondImportConfirmation = false
+    @State private var recalculationMessage = ""
+    private var unresolvedCount: Int { BondEligibility.excludedCount(Array(allBonds), on: MarketDay(date: Date())) }
 
     enum Tab: String, CaseIterable, Identifiable {
         case portfolio, cashflows, etf, history
@@ -57,8 +68,15 @@ struct MainTabView: View {
                 // Dynamic buttons depending on view
                 switch selectedTab {
                 case .portfolio:
-                    Button("Export Positions",systemImage: "square.and.arrow.up", action: chooseFolderAndExport)
-                    Button("Import Positions",systemImage: "square.and.arrow.down", action: chooseFolderAndImport)
+                    Menu("Export", systemImage: "square.and.arrow.up") {
+                        Button("Export Bonds (webapp + Mac)") { chooseExport(bondOnly: true) }
+                        Button("Export All Positions", action: chooseFolderAndExport)
+                    }.disabled(isTransferring)
+                    Menu("Import", systemImage: "square.and.arrow.down") {
+                        Button("Import Bonds") { chooseImport(bondOnly: true) }
+                        Button("Import All Positions", action: chooseFolderAndImport)
+                    }.disabled(isTransferring)
+                    Button("Review Terms (\(unresolvedCount))", action: openTermsReview).disabled(isTransferring)
                     Button {
                         showingAddBond = true
                     } label: {
@@ -119,9 +137,12 @@ struct MainTabView: View {
             }
         }
         .sheet(item: $validationSelection) { selection in
-            ExportValidationView(folderURL: selection.url)
+            ExportValidationView(folderURL: selection.url, bondOnly: selection.bondOnly, excludedSchedules: selection.excludedCount)
                 .environment(\.managedObjectContext, viewContext)
                 .environmentObject(notifier)
+        }
+        .sheet(isPresented: $showingTermsReview) {
+            if let reviewModel { BondTermsReviewView(review: reviewModel) }
         }
         .sheet(isPresented: $showingAddBond) {
             AddBondViewAsync()
@@ -148,12 +169,18 @@ struct MainTabView: View {
         }
         .alert("Cash Flows recalculated", isPresented: $showRecalculatedAlert) {
             Button("OK", role: .cancel) {}
+        } message: { Text(recalculationMessage) }
+        .alert("Replace the bond category?", isPresented: $showingBondImportConfirmation) {
+            Button("Replace Bonds", role: .destructive) { applyPendingBondImport() }
+            Button("Cancel", role: .cancel) { pendingBondImport = nil }
+        } message: {
+            if let transfer = pendingBondImport { Text(BondTermsPresentation.importSummary(transfer, existingIDs: expectedBondIDs)) }
         }
         .alert("Replace current positions?", isPresented: $showingImportConfirmation) {
             Button("Replace", role: .destructive) { applyPendingImport() }
             Button("Cancel", role: .cancel) { pendingImport = nil }
         } message: {
-            Text("This replaces all current bond and ETF positions (\(pendingImport?.bonds.count ?? 0) bonds, \(pendingImport?.etfs.count ?? 0) ETFs). Existing history is kept; this transfer does not restore history.")
+            Text("This replaces all current bond and ETF positions (\(pendingImport?.bonds.count ?? 0) bonds, \(pendingImport?.etfs.count ?? 0) ETFs). Existing history is kept; this transfer does not restore history. These legacy files do not restore approved native bond terms: imported bonds need review.")
         }
         .environment(\.managedObjectContext, viewContext)
     }
@@ -200,7 +227,8 @@ struct MainTabView: View {
 
     // MARK: – Import / Export
 
-    private func chooseFolderAndExport() {
+    private func chooseFolderAndExport() { chooseExport(bondOnly: false) }
+    private func chooseExport(bondOnly: Bool) {
         guard !isTransferring else { return }
         let panel = NSOpenPanel()
         panel.title = "Select folder to export current positions (history is excluded)"
@@ -211,13 +239,19 @@ struct MainTabView: View {
         Task { @MainActor in
             defer { isTransferring = false }
             do {
-                let published = try await ExportManager().exportAll(to: folder, from: viewContext)
-                validationSelection = FolderSelection(url: published)
+                if bondOnly {
+                    let published = try await ExportManager().exportBonds(to: folder, from: viewContext)
+                    validationSelection = FolderSelection(url: published, bondOnly: true)
+                } else {
+                    let result = try await ExportManager().exportAllWithReport(to: folder, from: viewContext)
+                    validationSelection = FolderSelection(url: result.folder, excludedCount: result.excludedCount)
+                }
             } catch { notifier.alertMessage = "Export failed: \(error.localizedDescription)" }
         }
     }
 
-    private func chooseFolderAndImport() {
+    private func chooseFolderAndImport() { chooseImport(bondOnly: false) }
+    private func chooseImport(bondOnly: Bool) {
         guard !isTransferring else { return }
         let panel = NSOpenPanel()
         panel.title = "Select positions transfer folder (history is excluded)"
@@ -228,9 +262,32 @@ struct MainTabView: View {
         Task { @MainActor in
             defer { isTransferring = false }
             do {
-                pendingImport = try await ImportManager().prepare(from: folder)
-                showingImportConfirmation = true
+                if bondOnly {
+                    let prepared = try await ImportManager().prepareBonds(from: folder)
+                    expectedBondIDs = Set(try viewContext.fetch(BondEntity.fetchRequest()).map(\.id))
+                    pendingBondImport = prepared; showingBondImportConfirmation = true
+                } else {
+                    pendingImport = try await ImportManager().prepare(from: folder)
+                    showingImportConfirmation = true
+                }
             } catch { notifier.alertMessage = "Import failed: \(error.localizedDescription)" }
+        }
+    }
+
+    private func openTermsReview() {
+        guard let container = portfolioContainer else { notifier.alertMessage = "Portfolio store is unavailable."; return }
+        reviewModel = BondTermsReview(container: container); showingTermsReview = true
+    }
+    private func applyPendingBondImport() {
+        guard let container = portfolioContainer, let transfer = pendingBondImport else { notifier.alertMessage = "Portfolio store or prepared transfer is unavailable."; return }
+        let identities = expectedBondIDs; isTransferring = true
+        Task { @MainActor in
+            defer { isTransferring = false }
+            do {
+                try await ImportManager().applyBonds(transfer, into: container, expectedDestinationIDs: identities)
+                pendingBondImport = nil
+                notifier.alertMessage = "Bonds imported. ETFs and financial history were kept. \(transfer.unresolvedCount) holdings need terms review."
+            } catch { notifier.alertMessage = "Bond import failed: \(error.localizedDescription)" }
         }
     }
 
@@ -257,11 +314,13 @@ struct MainTabView: View {
         }
         Task { @MainActor in
             do {
-                try await PortfolioTransaction.run(in: container) { context in
+                let excluded = try await PortfolioTransaction.run(in: container) { context in
                     let bonds = try context.fetch(BondEntity.fetchRequest())
                     let generator = CashFlowGenerator(context: context)
                     for bond in bonds { try generator.regenerateCashFlows(for: bond) }
+                    return bonds.filter { !BondTermsStore.isReady($0) }.count
                 }
+                recalculationMessage = BondTermsPresentation.exclusions(excluded) ?? "Approved schedules were recalculated from saved terms."
                 showRecalculatedAlert = true
             } catch { notifier.alertMessage = "Recalculation failed: \(error.localizedDescription)" }
         }

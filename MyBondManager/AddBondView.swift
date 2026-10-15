@@ -1,173 +1,109 @@
-//
-//  MyBondManager
-//  AddBondViewAsync.swift
-//  Adjusted to CoreData
-//  Created by Olivier on 20/04/2025.
-
 import SwiftUI
 import CoreData
 
-@available(macOS 13.0, *)
 struct AddBondViewAsync: View {
     @Environment(\.portfolioContainer) private var portfolioContainer
-    @State private var isSaving = false
-    @Environment(\.dismiss) private var dismiss: DismissAction // Explicitly specify DismissAction
-    @Environment(\.managedObjectContext) private var moc
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var collection = BondCollection()
-
-    // MARK: – Inputs
+    @State private var positionID = UUID()
     @State private var acquisitionDate = Date()
-    @State private var parValueStr         = ""
+    @State private var parValueStr = ""
     @State private var acquisitionPrice = ""
-    @State private var depotBank           = ""
-
+    @State private var depotBank = ""
+    @State private var terms = BondTerms()
+    @State private var previewDay = MarketDay(date: Date())
+    @State private var approve = false
+    @State private var isSaving = false
     @State private var errorMessage = ""
 
+    private var preview: Result<BondSchedulePreview, Error> {
+        Result {
+            guard let nominal = Double(parValueStr), let cost = Double(acquisitionPrice) else { throw PortfolioError("Enter nominal and acquisition cost to preview payments.") }
+            return try BondSchedule.preview(trade: BondTrade(id: positionID, isin: ETFPurchase.normalizedISIN(collection.isin),
+                nominal: nominal, cost: cost, acquisitionDay: MarketDay(date: acquisitionDate, calendar: .current), bank: depotBank), terms: terms, from: previewDay)
+        }
+    }
+    private var supported: Bool { if case .success(let value) = preview { return value.assessment.supported }; return false }
     var body: some View {
-        VStack(spacing: 0) {
-            // Title Bar with Custom Styling
-            HStack {
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundColor(.white) // Match title color
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.cancelAction)
-
-                Text("Add New Bond")
-                    .font(.system(.headline, design: .rounded))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity, alignment: .center)
-
-                Spacer()
-                    .frame(width: 30)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .background(AppTheme.tileBackground) // Use the specified background
-
-            Form {
-                Section("Please enter the required information") {
-                    TextField("ISIN", text: $collection.isin)
-                        .onSubmit { collection.isin = ETFPurchase.normalizedISIN(collection.isin) }
-                    DatePicker("Acquisition Date", selection: $acquisitionDate, displayedComponents: .date)
-                    TextField("Par Value", text: $parValueStr)
-                    TextField("Acquisition Price", text: $acquisitionPrice)
-                    TextField("Depot Bank", text: $depotBank)
-                }
-
-                Section("Automaticly collected") {
-                    TextField("Bond Name", text: .constant(collection.details?.name ?? ""))
-                        .disabled(true)
-                    TextField("Issuer", text: .constant(collection.details?.issuer ?? ""))
-                        .disabled(true)
-                    TextField("WKN", text: .constant(collection.details?.wkn ?? ""))
-                        .disabled(true)
-                    if let maturity = collection.details?.maturityDate {
-                        DatePicker("Maturity Date", selection: .constant(maturity), displayedComponents: .date).disabled(true)
-                    } else { Text("Maturity date needs review.").foregroundStyle(.secondary) }
-                    TextField("Coupon Rate (%)", text: .constant(collection.details?.couponRate.map { String($0) } ?? ""))
-                        .disabled(true)
-                }
-
-                if !errorMessage.isEmpty || !collection.errorMessage.isEmpty {
-                    Section {
-                        Text(errorMessage.isEmpty ? collection.errorMessage : errorMessage)
-                            .foregroundColor(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                Section {
-                    HStack {
-                        Spacer() // Push buttons to the right
-
+        VStack(spacing: 12) {
+            Text("Add New Bond").font(.headline).frame(maxWidth: .infinity).padding().background(AppTheme.tileBackground)
+            ScrollView {
+                Form {
+                    Section("Purchase") {
+                        TextField("ISIN", text: $collection.isin)
+                        DatePicker("Acquisition Date", selection: $acquisitionDate, displayedComponents: .date)
+                        TextField("Par Value", text: $parValueStr)
+                        TextField("Acquisition Price", text: $acquisitionPrice)
+                        TextField("Depot Bank", text: $depotBank)
                         Button("Collect Data") {
-                            startScrape()
-                        }
-                        .disabled(collection.isLoading || collection.isin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                        Button("Save") {
-                            saveBond()
-                        }
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(
-                            isSaving || collection.isLoading || collection.details == nil ||
-                            parValueStr.isEmpty || acquisitionPrice.isEmpty || depotBank.isEmpty
-                        )
+                            Task {
+                                await collection.collect()
+                                if let collected = collection.details?.terms { terms = collected; approve = false; previewDay = MarketDay(date: Date()) }
+                            }
+                        }.disabled(collection.isLoading || collection.isin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                }
+                    if let details = collection.details {
+                        Section("Collected instrument") {
+                            Text(details.name); Text(details.issuer + " / " + details.wkn)
+                            BondTermsFields(terms: $terms).id(ETFPurchase.normalizedISIN(collection.isin) + String(describing: terms.collectedAt))
+                        }
+                        Section("Payment Preview") {
+                            switch preview {
+                            case .success(let result):
+                                ForEach(result.assessment.reasons, id: \.self) { Text($0).foregroundStyle(.orange) }
+                                ForEach(Array(result.payments.enumerated()), id: \.offset) { _, payment in
+                                    Text("\(payment.paymentDay.rawValue) - \(payment.kind.rawValue): \(String(format: "%.2f", payment.amount)) EUR")
+                                }
+                                if let yield = result.estimatedYTM { Text(String(format: "Estimated YTM: %.3f%%", yield)) }
+                            case .failure(let error): Text(error.localizedDescription).foregroundStyle(.secondary)
+                            }
+                            Toggle("I reviewed these terms, conventions and payments.", isOn: $approve).disabled(!supported)
+                            if !supported { Text("Save as Needs review to retain the holding without unverified forecast payments.").foregroundStyle(.secondary) }
+                        }
+                    }
+                }.padding()
             }
-            .padding()
-            Spacer()
+            if !errorMessage.isEmpty { Text(errorMessage).foregroundStyle(.red) }
+            if !collection.errorMessage.isEmpty { Text(collection.errorMessage).foregroundStyle(.red) }
+            if collection.isLoading || isSaving { ProgressView() }
+            HStack {
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(approve ? "Save Approved Bond" : "Save as Needs Review", action: saveBond)
+                    .disabled(isSaving || collection.isLoading || collection.details == nil)
+                    .keyboardShortcut(.defaultAction)
+            }.padding()
         }
-        .background(AppTheme.panelBackground) // Set panelBackground for the overall background
-        // Remove the explicit frame to fit content
-        .overlay(
-            Group {
-                if collection.isLoading {
-                    Color.black.opacity(0.3).ignoresSafeArea()
-                    ProgressView("Scraping…")
-                        .padding(20)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(8)
-                        .shadow(radius: 4)
-                }
-            }
-        )
+        .frame(minWidth: 650, minHeight: 650).background(AppTheme.panelBackground)
+        .onChange(of: terms) { _, _ in approve = false }
+        .onChange(of: collection.isin) { _, _ in terms = BondTerms(); approve = false }
+        .onChange(of: parValueStr) { _, _ in resetPreview() }
+        .onChange(of: acquisitionPrice) { _, _ in resetPreview() }
+        .onChange(of: acquisitionDate) { _, _ in resetPreview() }
+        .onChange(of: depotBank) { _, _ in resetPreview() }
     }
-
-    private func startScrape() {
-        errorMessage = ""
-        Task { await collection.collect() }
-    }
-
+    private func resetPreview() { approve = false; previewDay = MarketDay(date: Date()) }
     private func saveBond() {
-        guard !isSaving, let container = portfolioContainer else {
-            errorMessage = "Portfolio store is unavailable."
-            return
-        }
-        guard let details = collection.details,
-              let rate = details.couponRate, let maturityDate = details.maturityDate,
+        guard !isSaving, let container = portfolioContainer else { errorMessage = "Portfolio store is unavailable."; return }
+        guard let details = collection.details, let rate = terms.couponRate, rate.isFinite, rate >= 0,
+              let maturity = terms.maturity, acquisitionDate <= maturity.instant,
               let nominal = Double(parValueStr), nominal.isFinite, nominal > 0,
               let cost = Double(acquisitionPrice), cost.isFinite, cost > 0,
-              rate.isFinite, rate >= 0,
-              acquisitionDate <= maturityDate else {
-            errorMessage = "Enter positive nominal and purchase cost, a nonnegative coupon, and valid dates."
-            return
+              !depotBank.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            errorMessage = "Enter positive nominal/cost, a bank, a valid coupon and contractual maturity."; return
         }
-        let years = maturityDate.timeIntervalSince(acquisitionDate) / (365 * 24 * 3600)
-        let ytm = years > 0 ? ((nominal * rate / 100 + (nominal - cost) / years) / ((nominal + cost) / 2)) * 100 : 0
-        let values = BondCodable(id: UUID(), name: details.name, isin: ETFPurchase.normalizedISIN(collection.isin),
-            issuer: details.issuer, depotBank: depotBank, acquisitionDate: acquisitionDate,
-            maturityDate: maturityDate, couponRate: rate, parValue: nominal, initialPrice: cost,
-            yieldToMaturity: ytm, wkn: details.wkn, cashFlows: [])
+        guard !approve || (supported && previewDay == MarketDay(date: Date())) else { errorMessage = "Refresh and review today's payment preview before approving."; resetPreview(); return }
+        let values = BondCodable(id: positionID, name: details.name, isin: ETFPurchase.normalizedISIN(collection.isin),
+            issuer: details.issuer, depotBank: depotBank, acquisitionDate: acquisitionDate, maturityDate: maturity.instant,
+            couponRate: rate, parValue: nominal, initialPrice: cost, yieldToMaturity: 0, wkn: details.wkn, cashFlows: [])
+        var savedTerms = terms; savedTerms.approvedAt = approve ? Date() : nil
         isSaving = true; errorMessage = ""
         Task { @MainActor in
             defer { isSaving = false }
             do {
-                try await PortfolioTransaction.run(in: container) { context in
-                    let entity = BondEntity(context: context)
-                    entity.id = values.id; entity.name = values.name; entity.isin = values.isin
-                    entity.issuer = values.issuer; entity.depotBank = values.depotBank
-                    entity.acquisitionDate = values.acquisitionDate; entity.maturityDate = values.maturityDate
-                    entity.couponRate = values.couponRate; entity.parValue = values.parValue
-                    entity.initialPrice = values.initialPrice; entity.yieldToMaturity = values.yieldToMaturity
-                    entity.wkn = values.wkn
-                    try CashFlowGenerator(context: context).regenerateCashFlows(for: entity)
-                    try HistoricalDataRecorder.recordBondAcquisition(bond: entity, context: context)
-                }
+                _ = try await BondTermsReview(container: container).saveNew(values: values, terms: savedTerms, legacyDateZone: TimeZone.current.identifier)
                 dismiss()
-            } catch { errorMessage = "Could not save bond: \(error.localizedDescription)" }
+            } catch { errorMessage = "Could not save bond: " + error.localizedDescription }
         }
-    }
-
-}
-
-struct AddBondViewAsync_Previews: PreviewProvider {
-    static var previews: some View {
-        AddBondViewAsync()
-            .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
     }
 }

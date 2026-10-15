@@ -57,6 +57,39 @@ final class PortfolioWriteTests: XCTestCase {
         XCTAssertGreaterThan(count, 0)
     }
 
+    func testInstrumentIdentityCannotChangeBehindRecordedHistory() async throws {
+        let container = try TestPortfolio.make()
+        let bond = TestPortfolio.bond(in: container.viewContext)
+        try HistoricalDataRecorder.recordBondAcquisition(bond: bond, context: container.viewContext)
+        try container.viewContext.save()
+        let values = BondCodable(id: bond.id, name: bond.name, isin: "DE0000000009", issuer: bond.issuer,
+            depotBank: bond.depotBank, acquisitionDate: bond.acquisitionDate, maturityDate: bond.maturityDate,
+            couponRate: bond.couponRate, parValue: bond.parValue, initialPrice: bond.initialPrice,
+            yieldToMaturity: bond.yieldToMaturity, wkn: bond.wkn, cashFlows: [])
+        do { try await EditBondView.persistChanges(bondID: bond.objectID, values: values, in: container); XCTFail("Expected identity/history protection") } catch {}
+        let reader = container.newBackgroundContext()
+        let isin = try await reader.perform { try reader.fetch(BondEntity.fetchRequest()).first?.isin }
+        XCTAssertEqual(isin, "DE0000000001")
+    }
+    func testAllowedTradeChangePreservesTermsAsUnapprovedDraft() async throws {
+        let container = try TestPortfolio.make()
+        let bond = try TestPortfolio.readyBond(in: container.viewContext, terms: BondTermsFixtures.fixed(), now: TestPortfolio.date("2026-02-03T12:00:00Z"))
+        try container.viewContext.save()
+        let values = BondCodable(id: bond.id, name: bond.name, isin: bond.isin, issuer: bond.issuer,
+            depotBank: bond.depotBank, acquisitionDate: bond.acquisitionDate, maturityDate: bond.maturityDate,
+            couponRate: bond.couponRate, parValue: bond.parValue, initialPrice: 950,
+            yieldToMaturity: bond.yieldToMaturity, wkn: bond.wkn, cashFlows: [])
+        try await EditBondView.persistChanges(bondID: bond.objectID, values: values, in: container)
+        let reader = container.newBackgroundContext()
+        try await reader.perform {
+            let stored = try XCTUnwrap(reader.fetch(BondEntity.fetchRequest()).first)
+            XCTAssertFalse(BondTermsStore.isReady(stored)); XCTAssertNil(try BondTermsStore.read(stored))
+            let draft = try XCTUnwrap(BondTermsStore.readDraft(stored))
+            XCTAssertEqual(draft.trade.cost, 950); XCTAssertNil(draft.proposed.approvedAt)
+            XCTAssertEqual(draft.proposed.frequency, 2)
+        }
+    }
+
     func testFailedSaleHistorySaveKeepsEveryLot() async throws {
         let container = try TestPortfolio.make()
         let first = TestPortfolio.holding(in: container.viewContext, shares: 5, price: 80)

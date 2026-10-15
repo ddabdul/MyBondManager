@@ -67,6 +67,28 @@ final class BondTermsReview: ObservableObject {
             }
         } catch { errors["review"] = error.localizedDescription }
     }
+    var today: MarketDay { MarketDay(date: now()) }
+    func beginManualReview(ids: [UUID]) async throws {
+        let day = today
+        let values = try await PortfolioTransaction.run(in: container) { context in
+            try Set(ids).map { id -> BondTermsDraft in
+                let bond = try Self.resolve(id, in: context)
+                if let existing = try BondTermsStore.readDraft(bond), existing.baseline == BondBaseline.capture(bond) { return existing }
+                let zone = bond.termsLegacyDateZone ?? TimeZone.current.identifier
+                var calendar = MarketDay.calendar; calendar.timeZone = TimeZone(identifier: zone)!
+                var proposed = try BondTermsStore.read(bond) ?? BondTerms()
+                proposed.isin = ETFPurchase.normalizedISIN(bond.isin)
+                if proposed.couponRate == nil { proposed.couponRate = bond.couponRate }
+                if proposed.maturity == nil { proposed.maturity = MarketDay(date: bond.maturityDate, calendar: calendar) }
+                proposed.approvedAt = nil
+                let draft = BondTermsDraft(baseline: BondBaseline.capture(bond), trade: try BondTermsStore.trade(bond),
+                    legacyDateZone: zone, proposed: proposed, previewDay: day)
+                try BondTermsStore.stageDraft(draft, for: bond)
+                return draft
+            }
+        }
+        for draft in values { drafts[draft.trade.id] = draft }
+    }
     func preview(_ draft: BondTermsDraft) throws -> BondSchedulePreview {
         try BondSchedule.preview(trade: draft.trade, terms: draft.proposed, from: draft.previewDay)
     }
@@ -74,6 +96,8 @@ final class BondTermsReview: ObservableObject {
         guard let original = drafts[draft.trade.id], original.baseline == draft.baseline, original.trade == draft.trade else {
             throw PortfolioError("Review input changed. Collect a new preview.")
         }
+        if let rate = draft.proposed.couponRate, !rate.isFinite || rate < 0 { throw PortfolioError("Enter a valid nonnegative coupon rate.") }
+        if let redemption = draft.proposed.redemptionPercent, !redemption.isFinite || redemption <= 0 { throw PortfolioError("Enter a valid positive redemption percentage.") }
         var frozen = draft
         frozen.proposed.restrictions = Array(Set(original.proposed.restrictions + draft.proposed.restrictions)).sorted()
         try await PortfolioTransaction.run(in: container) { context in
@@ -121,6 +145,7 @@ final class BondTermsReview: ObservableObject {
             bond.couponRate = values.couponRate; bond.yieldToMaturity = 0
             var calendar = MarketDay.calendar; calendar.timeZone = zone
             let day = MarketDay(date: values.acquisitionDate, calendar: calendar)
+            bond.termsAcquisitionDay = day.rawValue; bond.termsLegacyDateZone = legacyDateZone
             let trade = BondTrade(id: bond.id, isin: bond.isin, nominal: bond.parValue, cost: bond.initialPrice, acquisitionDay: day, bank: bond.depotBank)
             let preview = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay(date: savedAt))
             if terms.approvedAt != nil && preview.assessment.supported {
@@ -150,6 +175,7 @@ extension BondTerms {
             case "accrualStart": result.accrualStart = old.accrualStart
             case "issueDay": result.issueDay = old.issueDay
             case "nextCoupon": result.nextCoupon = old.nextCoupon; result.checkpointObservedOn = old.checkpointObservedOn
+            case "checkpointObservedOn": result.checkpointObservedOn = old.checkpointObservedOn
             case "redemptionPercent": result.redemptionPercent = old.redemptionPercent
             case "callable": result.callable = old.callable
             case "roll": result.roll = old.roll

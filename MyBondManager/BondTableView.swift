@@ -65,6 +65,7 @@ struct BondSummary: Identifiable {
     let records: [BondEntity]
 
     var recordCount: Int { records.count }
+    var unresolvedCount: Int { records.filter { !BondTermsStore.isReady($0) }.count }
 
     var totalNominal: Double {
         records.reduce(0) { $0 + $1.parValue }
@@ -166,8 +167,10 @@ struct BondTableView: View {
             sortOrder: $sortOrder
         ) {
             TableColumn("Issuer", value: \.issuer) { s in
-                Text(s.issuer)
-                    .multilineTextAlignment(.leading)
+                VStack(alignment: .leading) {
+                    Text(s.issuer).multilineTextAlignment(.leading)
+                    if s.unresolvedCount > 0 { Text("\(s.unresolvedCount) need review").font(.caption).foregroundStyle(.orange) }
+                }
             }
             .width(min: 120, ideal: 160, max: 240)
 
@@ -278,7 +281,8 @@ struct BondSummaryDetailView: View {
                                 Text("Price:   \(bond.acquisitionPriceFormatted)")
                                 Text("Acquisition: \(bond.acquisitionDateFormatted)")
                                 Text("Bank: \(bond.depotBank)")
-                                Text("YTM: \(bond.ytmFormatted)")
+                                Text("Estimated YTM: \(bond.ytmFormatted)")
+                                BondTermsStatus(bond: bond)
                             }
                             Spacer()
                             Button("Edit") { editingBond = bond }

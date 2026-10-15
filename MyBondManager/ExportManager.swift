@@ -20,16 +20,20 @@ public class ExportManager {
     }) { self.write = write }
 
     public func exportAll(to folderURL: URL, from context: NSManagedObjectContext) async throws -> URL {
+        try await exportAllWithReport(to: folderURL, from: context).folder
+    }
+    func exportAllWithReport(to folderURL: URL, from context: NSManagedObjectContext) async throws -> (folder: URL, excludedCount: Int) {
         let granted = folderURL.startAccessingSecurityScopedResource()
         defer { if granted { folderURL.stopAccessingSecurityScopedResource() } }
         let snapshot = try await context.perform {
             guard !context.hasChanges else { throw PortfolioError("Save pending portfolio changes before exporting.") }
-            return try Self.snapshot(from: context)
+            return (try Self.snapshot(from: context), try context.fetch(BondEntity.fetchRequest()).filter { !BondTermsStore.isReady($0) }.count)
         }
         return try await Task.detached(priority: .userInitiated) {
             let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
-            return try self.publish(files: [("bonds.json", encoder.encode(snapshot.bonds)),
-                ("etfs.json", encoder.encode(snapshot.etfs))], to: folderURL, now: Date())
+            let folder = try self.publish(files: [("bonds.json", encoder.encode(snapshot.0.bonds)),
+                ("etfs.json", encoder.encode(snapshot.0.etfs))], to: folderURL, now: Date())
+            return (folder, snapshot.1)
         }.value
     }
     func exportBonds(to folderURL: URL, from context: NSManagedObjectContext) async throws -> URL {

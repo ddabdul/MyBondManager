@@ -116,7 +116,7 @@ struct PortfolioSummaryView: View {
 
     private var nextCouponInfo: String {
         guard let coupon = CashFlowSelection.nextCoupon(in: filteredBonds) else { return "–" }
-        let amount = Formatters.currency.string(from: NSNumber(value: coupon.amount)) ?? "–"
+        let amount = Formatters.paymentCurrency.string(from: NSNumber(value: coupon.amount)) ?? "–"
         return """
         Payer: \(coupon.payer)
         Date:  \(Formatters.marketMediumDate.string(from: coupon.date))
@@ -204,7 +204,7 @@ struct PortfolioSummaryView: View {
                 .padding(.bottom, 8)
 
                 if BondEligibility.excludedCount(filteredBonds, on: MarketDay(date: Date())) > 0 {
-                    Text("Forecast excludes \(BondEligibility.excludedCount(filteredBonds, on: MarketDay(date: Date()))) holdings needing review.")
+                    Text(BondTermsPresentation.exclusions(BondEligibility.excludedCount(filteredBonds, on: MarketDay(date: Date()))) ?? "")
                         .foregroundStyle(.orange)
                 }
                 // Top Combined Metrics
@@ -269,7 +269,7 @@ struct PortfolioSummaryView: View {
                                    .string(from: NSNumber(value: totalExpectedProfitCF))
                                    ?? "–")
                     MetricView(icon: "percent",
-                               title: "Avg. YTM",
+                               title: "Estimated YTM",
                                value: weightedAverageYTMFormatted)
                 }
 

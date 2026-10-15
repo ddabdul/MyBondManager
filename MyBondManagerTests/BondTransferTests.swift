@@ -225,6 +225,15 @@ final class BondTransferTests: XCTestCase {
         let count = try await reader.perform { try reader.count(for: BondEntity.fetchRequest()) }
         XCTAssertEqual(count, 1)
     }
+    func testStaleReplacementConfirmationCannotDeleteANewHolding() async throws {
+        let target = try TestPortfolio.make()
+        let frozen = try BondTransfer.prepare(bonds: Data("[]".utf8), sidecar: nil)
+        _ = TestPortfolio.bond(in: target.viewContext); try target.viewContext.save()
+        do { try await ImportManager().applyBonds(frozen, into: target, expectedDestinationIDs: []); XCTFail("Expected stale confirmation") } catch {}
+        let reader = target.newBackgroundContext()
+        let count = try await reader.perform { try reader.count(for: BondEntity.fetchRequest()) }
+        XCTAssertEqual(count, 1)
+    }
     func testFailedSidecarWritePublishesNothingAndKeepsPreviousExport() async throws {
         let source = try TestPortfolio.make()
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
