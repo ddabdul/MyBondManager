@@ -6,17 +6,17 @@ import CoreData
 final class LaunchEventProcessorTests: XCTestCase {
     func testReplayingIntervalDoesNotDuplicateHistory() async throws {
         let container = try TestPortfolio.make()
-        let bond = TestPortfolio.bond(in: container.viewContext)
-        bond.couponRate = 5
-        try CashFlowGenerator(context: container.viewContext).regenerateCashFlows(for: bond)
+        var terms = try BondTermsFixtures.fixed(); terms.couponRate = 5
+        _ = try TestPortfolio.readyBond(in: container.viewContext, terms: terms,
+            now: TestPortfolio.date("2026-02-03T12:00:00Z"))
         try container.viewContext.save()
         let suite = "LaunchReplay." + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         for _ in 0..<2 {
-            defaults.set(TestPortfolio.date("2025-12-31T00:00:00Z"), forKey: "lastLaunchDate")
+            defaults.set(TestPortfolio.date("2026-07-14T00:00:00Z"), forKey: "lastLaunchDate")
             let notifier = LaunchNotifier(defaults: defaults)
-            await notifier.processLaunch(in: container, now: TestPortfolio.date("2026-01-02T00:00:00Z"))
+            await notifier.processLaunch(in: container, now: TestPortfolio.date("2026-07-16T00:00:00Z"))
         }
         let reader = container.newBackgroundContext()
         let count = try await reader.perform { try reader.count(for: HistoricalValuation.fetchRequest()) }
@@ -47,28 +47,31 @@ final class LaunchEventProcessorTests: XCTestCase {
         let container = try TestPortfolio.make()
         let context = container.viewContext
         let bond = TestPortfolio.bond(in: context)
-        bond.acquisitionDate = TestPortfolio.date("2026-01-02T00:00:00Z")
-        for day in [1, 2, 3] {
-            let flow = CashFlowEntity(context: context)
-            flow.bond = bond; flow.natureEnum = .interest; flow.amount = 50
-            flow.date = TestPortfolio.date("2026-01-0\(day)T00:00:00Z")
-        }
-        let messages = try LaunchEventProcessor.stage(context: context,
-            since: TestPortfolio.date("2026-01-02T00:00:00Z"),
-            until: TestPortfolio.date("2026-01-03T00:00:00Z"))
-        XCTAssertEqual(messages.count, 1)
-        let history = try context.fetch(HistoricalValuation.fetchRequest())
-        XCTAssertEqual(history.first?.date, TestPortfolio.date("2026-01-03T00:00:00Z"))
+        bond.acquisitionDate = TestPortfolio.date("2026-05-01T00:00:00Z")
+        var terms = try BondTermsFixtures.fixed(frequency: 4, next: "2026-04-15")
+        let approval = TestPortfolio.date("2026-05-02T12:00:00Z"); terms.approvedAt = approval
+        let preview = try BondSchedule.preview(trade: BondTermsStore.trade(bond), terms: terms, from: MarketDay(date: approval))
+        try BondTermsStore.replaceProjections(for: bond, terms: terms, preview: preview, now: approval,
+            acquisitionDay: MarketDay("2026-05-01"), legacyDateZone: "Europe/Berlin", context: context)
+        XCTAssertTrue(try LaunchEventProcessor.stage(context: context,
+            since: MarketDay("2026-04-14").instant, until: MarketDay("2026-04-16").instant).isEmpty)
+        let payment = try MarketDay("2026-07-15").instant
+        XCTAssertEqual(try LaunchEventProcessor.stage(context: context,
+            since: MarketDay("2026-07-14").instant, until: payment).count, 1)
+        XCTAssertTrue(try LaunchEventProcessor.stage(context: context, since: payment,
+            until: MarketDay("2026-07-16").instant).isEmpty)
+        XCTAssertEqual(try context.fetch(HistoricalValuation.fetchRequest()).first?.date, payment)
     }
 
     func testFinalCouponAndMaturityAreRecordedOnce() async throws {
         let container = try TestPortfolio.make()
-        let bond = TestPortfolio.bond(in: container.viewContext, cost: 900)
-        bond.couponRate = 5
-        try CashFlowGenerator(context: container.viewContext).regenerateCashFlows(for: bond)
+        var terms = try BondTermsFixtures.fixed(frequency: 1, maturity: "2027-01-01", next: "2027-01-01")
+        terms.accrualStart = try MarketDay("2026-01-01"); terms.couponRate = 5
+        _ = try TestPortfolio.readyBond(in: container.viewContext, terms: terms,
+            now: TestPortfolio.date("2026-02-03T12:00:00Z"))
         try container.viewContext.save()
         let since = TestPortfolio.date("2026-12-31T00:00:00Z")
-        let until = TestPortfolio.date("2027-01-02T00:00:00Z")
+        let until = TestPortfolio.date("2027-01-05T00:00:00Z")
         let first = try await PortfolioTransaction.run(in: container) { context in
             try LaunchEventProcessor.stage(context: context, since: since, until: until)
         }

@@ -54,9 +54,11 @@ final class BondCollectionTests: XCTestCase {
         collection.isin = "DE0000000001"
         await collection.collect()
         let container = try TestPortfolio.make()
-        let bond = TestPortfolio.bond(in: container.viewContext, cost: 100000, par: 100000)
+        let bond = try TestPortfolio.readyBond(in: container.viewContext,
+            terms: BondTermsFixtures.fixed(frequency: 1, next: "2027-01-15"),
+            now: TestPortfolio.date("2026-10-01T12:00:00Z"), nominal: 100000, cost: 100000)
         bond.couponRate = try XCTUnwrap(collection.details?.couponRate)
-        try CashFlowGenerator(context: container.viewContext).regenerateCashFlows(for: bond)
+        try CashFlowGenerator(context: container.viewContext).regenerateCashFlows(for: bond, now: TestPortfolio.date("2026-10-01T12:00:00Z"))
         try container.viewContext.save()
         let reader = container.newBackgroundContext()
         let result = try await reader.perform {

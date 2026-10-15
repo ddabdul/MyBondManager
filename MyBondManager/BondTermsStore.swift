@@ -87,6 +87,22 @@ enum BondTermsStore {
     static func projectedPayments(_ bond: BondEntity, from day: MarketDay) throws -> [BondPayment] {
         try validatedPreview(bond, from: day)?.payments ?? []
     }
+    static func historyIssue(for bond: BondEntity, payments: [BondPayment], before: Date,
+                             context: NSManagedObjectContext) throws -> String? {
+        let request = HistoricalValuation.fetchRequest()
+        request.predicate = NSPredicate(format: "assetType == %@ AND (eventKey == nil OR eventKey == '') AND date <= %@ AND (depotBank == %@ OR depotBank == nil)",
+            AssetType.bond.rawValue, before as NSDate, bond.depotBank)
+        let legacy = try context.fetch(request)
+        for payment in payments {
+            let end = try payment.paymentDay.addingDays(1).instant
+            for record in legacy where record.date >= payment.contractualDay.instant && record.date < end {
+                let couldMatch = payment.kind == .interest ? (record.interestReceived?.doubleValue ?? 0) > 0
+                    : record.investedCapital.doubleValue < 0
+                if couldMatch { return "Needs history review: an unlinked legacy payment overlaps this schedule." }
+            }
+        }
+        return nil
+    }
     static func replaceProjections(for bond: BondEntity, terms: BondTerms, preview: BondSchedulePreview,
         now: Date, acquisitionDay: MarketDay, legacyDateZone: String, context: NSManagedObjectContext) throws {
         guard let zone = TimeZone(identifier: legacyDateZone) else { throw PortfolioError("Invalid legacy date time zone.") }
@@ -100,6 +116,9 @@ enum BondTermsStore {
             bond.termsReady = false; bond.termsIssue = verified.assessment.reasons.joined(separator: "\n")
             return
         }
+        if let issue = try historyIssue(for: bond, payments: verified.payments, before: now, context: context) {
+            bond.termsReady = false; bond.termsIssue = issue; return
+        }
         var aliases = try legacyAliases(bond)
         func retain(_ identity: String, _ date: Date, kind: String) {
             let oldKey = "\(bond.id.uuidString)|\(kind)|\(Int(date.timeIntervalSince1970))"
@@ -109,7 +128,7 @@ enum BondTermsStore {
             let identity = flow.eventIdentity ?? "\(bond.id.uuidString)|interest|\(MarketDay(date: flow.date, calendar: calendar).rawValue)"
             retain(identity, flow.date, kind: "interest")
         }
-        let oldMaturity = MarketDay(date: bond.maturityDate, calendar: calendar)
+        let oldMaturity = terms.maturity!
         retain("\(bond.id.uuidString)|maturity|\(oldMaturity.rawValue)", bond.maturityDate, kind: "maturity")
         let prior = try read(bond)
         if bond.eventsActivateAfter == nil || prior?.approvedAt != terms.approvedAt { bond.eventsActivateAfter = now }

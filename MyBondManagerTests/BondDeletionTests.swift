@@ -7,8 +7,9 @@ final class BondDeletionTests: XCTestCase {
     func testFailedDeletionKeepsBondsFlowsAndUnrelatedDraft() async throws {
         let container = try TestPortfolio.make()
         let context = container.viewContext
-        let bond = TestPortfolio.bond(in: context)
-        try CashFlowGenerator(context: context).regenerateCashFlows(for: bond)
+        let bond = try TestPortfolio.readyBond(in: context, terms: BondTermsFixtures.fixed(),
+            now: TestPortfolio.date("2026-10-01T12:00:00Z"))
+        try CashFlowGenerator(context: context).regenerateCashFlows(for: bond, now: TestPortfolio.date("2026-10-01T12:00:00Z"))
         try context.save()
         let id = bond.objectID
         bond.name = "Unrelated draft"
@@ -31,7 +32,7 @@ final class BondDeletionTests: XCTestCase {
     func testSuccessfulDeletionCascadesFlowsAndKeepsHistory() async throws {
         let container = try TestPortfolio.make()
         let bond = TestPortfolio.bond(in: container.viewContext)
-        try CashFlowGenerator(context: container.viewContext).regenerateCashFlows(for: bond)
+        try CashFlowGenerator(context: container.viewContext).regenerateCashFlows(for: bond, now: TestPortfolio.date("2026-10-01T12:00:00Z"))
         try HistoricalDataRecorder.recordBondAcquisition(bond: bond, context: container.viewContext)
         try container.viewContext.save()
         let id = bond.objectID

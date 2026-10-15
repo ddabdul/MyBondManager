@@ -46,14 +46,11 @@ final class PortfolioWriteTests: XCTestCase {
     func testDormantSaveHelperPersistsGeneratedFlows() async throws {
         let persistence = PersistenceController(inMemory: true)
         let context = persistence.container.viewContext
-        let entity = try XCTUnwrap(persistence.container.managedObjectModel.entitiesByName["BondEntity"])
-        let bond = BondEntity(entity: entity, insertInto: context)
-        bond.id = UUID(); bond.name = "Helper"; bond.isin = "DE0000000001"
-        bond.issuer = "Issuer"; bond.wkn = "TEST01"; bond.depotBank = "Bank"
-        bond.parValue = 1000; bond.initialPrice = 900; bond.couponRate = 5; bond.yieldToMaturity = 0
-        bond.acquisitionDate = TestPortfolio.date("2025-01-01T00:00:00Z")
-        bond.maturityDate = TestPortfolio.date("2027-01-01T00:00:00Z")
-        try await persistence.saveAndGenerateCashFlows(bond: bond)
+        let bond = try TestPortfolio.readyBond(in: context,
+            terms: BondTermsFixtures.fixed(frequency: 1, next: "2027-01-15"),
+            now: TestPortfolio.date("2026-10-01T12:00:00Z"))
+        for flow in bond.cashFlowsArray { context.delete(flow) }
+        try await persistence.saveAndGenerateCashFlows(bond: bond, now: TestPortfolio.date("2026-10-01T12:00:00Z"))
         await persistence.backgroundContext.perform {}
         let reader = persistence.container.newBackgroundContext()
         let count = try await reader.perform { try reader.count(for: CashFlowEntity.fetchRequest()) }

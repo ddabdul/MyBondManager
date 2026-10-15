@@ -57,7 +57,7 @@ struct PersistenceController {
 
     /// Legacy two-phase helper. Active forms use PortfolioTransaction for a single save.
     @MainActor
-    func saveAndGenerateCashFlows(bond: BondEntity) async throws {
+    func saveAndGenerateCashFlows(bond: BondEntity, now: Date = Date()) async throws {
         let viewContext = container.viewContext
         if viewContext.hasChanges { try viewContext.save() }
         let bondID = bond.objectID
@@ -65,7 +65,7 @@ struct PersistenceController {
             guard let stored = try context.existingObject(with: bondID) as? BondEntity else {
                 throw PortfolioError("The bond no longer exists.")
             }
-            try CashFlowGenerator(context: context).regenerateCashFlows(for: stored)
+            try CashFlowGenerator(context: context).regenerateCashFlows(for: stored, now: now)
         }
     }
 

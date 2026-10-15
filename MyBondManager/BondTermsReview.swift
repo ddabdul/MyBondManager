@@ -101,6 +101,7 @@ final class BondTermsReview: ObservableObject {
                 terms.approvedAt = appliedAt
                 try BondTermsStore.replaceProjections(for: bond, terms: terms, preview: result, now: appliedAt,
                     acquisitionDay: draft.trade.acquisitionDay, legacyDateZone: draft.legacyDateZone, context: context)
+                guard bond.termsReady else { throw PortfolioError(bond.termsIssue ?? "Needs review.") }
             }
         }
         for id in ids { drafts.removeValue(forKey: id) }

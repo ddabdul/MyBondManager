@@ -32,7 +32,7 @@ final class PortfolioTransactionTests: XCTestCase {
         let container = try TestPortfolio.make()
         try await PortfolioTransaction.run(in: container) { context in
             let bond = TestPortfolio.bond(in: context, cost: 900)
-            try CashFlowGenerator(context: context).regenerateCashFlows(for: bond)
+            try CashFlowGenerator(context: context).regenerateCashFlows(for: bond, now: TestPortfolio.date("2026-10-01T12:00:00Z"))
             try HistoricalDataRecorder.recordBondAcquisition(bond: bond, context: context)
         }
         let reader = container.newBackgroundContext()
@@ -67,9 +67,10 @@ final class PortfolioTransactionTests: XCTestCase {
     func testRecalculationReplacesLoadedCashFlowRows() async throws {
         let container = try TestPortfolio.make()
         let context = container.viewContext
-        let bond = TestPortfolio.bond(in: context)
-        bond.couponRate = 3.375
-        try CashFlowGenerator(context: context).regenerateCashFlows(for: bond)
+        let bond = try TestPortfolio.readyBond(in: context,
+            terms: BondTermsFixtures.fixed(frequency: 1, next: "2027-01-15"),
+            now: TestPortfolio.date("2026-10-01T12:00:00Z"))
+        try CashFlowGenerator(context: context).regenerateCashFlows(for: bond, now: TestPortfolio.date("2026-10-01T12:00:00Z"))
         try context.save()
         let oldIDs = Set(bond.cashFlowsArray.map(\.objectID))
         XCTAssertFalse(oldIDs.isEmpty)
@@ -80,7 +81,7 @@ final class PortfolioTransactionTests: XCTestCase {
         let id = bond.objectID
         try await PortfolioTransaction.run(in: container) { operation in
             let stored = try XCTUnwrap(operation.existingObject(with: id) as? BondEntity)
-            try CashFlowGenerator(context: operation).regenerateCashFlows(for: stored)
+            try CashFlowGenerator(context: operation).regenerateCashFlows(for: stored, now: TestPortfolio.date("2026-10-01T12:00:00Z"))
         }
         await fulfillment(of: [merged], timeout: 5)
         let rows = bond.cashFlowsArray
@@ -104,7 +105,7 @@ final class PortfolioTransactionTests: XCTestCase {
             return (stored.name, stored.initialPrice, try reader.count(for: CashFlowEntity.fetchRequest()))
         }
         XCTAssertEqual(result.0, "Edited in fixture"); XCTAssertEqual(result.1, 950)
-        XCTAssertGreaterThan(result.2, 0)
+        XCTAssertEqual(result.2, 0) // Unreviewed financial edits cannot invent an annual schedule.
     }
 
 }
