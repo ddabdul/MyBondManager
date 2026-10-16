@@ -66,4 +66,29 @@ final class BondTermsEventTests: XCTestCase {
             since: TestPortfolio.date("2027-01-02T00:00:00Z"), until: TestPortfolio.date("2027-01-05T00:00:00Z")).isEmpty)
         XCTAssertEqual(try container.viewContext.count(for: HistoricalValuation.fetchRequest()), 1)
     }
+    func testRecordedSaturdayCouponIsNotReplayedOnAdjustedMonday() throws {
+        let container = try TestPortfolio.make()
+        let bond = TestPortfolio.bond(in: container.viewContext)
+        let saturday = TestPortfolio.date("2026-08-15T00:00:00Z")
+        let oldFlow = CashFlowEntity(context: container.viewContext)
+        oldFlow.bond = bond; oldFlow.date = saturday; oldFlow.amount = 16.875; oldFlow.nature = "interest"
+        let recorded = try HistoricalDataRecorder.recordChange(assetType: .bond, depotBank: bond.depotBank,
+            investedDelta: 0, interestDelta: 16.875, gainsDelta: 0, date: saturday, context: container.viewContext)
+        recorded.eventKey = "\(bond.id.uuidString)|interest|\(Int(saturday.timeIntervalSince1970))"
+        var terms = try BondTermsFixtures.fixed(maturity: "2027-02-15", next: "2026-08-15")
+        terms.accrualStart = try MarketDay("2026-02-15")
+        let now = TestPortfolio.date("2026-08-14T12:00:00Z"); terms.approvedAt = now
+        let preview = try BondSchedule.preview(trade: BondTermsStore.trade(bond), terms: terms, from: MarketDay(date: now))
+        XCTAssertEqual(preview.payments.first?.paymentDay.rawValue, "2026-08-17")
+        try BondTermsStore.replaceProjections(for: bond, terms: terms, preview: preview, now: now,
+            acquisitionDay: MarketDay("2025-01-01"), legacyDateZone: "Europe/Berlin", context: container.viewContext)
+        for _ in 0..<2 {
+            try CashFlowGenerator(context: container.viewContext).regenerateCashFlows(for: bond, now: now)
+            XCTAssertTrue(try LaunchEventProcessor.stage(context: container.viewContext,
+                since: TestPortfolio.date("2026-08-16T00:00:00Z"), until: TestPortfolio.date("2026-08-18T00:00:00Z")).isEmpty)
+        }
+        XCTAssertEqual(try container.viewContext.count(for: HistoricalValuation.fetchRequest()), 1)
+        XCTAssertEqual(recorded.interestReceived?.doubleValue, 16.875)
+    }
+
 }

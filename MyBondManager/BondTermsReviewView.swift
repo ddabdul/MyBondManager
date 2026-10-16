@@ -18,6 +18,7 @@ private struct BondTermsReviewContent: View {
     @State private var selected: Set<UUID> = []
     @State private var focused: UUID?
     @State private var edited: BondTermsDraft?
+    @State private var editorRevision = UUID()
     @State private var message = ""
     @State private var busy = false
     @State private var confirmApproval = false
@@ -109,8 +110,7 @@ private struct BondTermsReviewContent: View {
                 Text("Current holding: coupon \(draft.baseline.rate)% · maturity \(Formatters.shortDate.string(from: draft.baseline.maturity))")
                 Text("Trade: \(draft.trade.nominal) nominal · \(draft.trade.cost) cost · acquired \(draft.trade.acquisitionDay.rawValue) · \(draft.trade.bank)").font(.caption)
                 Text("Legacy date interpretation: " + draft.legacyDateZone).font(.caption).foregroundStyle(.secondary)
-                BondTermsFields(terms: Binding(get: { edited?.proposed ?? draft.proposed }, set: { edited?.proposed = $0 }))
-                    .id(draft.trade.id.uuidString + String(describing: draft.proposed.collectedAt))
+                BondTermsFields(terms: Binding(get: { edited?.proposed ?? draft.proposed }, set: { edited?.proposed = $0 }), resetID: editorRevision)
                 Divider()
                 Text("Preview from " + draft.previewDay.rawValue).font(.headline)
                 if draft.previewDay != review.today { Text("The preview day changed. Save the draft to refresh its preview before applying.").foregroundStyle(.orange) }
@@ -137,7 +137,10 @@ private struct BondTermsReviewContent: View {
                 .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
-    private func refreshEditor() { edited = focused.flatMap { review.drafts[$0] } }
+    private func refreshEditor() {
+        edited = focused.flatMap { review.drafts[$0] }
+        editorRevision = UUID()
+    }
     private func focus(_ id: UUID) {
         guard !dirty else { message = "Save or revert the current draft before switching holdings."; return }
         focused = id; refreshEditor()

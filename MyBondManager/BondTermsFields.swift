@@ -17,6 +17,12 @@ enum BondTermsPresentation {
 
 struct BondTermsFields: View {
     @Binding var terms: BondTerms
+    var resetID: UUID? = nil
+    var body: some View { BondTermsInputFields(terms: $terms).id(resetID) }
+}
+
+private struct BondTermsInputFields: View {
+    @Binding var terms: BondTerms
     @State private var text: [String: String] = [:]
     @State private var errors: [String: String] = [:]
 

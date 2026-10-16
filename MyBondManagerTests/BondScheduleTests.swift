@@ -71,4 +71,21 @@ final class BondScheduleTests: XCTestCase {
         XCTAssertTrue(result.assessment.supported)
         XCTAssertEqual(result.payments.filter { $0.kind == .interest }.map { $0.contractualDay.rawValue }, ["2026-08-31", "2027-02-28"])
     }
+    func testAnnualFebruaryRollRequiresConfirmationAcrossEveryCouponYear() throws {
+        var terms = try BondTermsFixtures.fixed(frequency: 1, maturity: "2030-02-28", next: "2027-02-28")
+        terms.accrualStart = try MarketDay("2026-02-28")
+        terms.checkpointObservedOn = try MarketDay("2026-03-01")
+        terms.roll = nil
+        let from = try MarketDay("2026-03-01")
+        let ambiguous = try BondSchedule.preview(trade: BondTermsFixtures.trade(), terms: terms, from: from)
+        XCTAssertFalse(ambiguous.assessment.supported)
+        XCTAssertTrue(ambiguous.payments.isEmpty)
+        for (roll, leapCoupon) in [(CouponRoll.dayOfMonth, "2028-02-28"), (.endOfMonth, "2028-02-29")] {
+            terms.roll = roll
+            let result = try BondSchedule.preview(trade: BondTermsFixtures.trade(), terms: terms, from: from)
+            XCTAssertTrue(result.assessment.supported, result.assessment.reasons.joined())
+            XCTAssertTrue(result.payments.contains { $0.kind == .interest && $0.contractualDay.rawValue == leapCoupon })
+        }
+    }
+
 }

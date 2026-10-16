@@ -65,14 +65,14 @@ enum BondSchedule {
             guard let checkpoint = terms.nextCoupon, let observed = terms.checkpointObservedOn else {
                 reasons.append("Next coupon checkpoint is missing."); return unsupported()
             }
-            if terms.roll == nil && maturity.day == MarketDay.calendar.range(of: .day, in: .month, for: maturity.instant)?.count {
-                let dayRoll = try maturity.addingMonths(-12 / frequency, anchorDay: maturity.day, endOfMonth: false)
-                let endRoll = try maturity.addingMonths(-12 / frequency, anchorDay: maturity.day, endOfMonth: true)
-                if dayRoll != endRoll { reasons.append("Confirm the coupon month-end roll."); return unsupported() }
-            }
             var reachedStart = false
             for index in 0..<1200 {
                 let day = try maturity.addingMonths(-index * (12 / frequency), anchorDay: maturity.day, endOfMonth: terms.roll == .endOfMonth)
+                if terms.roll == nil, day >= start,
+                   maturity.day == MarketDay.calendar.range(of: .day, in: .month, for: maturity.instant)?.count {
+                    let endRoll = try maturity.addingMonths(-index * (12 / frequency), anchorDay: maturity.day, endOfMonth: true)
+                    if day != endRoll { reasons.append("Confirm the coupon month-end roll."); return unsupported() }
+                }
                 if day == start { reachedStart = true; break }
                 if day < start { break }
                 couponDays.append(day)

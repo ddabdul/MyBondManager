@@ -249,4 +249,47 @@ final class BondTransferTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: previous.appendingPathComponent("bonds.json")), original)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path).count, 1)
     }
+    func testApprovalOverlappingImportRejectsStaleTradeWithoutPartialWrites() async throws {
+        let target = try TestPortfolio.make()
+        let now = TestPortfolio.date("2026-02-03T12:00:00Z")
+        let bond = try TestPortfolio.readyBond(in: target.viewContext, terms: BondTermsFixtures.fixed(), now: now)
+        let id = bond.id
+        _ = TestPortfolio.holding(in: target.viewContext)
+        try HistoricalDataRecorder.recordBondAcquisition(bond: bond, context: target.viewContext)
+        try target.viewContext.save()
+        let review = BondTermsReview(container: target, now: { now })
+        try await review.beginManualReview(ids: [id])
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        let bytes = try encoder.encode(ExportManager.snapshot(from: target.viewContext).bonds)
+        var objects = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [[String: Any]])
+        objects[0]["initialPrice"] = 950
+        let transfer = try BondTransfer.prepare(bonds: JSONSerialization.data(withJSONObject: objects), sidecar: nil)
+        let saving = expectation(description: "Import holds serialized write through save")
+        let release = DispatchSemaphore(value: 0)
+        let coordinator = target.persistentStoreCoordinator
+        let token = NotificationCenter.default.addObserver(forName: .NSManagedObjectContextWillSave, object: nil, queue: nil) { note in
+            guard let context = note.object as? NSManagedObjectContext,
+                  context.persistentStoreCoordinator === coordinator, context.concurrencyType == .privateQueueConcurrencyType else { return }
+            saving.fulfill()
+            if release.wait(timeout: .now() + 5) != .success { XCTFail("Import release timed out") }
+        }
+        defer { release.signal(); NotificationCenter.default.removeObserver(token) }
+        let importing = Task { try await ImportManager().applyBonds(transfer, into: target, now: now) }
+        await fulfillment(of: [saving], timeout: 5)
+        let approving = Task { try await review.apply(ids: [id]) }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        release.signal()
+        try await importing.value
+        do { try await approving.value; XCTFail("Stale approval should fail") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("Holding changed")) }
+        let reader = target.newBackgroundContext()
+        try await reader.perform {
+            let stored = try XCTUnwrap(reader.fetch(BondEntity.fetchRequest()).first)
+            XCTAssertEqual(stored.initialPrice, 950)
+            XCTAssertFalse(BondTermsStore.isReady(stored)); XCTAssertNil(try BondTermsStore.read(stored))
+            XCTAssertEqual(try reader.count(for: ETFEntity.fetchRequest()), 1)
+            XCTAssertEqual(try reader.count(for: HistoricalValuation.fetchRequest()), 1)
+        }
+    }
+
 }

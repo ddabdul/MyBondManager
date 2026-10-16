@@ -61,6 +61,45 @@ final class UIIsolationTests: XCTestCase {
         XCTAssertEqual(try container.viewContext.count(for: HistoricalValuation.fetchRequest()), 0)
         XCTAssertEqual(try container.viewContext.count(for: BondEntity.fetchRequest()), 4)
     }
+
+    func testRevertRestoresVisibleTermsAndClearsValidationErrors() async throws {
+        let state = TermsEditorFixture(terms: try BondTermsFixtures.fixed())
+        let view = NSHostingView(rootView: TermsEditorFixtureView(state: state))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 1000),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = view
+        defer { window.orderOut(nil) }
+        func settle() async throws {
+            await Task.yield(); try await Task.sleep(nanoseconds: 100_000_000)
+            view.layoutSubtreeIfNeeded()
+        }
+        func descendants(_ root: NSView) -> [NSView] { [root] + root.subviews.flatMap(descendants) }
+        func field(_ value: String) throws -> NSTextField {
+            try XCTUnwrap(descendants(view).compactMap { $0 as? NSTextField }.first { $0.isEditable && $0.stringValue == value })
+        }
+        func enter(_ value: String, into field: NSTextField) throws {
+            XCTAssertTrue(window.makeFirstResponder(field))
+            let input = try XCTUnwrap(field.currentEditor() as? NSTextView)
+            input.string = value; input.didChangeText()
+            window.makeFirstResponder(nil)
+        }
+        try await settle()
+        try enter("9", into: field("3.375"))
+        try enter("invalid", into: field("100.0"))
+        try await settle()
+        XCTAssertEqual(state.terms.couponRate, 9)
+        XCTAssertNil(state.terms.redemptionPercent)
+        state.terms = try BondTermsFixtures.fixed()
+        state.resetID = UUID()
+        try await settle()
+        let fields = descendants(view).compactMap { $0 as? NSTextField }.filter(\.isEditable)
+        XCTAssertTrue(fields.contains { $0.stringValue == "3.375" })
+        XCTAssertTrue(fields.contains { $0.stringValue == "100.0" })
+        XCTAssertFalse(fields.contains { ["9", "invalid"].contains($0.stringValue) })
+        // The invalid numeric input and its error share the same replaced field state.
+        XCTAssertEqual(state.terms.couponRate, 3.375)
+        XCTAssertEqual(state.terms.redemptionPercent, 100)
+    }
     private func render<V: View>(_ root: V, to path: String) async throws {
         let view = NSHostingView(rootView: root)
         let rect = NSRect(x: 0, y: 0, width: 1500, height: 1000)
@@ -83,4 +122,15 @@ final class UIIsolationTests: XCTestCase {
         XCTAssertGreaterThan(data.count, 1000)
     }
 
+}
+
+@MainActor
+private final class TermsEditorFixture: ObservableObject {
+    @Published var terms: BondTerms
+    @Published var resetID = UUID()
+    init(terms: BondTerms) { self.terms = terms }
+}
+private struct TermsEditorFixtureView: View {
+    @ObservedObject var state: TermsEditorFixture
+    var body: some View { BondTermsFields(terms: $state.terms, resetID: state.resetID) }
 }
