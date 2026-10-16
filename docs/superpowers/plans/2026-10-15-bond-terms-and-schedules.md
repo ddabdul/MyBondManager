@@ -810,8 +810,8 @@ Use one initial review explanation, a persistent unresolved count/action and res
 
 **Interfaces:** Consumes the completed app and tests from Tasks 1–10; produces a reproducible validation record and a reviewed branch. No new runtime interfaces.
 
-- [ ] **Step 1: Document the shipped rules.** Describe one-time resumable collection, per-purchase approval, EUR/regular-only support, assumed defaults, callable warning, Needs review exclusions, adjusted maturity, prospective event activation, preserved history, and Estimated YTM. Show the two bond files and existing all-positions alternative; native approved reuse, legacy-only Needs review, digest failures, bond-category replacement/empty behavior, no history backup, and ETF preservation. Explicitly distinguish schema compatibility from an actual external-webapp check.
-- [ ] **Step 2: Run the full Debug suite and Release build.** Use the full test command in the workflow section, then:
+- [x] **Step 1: Document the shipped rules.** Describe one-time resumable collection, per-purchase approval, EUR/regular-only support, assumed defaults, callable warning, Needs review exclusions, adjusted maturity, prospective event activation, preserved history, and Estimated YTM. Show the two bond files and existing all-positions alternative; native approved reuse, legacy-only Needs review, digest failures, bond-category replacement/empty behavior, no history backup, and ETF preservation. Explicitly distinguish schema compatibility from an actual external-webapp check.
+- [x] **Step 2: Run the full Debug suite and Release build.** Use the full test command in the workflow section, then:
 
 ```sh
 xcodebuild -project MyBondManager.xcodeproj -scheme MyBondManager \
@@ -822,9 +822,9 @@ xcodebuild -project MyBondManager.xcodeproj -scheme MyBondManager \
 ```
 
 Check process exit status and final XCTest/build result; record test totals/failures and log locations, without claiming a particular future count. Inspect V1/V2 migration tests, calendar/schedule golden cases, ETF regressions and local-only transfer temp directories. Inspect the in-memory UI preview. If the actual webapp is unavailable, record that runtime compatibility remains unverified; do not block truthful completion of repository work or claim it was checked. Broker-statement agreement is likewise separate from deterministic fixtures.
-- [ ] **Step 3: Obtain the independent review.** Use requesting-code-review against application baseline `33992ac5379b80ebb3b44d7a8c21620764880527` and the final feature head, supplying the spec, plan and evidence. Native execution gets one fresh final reviewer; Subagent-driven execution also requires the whole-branch review after per-task reviews. Review financial/event/transfer paths with connected code, not diff alone. Verify substantive findings before fixing under receiving-code-review; rerun affected tests and full suite after changes.
-- [ ] **Step 4: Commit documentation and evidence.** Commit `docs: explain approved bond schedules and native transfers` with only these docs and verified implementation corrections in their own scoped commits. Verify `git status --short`, `git log -1`, and the branch diff; keep local signing/workspace/generated files out. Do not push or merge without a new user request.
-- [ ] **Step 5: Hand off reviewable results.** Report implemented scope, test/build results, independent-review outcome, remaining external checks and local branch state. A Release build passing is not proof of an installed app or a live webapp check. Do not automatically launch against the user's real portfolio or perform the migration for them.
+- [x] **Step 3: Obtain the independent review.** Use requesting-code-review against application baseline `33992ac5379b80ebb3b44d7a8c21620764880527` and the final feature head, supplying the spec, plan and evidence. Native execution gets one fresh final reviewer; Subagent-driven execution also requires the whole-branch review after per-task reviews. Review financial/event/transfer paths with connected code, not diff alone. Verify substantive findings before fixing under receiving-code-review; rerun affected tests and full suite after changes.
+- [x] **Step 4: Commit documentation and evidence.** Commit `docs: explain approved bond schedules and native transfers` with only these docs and verified implementation corrections in their own scoped commits. Verify `git status --short`, `git log -1`, and the branch diff; keep local signing/workspace/generated files out. Do not push or merge without a new user request.
+- [x] **Step 5: Hand off reviewable results.** Report implemented scope, test/build results, independent-review outcome, remaining external checks and local branch state. A Release build passing is not proof of an installed app or a live webapp check. Do not automatically launch against the user's real portfolio or perform the migration for them.
 
 ## Targeted execution commands and scoped commits
 
@@ -896,10 +896,35 @@ Before implementation, the human reviews this written plan and selects Native or
 
 ## Execution evidence
 
-Native execution was authorized by the user's executing-plans invocation. Tasks 1-10 are implemented and committed on `codex/bond-terms-schedules`, in the managed isolated worktree. Task 11 final verification and independent review are in progress.
+Native execution was authorized by the user's executing-plans invocation. Tasks 1-11 are implemented on `codex/bond-terms-schedules`, in the managed isolated worktree. The final review fixes are committed as `4c6afcd`; integration awaits the user's decision.
 
 - Baseline: 62 tests passed.
-- Latest implementation suite: 121 tests passed, zero failures. `/tmp/mybond-ui-full-green.log` and the task-specific logs record the executed tests.
+- Final Debug suite: 125 tests passed, zero failures, xcodebuild exit 0. `/tmp/mybond-final-full-green.log` records the complete run. The task-11 completion gate repeats this full suite against the committed feature.
 - Migration tests exercised both original and V2 SQLite stores upgrading to V3, retaining positions, cash flows and history.
 - Synthetic in-memory portfolio/review renders inspected through XCTest attachments in `/tmp/mybond-bond-terms-ui-final`; no production store opened.
 - External webapp rendering, broker-statement parity and real user-data migration/interactive modal clicks have not been performed.
+
+- Final Release build: succeeded after review fixes, using ad hoc signing; `/tmp/mybond-bond-terms-release-final.log`. Local app: `/tmp/MyBondManager-bond-terms/Build/Products/Release/MyBondManager.app`. No installation or production launch performed.
+- Fresh independent whole-branch review: verdict With fixes, two Important findings and no Critical findings. The annual leap-year roll ambiguity and stale rendered input after restoring saved terms each have observed failing regressions followed by a passing full suite. No second independent review is claimed.
+- Exact additional integration cases now pass: an already recorded Saturday coupon is not replayed on adjusted Monday; approval overlapping a saving import rejects the stale trade and preserves ETF/history state.
+- The rendered terms component is exercised with actual native text editing and an explicit reset. The complete Revert-button/modal interaction remains a manual check.
+- Deferred minors: none reported by the reviewer.
+
+### Execution decisions
+
+The following chronological rulings preserve the execution ledger before its scratch workspace is removed.
+
+- Ruling: Native worktree created from committed feature head and only approved documents copied — original signing/scheme/workspace changes remain in original checkout — cost if wrong: use command-line signing overrides for local tests.
+- Task 4: Ruling: private Core Data JSON envelopes use Foundation exact numeric Date encoding instead of whole-second ISO — the subsecond regression proved ISO truncation makes approved holdings fail their trade baseline and changes approval instants — cost if wrong: private version-1 bytes differ from plan; public legacy/native wire date conventions remain unchanged. RED /tmp/mybond-store-instants-red.log.
+- Task 6: Ruling: switch the legacy generator to readiness gating together with event consumers in Task 7 — their legacy annual fixtures must change in the same integration gate; the new review/save service already uses only approved schedules — cost if wrong: this intermediate commit retains the old generator until Task 7, never shipped separately.
+- Task 7: Ruling: add defaulted now parameter to the legacy persistence generation helper and explicit fixture clocks — avoids tests depending on wall-clock maturity, preserving existing call sites — cost if wrong: one optional parameter on a dormant helper. Missing overload observed RED in /tmp/mybond-helper-clock-red.log.
+- Task 7: Ruling: native-import activation regression belongs to Task 9 where that API is introduced — Task 7 cannot consume a future transfer API — cost if wrong: import activation is not verified until Task 9; no UI/native transfer is exposed before then.
+- Task 8: Ruling: add explicit Berlin market date formatters and wire payment labels/month groups, preserving acquisition date formatting — canonical Berlin midnight otherwise renders as the previous day on a western device — cost if wrong: date labels now deliberately use the EUR market day rather than device-local day. Next Redemption shows actual redemption amount; average maturity uses adjusted date.
+- Task 9: Ruling: legacy imports clear approval/profile data but retain safe local same-identity event aliases — they are destination deduplication state, never imported historical data — cost if wrong: stale aliases could suppress an event; retention is limited to same UUID/normalized ISIN and native mode also verifies trade identity against local keyed history.
+- Task 10: Ruling: add optional expectedDestinationIDs to bond-only apply and recheck inside the transaction — a newly created holding after a replacement prompt was not part of the confirmed removal count — cost if wrong: a changed portfolio requires reconfirmation; existing programmatic calls keep default behavior.
+- Final: Ruling: exact yield, accrued interest, irregular coupons, callable valuation and historical repair remain excluded — the approved scope exposes estimated yield and unsupported/callable warnings — cost if wrong: these instruments need a broader calculation model before reliable pricing.
+- Final: Ruling: external webapp and broker parity are unverified — schema tests prove only the unchanged wire contract — cost if wrong: consumer behavior or statement differences need external validation.
+- Final: Ruling: live ING compatibility is unverified — fixture-tested parsing stands pending a live provider check — cost if wrong: provider response drift can require parser updates.
+- Final: Ruling: production migration and real modal interaction remain unperformed — synthetic migration/UI tests avoid touching the user's portfolio — cost if wrong: real-data or interaction-specific defects remain possible.
+- Final: Ruling: reviewer did not repeat Release build — parent-run xcodebuild succeeded and will run again after fixes — cost if wrong: build evidence has no independent reproduction.
+- Final: Ruling: rendered input-state regression replaces a virtual-button click test — native test-host accessibility does not expose the SwiftUI footer actions reliably; the same production reset token now owns the entire field component state — cost if wrong: complete Revert-button interaction still needs a manual UI check, while displayed values and invalid-input reset are tested directly.
