@@ -1,30 +1,35 @@
 {
-  "configurations" : [
+  "configurations": [
     {
-      "id" : "20B6C6DF-C9C8-45EA-8001-5CB64D382F91",
-      "name" : "Test Scheme Action",
-      "options" : {
-
-      }
+      "id": "20B6C6DF-C9C8-45EA-8001-5CB64D382F91",
+      "name": "Test Scheme Action",
+      "options": {}
     }
   ],
-  "defaultOptions" : {
-    "targetForVariableExpansion" : {
-      "containerPath" : "container:MyBondManager.xcodeproj",
-      "identifier" : "0966F6142DB3FB2600DC7CC7",
-      "name" : "MyBondManager"
-    }
+  "defaultOptions": {
+    "targetForVariableExpansion": {
+      "containerPath": "container:MyBondManager.xcodeproj",
+      "identifier": "0966F6142DB3FB2600DC7CC7",
+      "name": "MyBondManager"
+    },
+    "environmentVariableEntries": [
+      {
+        "key": "MYBONDMANAGER_TESTING",
+        "value": "1",
+        "enabled": true
+      }
+    ]
   },
-  "testTargets" : [
+  "testTargets": [
     {
-      "enabled" : false,
-      "parallelizable" : false,
-      "target" : {
-        "containerPath" : "container:MyBondManager.xcodeproj",
-        "identifier" : "0936DA1B2DBE384C00EE350C",
-        "name" : "MyBondManagerTests"
+      "enabled": true,
+      "parallelizable": false,
+      "target": {
+        "containerPath": "container:MyBondManager.xcodeproj",
+        "identifier": "098EB4F72DBE982A008CB539",
+        "name": "MyBondManagerTests"
       }
     }
   ],
-  "version" : 1
+  "version": 1
 }

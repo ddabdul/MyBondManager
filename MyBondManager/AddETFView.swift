@@ -10,6 +10,7 @@ import CoreData
 @available(macOS 13.0, *)
 struct AddHoldingView: View {
     // MARK: – Core Data
+    @Environment(\.portfolioContainer) private var portfolioContainer
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss)           private var dismiss: DismissAction // Explicitly specify DismissAction
 
@@ -29,6 +30,10 @@ struct AddHoldingView: View {
     @State private var newISIN: String = ""
     @State private var fetchedHeader: InstrumentHeaderScraper.ETFInstrumentHeader?
     @State private var isFetching = false
+    @State private var fetchedISIN: String?
+    @State private var activeRequest: UUID?
+    @State private var isSaving = false
+    @State private var errorMessage: String?
     @State private var fetchError: Error?
 
     // holding fields (shared)
@@ -66,6 +71,7 @@ struct AddHoldingView: View {
             .background(AppTheme.tileBackground) // Use the specified background
 
             Form {
+                if let errorMessage { Text(errorMessage).foregroundColor(.red) }
                 // Mode picker
                 Picker("", selection: $mode) {
                     Text("Add to an existing ETF").tag(Mode.existing)
@@ -163,75 +169,65 @@ struct AddHoldingView: View {
             .padding()
             Spacer()
         }
+        .onChange(of: newISIN) { _, _ in invalidateHeader() }
+        .onChange(of: mode) { _, _ in invalidateHeader() }
         .background(AppTheme.panelBackground) // Set panelBackground for the overall background
         // Remove the explicit frame to fit content
     }
 
     private var canSave: Bool {
-        Double(acquisitionPrice) != nil &&
-        Int32(numberOfShares) != nil &&
-        ((mode == .existing && selectedETF != nil) ||
-         (mode == .new && fetchedHeader != nil))
+        guard !isSaving, let price = Double(acquisitionPrice), let shares = Int32(numberOfShares),
+              price.isFinite, price > 0, shares > 0 else { return false }
+        return mode == .existing ? selectedETF != nil
+            : fetchedHeader != nil && fetchedISIN == ETFPurchase.normalizedISIN(newISIN)
     }
 
-    // MARK: – Fetch header
-    private func fetchHeader() async {
-        fetchError = nil
-        fetchedHeader = nil
-        isFetching = true
-        defer { isFetching = false }
+    private func invalidateHeader() {
+        fetchedHeader = nil; fetchedISIN = nil; activeRequest = nil
+        isFetching = false; fetchError = nil; showSuccess = false
+    }
 
+    @MainActor private func fetchHeader() async {
+        let requestedISIN = ETFPurchase.normalizedISIN(newISIN)
+        let request = UUID()
+        activeRequest = request; fetchedHeader = nil; fetchedISIN = nil
+        isFetching = true; fetchError = nil
+        defer { if activeRequest == request { isFetching = false } }
         do {
-            let header = try await scraper.fetchInstrumentHeader(isin: newISIN)
-            await MainActor.run { fetchedHeader = header }
+            let header = try await scraper.fetchInstrumentHeader(isin: requestedISIN)
+            guard ETFPurchase.acceptsHeader(requestedISIN: requestedISIN, currentISIN: newISIN,
+                isNewMode: mode == .new, requestedID: request, activeID: activeRequest) else { return }
+            fetchedHeader = header; fetchedISIN = requestedISIN
         } catch {
-            await MainActor.run { fetchError = error }
+            if activeRequest == request { fetchError = error }
         }
     }
 
-    // MARK: – Save holding
     private func saveHolding() {
-        let etf: ETFEntity
-        if mode == .existing {
-            etf = selectedETF!
-        } else {
-            etf = ETFEntity(context: viewContext)
-            etf.id = UUID()
-            etf.etfName = fetchedHeader!.name
-            etf.isin = newISIN
-            etf.wkn = fetchedHeader!.wkn
-            etf.lastPrice = fetchedHeader!.price
-            etf.issuer = ""
+        guard !isSaving, let container = portfolioContainer else {
+            errorMessage = "Portfolio store is unavailable."
+            return
         }
-
-        let holding = ETFHoldings(context: viewContext)
-        holding.acquisitionDate = acquisitionDate
-        holding.acquisitionPrice = Double(acquisitionPrice)!
-        holding.numberOfShares = Int32(Int(numberOfShares)!)
-        holding.holdingtoetf = etf
-
-        if let latest = fetchedHeader?.price {
-            etf.lastPrice = latest
+        guard canSave, let price = Double(acquisitionPrice), let shares = Int32(numberOfShares) else {
+            errorMessage = "Enter valid purchase details and fetch matching instrument data."
+            return
         }
-
-        do {
-            try viewContext.save()
-            // Record historical acquisition
-            try HistoricalDataRecorder.recordETFAcquisition(
-                holding: holding,
-                context: viewContext
-            )
-            
-            // Clear inputs
-            acquisitionPrice = ""
-            numberOfShares = ""
-            if mode == .new {
-                newISIN = ""
-                fetchedHeader = nil
-            }
-            showSuccess = true
-        } catch {
-            print("Core Data save error:", error)
+        let isin = ETFPurchase.normalizedISIN(newISIN)
+        let header = mode == .new ? fetchedHeader : nil
+        let existingID = mode == .existing ? selectedETF?.objectID : nil
+        let date = acquisitionDate
+        isSaving = true; errorMessage = nil; showSuccess = false
+        Task { @MainActor in
+            defer { isSaving = false }
+            do {
+                try await PortfolioTransaction.run(in: container) { context in
+                    try ETFPurchase.stage(isin: isin, header: header, existingID: existingID,
+                        date: date, price: price, shares: shares, context: context)
+                }
+                acquisitionPrice = ""; numberOfShares = ""
+                if mode == .new { newISIN = ""; invalidateHeader() }
+                showSuccess = true
+            } catch { errorMessage = "Could not save holding: \(error.localizedDescription)" }
         }
     }
 }

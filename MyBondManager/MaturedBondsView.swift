@@ -7,6 +7,7 @@ import CoreData
 
 struct MaturedBondsView: View {
     @Environment(\.managedObjectContext) private var moc
+    @Environment(\.portfolioContainer) private var portfolioContainer
     @Environment(\.dismiss) private var dismiss
 
     /// Bonds with maturityDate before the start of today
@@ -18,17 +19,13 @@ struct MaturedBondsView: View {
         sortDescriptors: [
             NSSortDescriptor(keyPath: \BondEntity.maturityDate, ascending: true)
         ],
-        predicate: NSPredicate(
-            format: "maturityDate < %@",
-            Self.startOfToday as NSDate
-        ),
         animation: .default
     )
     private var bondEntities: FetchedResults<BondEntity>
 
     /// Summaries grouped by ISIN
     private var summaries: [BondSummary] {
-        Dictionary(grouping: bondEntities, by: \.isin)
+        Dictionary(grouping: bondEntities.filter { !BondEligibility.isActive($0, on: MarketDay(date: Date())) }, by: \.isin)
             .map { isin, entities in
                 let first = entities[0]
                 return BondSummary(
@@ -43,6 +40,8 @@ struct MaturedBondsView: View {
     }
 
     @State private var summaryToDelete: BondSummary?
+    @State private var isDeleting = false
+    @State private var deletionError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,6 +55,7 @@ struct MaturedBondsView: View {
             .padding()
             .background(AppTheme.tileBackground)
 
+            if let deletionError { Text(deletionError).foregroundColor(.red).padding() }
             // Table of summaries with inline delete
             Table(summaries) {
                 TableColumn("Issuer") { (summary: BondSummary) in
@@ -103,10 +103,7 @@ struct MaturedBondsView: View {
                         "maturing on \(Formatters.shortDate.string(from: summary.maturityDate))."
                     ),
                     primaryButton: .destructive(Text("Delete")) {
-                        summary.records.forEach { bond in
-                            moc.delete(bond)
-                        }
-                        try? moc.save()
+                        deleteSummary(summary)
                     },
                     secondaryButton: .cancel()
                 )
@@ -123,8 +120,25 @@ struct MaturedBondsView: View {
             }
             .padding()
         }
+        .disabled(isDeleting)
         .background(AppTheme.panelBackground)
         .frame(minWidth: 700, minHeight: 400)
+    }
+
+    private func deleteSummary(_ summary: BondSummary) {
+        guard !isDeleting else { return }
+        guard let container = portfolioContainer else {
+            deletionError = "Portfolio store is unavailable."
+            return
+        }
+        let ids = summary.records.map(\.objectID)
+        isDeleting = true; deletionError = nil
+        Task { @MainActor in
+            defer { isDeleting = false }
+            do {
+                try await PortfolioTransaction.run(in: container) { try BondDeletion.stage(ids: ids, context: $0) }
+            } catch { deletionError = "Could not delete matured bonds: \(error.localizedDescription)" }
+        }
     }
 }
 

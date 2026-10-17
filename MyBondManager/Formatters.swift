@@ -20,6 +20,27 @@ enum Formatters {
         return f
     }()
     
+    static let marketMediumDate: DateFormatter = marketFormatter(style: .medium)
+    static let marketShortDate: DateFormatter = marketFormatter(style: .short)
+    static let marketMonthYear: DateFormatter = {
+        let formatter = marketFormatter(style: .short)
+        formatter.dateFormat = "MM/yy"
+        return formatter
+    }()
+    private static func marketFormatter(style: DateFormatter.Style) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.calendar = MarketDay.calendar
+        formatter.timeZone = MarketDay.calendar.timeZone
+        formatter.dateStyle = style
+        return formatter
+    }
+
+    static let paymentCurrency: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency; formatter.currencyCode = "EUR"
+        formatter.minimumFractionDigits = 2; formatter.maximumFractionDigits = 6
+        return formatter
+    }()
     // MARK: – Dates
     /// “Mar 12, 2025”
     static let mediumDate: DateFormatter = {

@@ -9,22 +9,23 @@ import CoreData
 
 struct EditBondView: View {
     @Environment(\.managedObjectContext) private var moc
+    @Environment(\.portfolioContainer) private var portfolioContainer
+    @State private var isSaving = false
+    @State private var termsReview: BondTermsReview?
     @Environment(\.dismiss)      private var dismiss
 
     @ObservedObject var bond: BondEntity
 
     // Local editable copy of each field
+    @State private var errorMessage = ""
     @State private var name: String
     @State private var issuer: String
     @State private var isin: String
     @State private var wkn: String
     @State private var parValue: String
     @State private var initialPrice: String
-    @State private var couponRate: String
     @State private var depotBank: String
     @State private var acquisitionDate: Date
-    @State private var yieldToMaturity: String
-    @State private var maturityDate: Date
 
     init(bond: BondEntity) {
         print("[EditBondView] init for bond ISIN: \(bond.isin)")
@@ -35,15 +36,13 @@ struct EditBondView: View {
         _wkn             = State(initialValue: bond.wkn)
         _parValue        = State(initialValue: String(bond.parValue))
         _initialPrice    = State(initialValue: String(bond.initialPrice))
-        _couponRate      = State(initialValue: String(bond.couponRate))
         _depotBank       = State(initialValue: bond.depotBank)
         _acquisitionDate = State(initialValue: bond.acquisitionDate)
-        _yieldToMaturity = State(initialValue: String(bond.yieldToMaturity))
-        _maturityDate    = State(initialValue: bond.maturityDate)
     }
 
     var body: some View {
         Form {
+            if !errorMessage.isEmpty { Text(errorMessage).foregroundColor(.red) }
             Section("Identifiers") {
                 TextField("Name", text: $name)
                 TextField("Issuer", text: $issuer)
@@ -54,14 +53,15 @@ struct EditBondView: View {
             Section("Financials") {
                 TextField("Par Value", text: $parValue)
                 TextField("Initial Price", text: $initialPrice)
-                TextField("Coupon Rate (%)", text: $couponRate)
-                TextField("Yield to Maturity (%)", text: $yieldToMaturity)
-                    .disabled(true) // we’ll recalc this
+                Text("Coupon: " + bond.couponFormatted)
+                Text("Estimated YTM: " + bond.ytmFormatted)
+                BondTermsStatus(bond: bond)
+                Button("Review instrument terms") { openTermsReview() }
             }
 
             Section("Dates & Bank") {
                 DatePicker("Acquisition Date", selection: $acquisitionDate, displayedComponents: .date)
-                DatePicker("Maturity Date",    selection: $maturityDate,    displayedComponents: .date)
+                Text("Contractual maturity: " + bond.contractualMaturityFormatted)
                 TextField("Depot Bank", text: $depotBank)
             }
 
@@ -72,59 +72,116 @@ struct EditBondView: View {
                 }
                 Button("Save") {
                     saveChanges()
-                    dismiss()
                 }
+                .disabled(isSaving)
                 .keyboardShortcut(.defaultAction)
             }
         }
         .padding()
         .frame(minWidth: 400, minHeight: 500)
+        .sheet(item: $termsReview) { review in
+            BondTermsReviewView(review: review, initialSelection: bond.id)
+        }
+    }
+    private func openTermsReview() {
+        guard let container = portfolioContainer else { errorMessage = "Portfolio store is unavailable."; return }
+        Task { @MainActor in
+            do { termsReview = try await Self.prepareTermsReview(in: container) }
+            catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    @MainActor
+    static func prepareTermsReview(in container: NSPersistentContainer) async throws -> BondTermsReview {
+        let review = BondTermsReview(container: container)
+        try await review.load()
+        return review
     }
 
     private func saveChanges() {
-        // 1️⃣ Update text fields
-        bond.name       = name
-        bond.issuer     = issuer
-        bond.isin       = isin
-        bond.wkn        = wkn
-        bond.depotBank  = depotBank
-        bond.acquisitionDate = acquisitionDate
-        bond.maturityDate    = maturityDate
-
-        // 2️⃣ Parse numeric inputs (fallback to existing if parsing fails)
-        let parVal      = Double(parValue)     ?? bond.parValue
-        let pricePaid   = Double(initialPrice) ?? bond.initialPrice
-        let couponPct   = Double(couponRate)   ?? bond.couponRate
-
-        bond.parValue     = parVal
-        bond.initialPrice = pricePaid
-        bond.couponRate   = couponPct
-
-        // 3️⃣ Recalculate YTM
-        let couponPayment = parVal * couponPct / 100.0
-        let secondsPerYear = 365 * 24 * 3600
-        let years = maturityDate.timeIntervalSince(acquisitionDate) / Double(secondsPerYear)
-
-        let newYTM: Double
-        if years > 0 {
-            let numerator   = couponPayment + (parVal - pricePaid) / years
-            let denominator = (parVal + pricePaid) / 2
-            newYTM = (numerator / denominator) * 100.0
-        } else {
-            newYTM = 0
+        guard !isSaving, let container = portfolioContainer else {
+            errorMessage = "Portfolio store is unavailable."
+            return
         }
-        bond.yieldToMaturity = newYTM
-
-        do {
-            // 4️⃣ Regenerate cash flows with updated terms
-            let generator = CashFlowGenerator(context: moc)
-            try generator.regenerateCashFlows(for: bond)
-
-            // 5️⃣ Save everything in one shot
-            try moc.save()
-            print("[EditBondView] Saved edits and recalculated YTM (\(String(format: "%.2f", newYTM))%) + cash flows")
-        } catch {
-            print("[EditBondView] Error saving bond or regenerating cash flows: \(error)")
+        let rate = bond.couponRate, maturityDate = bond.maturityDate
+        guard !ETFPurchase.normalizedISIN(isin).isEmpty, let nominal = Double(parValue), nominal.isFinite, nominal > 0,
+              let cost = Double(initialPrice), cost.isFinite, cost > 0,
+              rate.isFinite, rate >= 0,
+              acquisitionDate <= maturityDate else {
+            errorMessage = "Enter positive nominal and purchase cost, a nonnegative coupon, and valid dates."
+            return
+        }
+        let values = BondCodable(id: bond.id, name: name, isin: isin,
+            issuer: issuer, depotBank: depotBank, acquisitionDate: acquisitionDate,
+            maturityDate: maturityDate, couponRate: rate, parValue: nominal, initialPrice: cost,
+            yieldToMaturity: bond.yieldToMaturity, wkn: wkn, cashFlows: [])
+        let bondID = bond.objectID
+        isSaving = true; errorMessage = ""
+        Task { @MainActor in
+            defer { isSaving = false }
+            do {
+                try await Self.persistChanges(bondID: bondID, values: values, in: container)
+                dismiss()
+            } catch { errorMessage = "Could not save bond: \(error.localizedDescription)" }
         }
     }
+
+    static func persistChanges(bondID: NSManagedObjectID, values: BondCodable,
+                               in container: NSPersistentContainer) async throws {
+        try await PortfolioTransaction.run(in: container) { context in
+            guard let entity = try context.existingObject(with: bondID) as? BondEntity else {
+                throw PortfolioError("The bond no longer exists.")
+            }
+            guard entity.id == values.id else { throw PortfolioError("The bond identity cannot be changed.") }
+            let identityChanged = ETFPurchase.normalizedISIN(entity.isin) != ETFPurchase.normalizedISIN(values.isin)
+            let acquisitionChanged = entity.acquisitionDate != values.acquisitionDate
+            let previousDay = entity.termsAcquisitionDay
+            let previousZone = entity.termsLegacyDateZone
+            let previousTerms = try BondTermsStore.readDraft(entity)?.proposed ?? BondTermsStore.read(entity)
+            let instrumentChanged = identityChanged || entity.couponRate != values.couponRate || entity.maturityDate != values.maturityDate
+            let instrumentApproval = instrumentChanged ? nil : entity.termsData
+            let financialChange = identityChanged || entity.parValue != values.parValue || entity.initialPrice != values.initialPrice
+                || entity.couponRate != values.couponRate || entity.depotBank != values.depotBank
+                || entity.acquisitionDate != values.acquisitionDate || entity.maturityDate != values.maturityDate
+            if financialChange {
+                let history = HistoricalValuation.fetchRequest()
+                history.predicate = NSPredicate(format:
+                    "assetType == %@ AND (eventKey BEGINSWITH %@ OR eventKey == nil OR eventKey == '')",
+                    AssetType.bond.rawValue, entity.id.uuidString + "|")
+                history.fetchLimit = 1
+                guard try context.count(for: history) == 0 else {
+                    throw PortfolioError("Instrument identity, financial values, dates and bank cannot be changed while related or unlinked legacy bond history exists. Descriptive fields can still be edited; history corrections need a separate reconciliation.")
+                }
+            }
+            let localAliases = identityChanged ? [:] : try BondTermsStore.captureLegacyAliases(entity)
+            if financialChange {
+                BondTermsStore.clear(entity)
+                // Keep the approved instrument terms while invalidating this purchase's projections.
+                entity.termsData = instrumentApproval
+            }
+            entity.id = values.id; entity.name = values.name; entity.isin = values.isin
+            entity.issuer = values.issuer; entity.depotBank = values.depotBank
+            entity.acquisitionDate = values.acquisitionDate; entity.maturityDate = values.maturityDate
+            entity.couponRate = values.couponRate; entity.parValue = values.parValue
+            entity.initialPrice = values.initialPrice; entity.yieldToMaturity = values.yieldToMaturity
+            entity.wkn = values.wkn
+            if financialChange {
+                entity.yieldToMaturity = 0
+                let zone = acquisitionChanged ? TimeZone.current.identifier : (previousZone ?? TimeZone.current.identifier)
+                var calendar = MarketDay.calendar; calendar.timeZone = TimeZone(identifier: zone)!
+                let day = try (!acquisitionChanged ? previousDay : nil).map(MarketDay.init) ?? MarketDay(date: values.acquisitionDate, calendar: calendar)
+                entity.termsAcquisitionDay = day.rawValue; entity.termsLegacyDateZone = zone
+                entity.legacyEventAliasesData = try BondTermsStore.encode(localAliases)
+                var proposed = identityChanged ? BondTerms() : (previousTerms ?? BondTerms())
+                proposed.isin = ETFPurchase.normalizedISIN(values.isin); proposed.approvedAt = nil
+                proposed.couponRate = values.couponRate
+                if proposed.maturity == nil || proposed.maturity?.instant != values.maturityDate { proposed.maturity = MarketDay(date: values.maturityDate, calendar: calendar) }
+                let draft = try BondTermsDraft(baseline: BondBaseline.capture(entity), trade: BondTermsStore.trade(entity),
+                    legacyDateZone: zone, proposed: proposed, previewDay: MarketDay(date: Date()))
+                try BondTermsStore.stageDraft(draft, for: entity)
+                entity.termsIssue = "Needs review after a trade change."
+            } else { try CashFlowGenerator(context: context).regenerateCashFlows(for: entity) }
+        }
+    }
+
 }

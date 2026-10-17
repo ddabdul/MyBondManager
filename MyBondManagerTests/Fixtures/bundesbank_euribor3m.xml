@@ -1,0 +1,33 @@
+<?xml version="1.0" ?>
+<message:GenericData xmlns:generic="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/data/generic"
+  xmlns:message="http://www.sdmx.org/resources/sdmxml/schemas/v2_1/message">
+  <message:DataSet structureRef="BBK_IRMM" setID="BBIG1">
+    <generic:Series>
+      <generic:SeriesKey>
+        <generic:Value id="BBK_IRMM_MATURITY" value="M03"/>
+      </generic:SeriesKey>
+      <generic:Obs>
+        <generic:ObsDimension value="2024-05-28"/>
+        <generic:ObsValue value="2.365"/>
+      </generic:Obs>
+      <generic:Obs>
+        <generic:ObsDimension value="2024-05-29"/>
+        <generic:ObsValue value="2.377"/>
+      </generic:Obs>
+      <generic:Obs>
+        <generic:ObsDimension value="2024-05-31"/>
+        <generic:ObsValue value="2.384"/>
+      </generic:Obs>
+      <generic:Obs>
+        <generic:ObsDimension value="2024-06-02"/>
+        <generic:Attributes>
+          <generic:Value id="OBS_STATUS" value="K"/>
+        </generic:Attributes>
+      </generic:Obs>
+      <generic:Obs>
+        <generic:ObsDimension value="2024-06-03"/>
+        <generic:ObsValue value="2.391"/>
+      </generic:Obs>
+    </generic:Series>
+  </message:DataSet>
+</message:GenericData>

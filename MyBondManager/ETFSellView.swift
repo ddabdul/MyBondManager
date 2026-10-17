@@ -12,6 +12,7 @@ import CoreData
 struct SellETFView: View {
 
     // MARK: – Environment
+    @Environment(\.portfolioContainer) private var portfolioContainer
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss)           private var dismiss: DismissAction // Explicitly specify DismissAction
 
@@ -24,6 +25,8 @@ struct SellETFView: View {
     // MARK: – UI State
     @State private var selectedETF: ETFEntity?
     @State private var saleDate: Date = Date()
+    @State private var salePrice = ""
+    @State private var isSaving = false
     @State private var saleShares: String = ""
     @State private var errorMessage: String?
 
@@ -73,7 +76,8 @@ struct SellETFView: View {
                                 .foregroundColor(.secondary)
                         }
 
-    //                    DatePicker("Sale Date", selection: $saleDate, in: ...Date(), displayedComponents: .date)
+                        TextField("Execution Price Per Share", text: $salePrice)
+                        DatePicker("Sale Date", selection: $saleDate, in: ...Date(), displayedComponents: .date)
                     }
 
                     // validation errors
@@ -103,7 +107,8 @@ struct SellETFView: View {
 
     // MARK: – Validation
     private func canSave(etf: ETFEntity) -> Bool {
-        guard let shares = Int32(saleShares),
+        guard !isSaving, let price = Double(salePrice), price.isFinite, price > 0,
+              let shares = Int32(saleShares),
               shares > 0,
               shares <= etf.totalShares
         else { return false }
@@ -112,53 +117,30 @@ struct SellETFView: View {
 
     // MARK: – FIFO sale logic
     private func saveSale() {
-        guard let etf = selectedETF else { return }
-        guard let sharesToSell = Int32(saleShares),
-              sharesToSell > 0,
-              sharesToSell <= etf.totalShares
-        else {
-            errorMessage = "Enter a valid number of shares (≤ your total)."
+        guard !isSaving, let container = portfolioContainer else {
+            errorMessage = "Portfolio store is unavailable."
             return
         }
-
-        var remaining = sharesToSell
-        let fifo = (etf.etftoholding as? Set<ETFHoldings>)?
-            .sorted { $0.acquisitionDate < $1.acquisitionDate } ?? []
-
-        for lot in fifo {
-            guard remaining > 0 else { break }
-            let available = lot.numberOfShares
-            let toSell = min(available, remaining)
-
-                    // ——— Historical record insertion ———
-                    do {
-                        try HistoricalDataRecorder.recordETFSale(
-                            holding: lot,
-                            soldShares: Int(toSell),
-                            pricePerShare: etf.lastPrice,
-                            date: saleDate,
-                            context: viewContext
-                        )
-                    } catch {
-                        print("⚠️ Failed to record ETF sale history: \(error)")
-                    }
-                    // ————————————————————————————————
-            if available <= remaining {
-                remaining -= available
-                viewContext.delete(lot)
-            } else {
-                lot.numberOfShares = available - remaining
-                remaining = 0
-            }
+        guard let etf = selectedETF, canSave(etf: etf),
+              let shares = Int32(saleShares), let price = Double(salePrice) else {
+            errorMessage = "Enter valid shares and an execution price."
+            return
         }
-        
-     
-        do {
-            try viewContext.save()
-            viewContext.refreshAllObjects()
-            dismiss()
-        } catch {
-            errorMessage = "Failed saving sale: \(error.localizedDescription)"
+        let etfID = etf.objectID
+        let date = saleDate
+        isSaving = true; errorMessage = nil
+        Task { @MainActor in
+            defer { isSaving = false }
+            do {
+                try await PortfolioTransaction.run(in: container) { context in
+                    guard let stored = try context.existingObject(with: etfID) as? ETFEntity else {
+                        throw PortfolioError("The selected ETF no longer exists.")
+                    }
+                    try ETFSale.stage(etf: stored, shares: shares, executionPrice: price,
+                        date: date, context: context)
+                }
+                dismiss()
+            } catch { errorMessage = "Could not save sale: \(error.localizedDescription)" }
         }
     }
 }

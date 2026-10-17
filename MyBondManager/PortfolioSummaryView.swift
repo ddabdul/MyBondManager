@@ -22,7 +22,6 @@ struct PortfolioSummaryView: View {
     // — Bonds
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.acquisitionDate, ascending: false)],
-        predicate: NSPredicate(format: "maturityDate >= %@", Self.startOfToday as NSDate),
         animation: .default
     )
     private var bondEntities: FetchedResults<BondEntity>
@@ -51,15 +50,14 @@ struct PortfolioSummaryView: View {
     }
 
     private var filteredBonds: [BondEntity] {
-        guard selectedDepotBank != "All" else { return Array(bondEntities) }
-        return bondEntities.filter { $0.depotBank == selectedDepotBank }
+        bondEntities.filter { BondEligibility.isActive($0, on: MarketDay(date: Date())) &&
+            (selectedDepotBank == "All" || $0.depotBank == selectedDepotBank) }
     }
-
     private var futureCashFlows: [CashFlowEntity] {
-        let now = Date()
-        return filteredBonds
-            .flatMap { $0.cashFlows ?? [] }
-            .filter { $0.date >= now }
+        filteredBonds.flatMap { bond -> [CashFlowEntity] in
+            do { return try BondEligibility.flows(bond, from: MarketDay(date: Date()), through: MarketDay("2199-12-31")) }
+            catch { NSLog("Cannot validate portfolio forecast: %@", error.localizedDescription); return [] }
+        }
     }
 
     // MARK: – Bond Metrics
@@ -77,9 +75,7 @@ struct PortfolioSummaryView: View {
     private var averageMaturityYears: Double {
         guard !filteredBonds.isEmpty else { return 0 }
         let totalYears = filteredBonds.reduce(0.0) { sum, bond in
-            sum + bond.maturityDate
-                    .timeIntervalSince(Date())
-                    / (365 * 24 * 3600)
+            sum + max(0, BondEligibility.redemptionDay(bond).instant.timeIntervalSince(Date())) / (365 * 24 * 3600)
         }
         return totalYears / Double(filteredBonds.count)
     }
@@ -102,67 +98,40 @@ struct PortfolioSummaryView: View {
             .reduce(0) { $0 + $1.amount }
     }
 
-    /// Sum of all future interest + capital-gains – capital-loss cash-flows
+    /// Future interest and gains plus signed capital losses.
     private var totalExpectedProfitCF: Double {
-        totalInterestExpected
-      + totalCapitalGainExpected
-      - totalCapitalLossExpected
+        PortfolioCalculations.expectedReturn(interest: totalInterestExpected,
+            gains: totalCapitalGainExpected, signedLosses: totalCapitalLossExpected)
     }
 
     // MARK: – Weighted Average YTM
     /// Portfolio‐weighted average yield to maturity (by par value)
-    private var weightedAverageYTM: Double {
-        let totalPar = filteredBonds.reduce(0.0) { $0 + $1.parValue }
-        guard totalPar > 0 else { return 0 }
-        let sumWeighted = filteredBonds.reduce(0.0) { acc, bond in
-            acc + bond.yieldToMaturity * bond.parValue
-        }
-        return sumWeighted / totalPar
-    }
     private var weightedAverageYTMFormatted: String {
-        String(format: "%.2f%%", weightedAverageYTM)
+        do { return try BondEligibility.weightedYTM(filteredBonds).map { String(format: "%.2f%%", $0) } ?? "–" }
+        catch { NSLog("Cannot validate weighted yield: %@", error.localizedDescription); return "Needs review" }
     }
-
     private var nextMaturingBond: BondEntity? {
-        filteredBonds.min { $0.maturityDate < $1.maturityDate }
-    }
-
-    private func nextCouponDate(for bond: BondEntity) -> Date? {
-        let cal = Calendar.current
-        let comps = cal.dateComponents([.month, .day], from: bond.maturityDate)
-        let candidate = DateComponents(
-            year:  cal.component(.year, from: Date()),
-            month: comps.month,
-            day:   comps.day
-        )
-        guard let thisYear = cal.date(from: candidate) else { return nil }
-        return thisYear < Date()
-            ? cal.date(byAdding: .year, value: 1, to: thisYear)
-            : thisYear
+        filteredBonds.filter { BondTermsStore.isReady($0) }.min { BondEligibility.redemptionDay($0) < BondEligibility.redemptionDay($1) }
     }
 
     private var nextCouponInfo: String {
-        guard
-            let date = filteredBonds
-                .compactMap(nextCouponDate(for:))
-                .min()
-        else { return "–" }
-
-        let bonds = filteredBonds.filter { nextCouponDate(for: $0) == date }
-        let payer = bonds.count == 1
-            ? bonds.first!.name
-            : (bonds.isEmpty ? "–" : "Multiple")
-        let totalAmt = bonds.reduce(0) { sum, b in
-            sum + b.parValue * (b.couponRate / 100)
-        }
-        let totalStr = Formatters.currency
-            .string(from: NSNumber(value: totalAmt)) ?? "–"
-
+        guard let coupon = CashFlowSelection.nextCoupon(in: filteredBonds) else { return "–" }
+        let amount = Formatters.paymentCurrency.string(from: NSNumber(value: coupon.amount)) ?? "–"
         return """
-        Payer: \(payer)
-        Date:  \(Formatters.mediumDate.string(from: date))
-        Total: \(totalStr)
+        Payer: \(coupon.payer)
+        Date:  \(Formatters.marketMediumDate.string(from: coupon.date))
+        Total: \(amount)
         """
+    }
+
+    private var nextRedemptionInfo: String {
+        guard let bond = nextMaturingBond else { return "–" }
+        do {
+            let payment = try BondTermsStore.projectedPayments(bond, from: MarketDay(date: Date())).first { $0.kind == .maturity }
+            guard let payment else { return "–" }
+            let amount = Formatters.currency.string(from: NSNumber(value: payment.amount)) ?? "–"
+            return "\(bond.name)\nDate: \(Formatters.marketMediumDate.string(from: payment.paymentDay.instant))\nRedemption: \(amount)"
+        } catch { NSLog("Cannot validate next redemption: %@", error.localizedDescription); return "Needs review" }
     }
 
     private func calculateYTM() {
@@ -234,6 +203,10 @@ struct PortfolioSummaryView: View {
                 }
                 .padding(.bottom, 8)
 
+                if BondEligibility.excludedCount(filteredBonds, on: MarketDay(date: Date())) > 0 {
+                    Text(BondTermsPresentation.exclusions(BondEligibility.excludedCount(filteredBonds, on: MarketDay(date: Date()))) ?? "")
+                        .foregroundStyle(.orange)
+                }
                 // Top Combined Metrics
                 HStack(spacing: 12) {
                     MetricView(
@@ -296,7 +269,7 @@ struct PortfolioSummaryView: View {
                                    .string(from: NSNumber(value: totalExpectedProfitCF))
                                    ?? "–")
                     MetricView(icon: "percent",
-                               title: "Avg. YTM",
+                               title: "Estimated YTM",
                                value: weightedAverageYTMFormatted)
                 }
 
@@ -324,10 +297,8 @@ struct PortfolioSummaryView: View {
                 // Next Maturity Tile
                 MetricView(
                     icon:  "flag.checkered",
-                    title: "Next Maturity",
-                    value: nextMaturingBond.map {
-                        "\($0.name)\nDate: \(Formatters.mediumDate.string(from: $0.maturityDate))\nNominal: \(Formatters.currency.string(from: NSNumber(value: $0.parValue)) ?? "–")"
-                    } ?? "–"
+                    title: "Next Redemption",
+                    value: nextRedemptionInfo
                 )
                 .frame(maxWidth: .infinity)
 

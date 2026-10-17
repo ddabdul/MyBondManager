@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>fixingQuotesURL</key>
+	<string>https://cf.com/public-api/public-rates/eurlibor.json/</string>
+	<key>historicalFixingURLs</key>
+	<dict>
+		<key>1</key>
+		<string>https://api.statistiken.bundesbank.de/rest/data/BBIG1/D.D0.EUR.MMKT.EURIBOR.M01.BID._Z</string>
+		<key>12</key>
+		<string>https://api.statistiken.bundesbank.de/rest/data/BBIG1/D.D0.EUR.MMKT.EURIBOR.M12.BID._Z</string>
+		<key>3</key>
+		<string>https://api.statistiken.bundesbank.de/rest/data/BBIG1/D.D0.EUR.MMKT.EURIBOR.M03.BID._Z</string>
+		<key>6</key>
+		<string>https://api.statistiken.bundesbank.de/rest/data/BBIG1/D.D0.EUR.MMKT.EURIBOR.M06.BID._Z</string>
+	</dict>
+	<key>sourceName</key>
+	<string>cf.com / Deutsche Bundesbank</string>
+	<key>swapQuotesURLs</key>
+	<dict>
+		<key>3</key>
+		<string>https://cf.com/public-api/public-rates/euriborswap.json/</string>
+		<key>6</key>
+		<string>https://cf.com/public-api/public-rates/euribor6monthswap.json/</string>
+	</dict>
+</dict>
+</plist>

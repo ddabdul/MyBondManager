@@ -1,0 +1,13 @@
+# Instrument terms as portfolio data
+
+The application contains no ISIN-specific lookup table, issuer URLs, coupon dates, rates or enrichment rules. ING collection uses the same parser and validation for every instrument. Missing provider fields remain missing; collecting or refreshing never substitutes a bundled instrument record.
+
+Additional facts belong in the saved terms for each normalized ISIN. Use Review Terms to enter the first-coupon date, structure, frequency, accrual start, maturity, redemption, callable status, payment deferral status and floating-phase start as applicable. Save the shared draft, inspect the preview and explicitly Apply. Every purchase keeps its own nominal, acquisition cost, acquisition date and schedule. Confirmed manual fields survive ING refresh.
+
+Existing saved metadata, including source URLs, deferral safeguards and first-coupon dates, is retained by the generic persistence and native transfer paths. Removing the former supplements does not run a data migration or alter holdings on launch. A native Mac-to-Mac transfer carries saved terms; the legacy bonds.json format remains unchanged.
+
+A confirmed first-coupon date must fit the regular grid and follow accrual start. Long or short opening coupons use Actual/Actual (ICMA): sum `overlapDays / (referenceDays * paymentsPerYear)` over the regular reference periods. The unadjusted dates determine interest; TARGET payment delays add no interest. Ambiguous reference-period month-end rolls require confirmation. A missing first date still prevents forecasting a potentially irregular opening payment. [ISO 15022 A006](https://www.iso20022.org/15022/uhb/mt564-76-field-22f.htm) describes the convention.
+
+Deferrable instruments produce conditional forecasts; coupons and redemption are not recorded automatically as receipts. Plain EURIBOR floating and supported on-grid fixed-to-floating calculations use QuantLib with explicitly confirmed reset terms and frozen market inputs; see [market-data requirements](quantlib-market-data.md). An explicit, confirmed Fixed structure selection overrides the retained provider variable-rate classification: forecasts use the entered coupon rate as constant for every remaining coupon and display a warning in the editor, preview and holding status. Provider metadata is retained for transparency and survives refresh. Unconfirmed changes remain blocked; unrelated restrictions and deferral safeguards still apply.
+
+Collect missing terms skips saved drafts; Refresh selected from ING explicitly fetches again. Apply validates and saves existing draft data without fetching. Each ISIN applies independently, so missing or unsupported terms do not block successful instruments.

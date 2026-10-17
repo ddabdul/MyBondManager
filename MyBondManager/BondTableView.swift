@@ -25,23 +25,31 @@ extension BondEntity {
     }
 
     var ytmFormatted: String {
-        String(format: "%.2f%%", yieldToMaturity)
+        {
+            do { return try BondTermsStore.estimatedYTM(self).map { String(format: "%.2f%%", $0) } ?? "–" }
+            catch { NSLog("Cannot validate estimated yield: %@", error.localizedDescription); return "Needs review" }
+        }()
     }
 
+    var contractualMaturityFormatted: String {
+        (BondTermsStore.isReady(self) ? Formatters.marketShortDate : Formatters.shortDate).string(from: maturityDate)
+    }
     var acquisitionDateFormatted: String {
         Formatters.shortDate.string(from: acquisitionDate)
     }
 
     /// Grab the bond’s “expectedProfit” cash-flow event, if any
     var expectedProfit: Double {
-        let flows = cashFlows ?? []
-        return flows
-            .first(where: { $0.natureEnum == .expectedProfit })?
-            .amount ?? 0
+        do {
+            let day = MarketDay(date: Date())
+            let flows = try BondEligibility.flows(self, from: day, through: MarketDay("2199-12-31"))
+            return flows.filter { [.interest, .capitalGains, .capitalLoss].contains($0.natureEnum) }.reduce(0) { $0 + $1.amount }
+        } catch { NSLog("Cannot validate expected profit: %@", error.localizedDescription); return 0 }
     }
 
     var expectedProfitFormatted: String {
-        Formatters.currency.string(from: NSNumber(value: expectedProfit)) ?? "–"
+        guard BondTermsStore.isReady(self) else { return "Needs review" }
+        return Formatters.currency.string(from: NSNumber(value: expectedProfit)) ?? "–"
     }
 }
 
@@ -57,6 +65,7 @@ struct BondSummary: Identifiable {
     let records: [BondEntity]
 
     var recordCount: Int { records.count }
+    var unresolvedCount: Int { records.filter { !BondTermsStore.isReady($0) }.count }
 
     var totalNominal: Double {
         records.reduce(0) { $0 + $1.parValue }
@@ -90,7 +99,6 @@ struct BondTableView: View {
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.maturityDate, ascending: true)],
-        predicate: NSPredicate(format: "maturityDate >= %@", Self.startOfToday as NSDate),
         animation: .default
     )
     private var bondEntities: FetchedResults<BondEntity>
@@ -102,10 +110,9 @@ struct BondTableView: View {
 
     // Filter bondEntities by the selected depot bank
     private var filteredEntities: [BondEntity] {
-        guard selectedDepotBank != "All" else {
-            return Array(bondEntities)
-        }
-        return bondEntities.filter { $0.depotBank == selectedDepotBank }
+        let today = MarketDay(date: Date())
+        return bondEntities.filter { BondEligibility.isActive($0, on: today) &&
+            (selectedDepotBank == "All" || $0.depotBank == selectedDepotBank) }
     }
 
     private var summaries: [BondSummary] {
@@ -160,8 +167,10 @@ struct BondTableView: View {
             sortOrder: $sortOrder
         ) {
             TableColumn("Issuer", value: \.issuer) { s in
-                Text(s.issuer)
-                    .multilineTextAlignment(.leading)
+                VStack(alignment: .leading) {
+                    Text(s.issuer).multilineTextAlignment(.leading)
+                    if s.unresolvedCount > 0 { Text("\(s.unresolvedCount) need review").font(.caption).foregroundStyle(.orange) }
+                }
             }
             .width(min: 120, ideal: 160, max: 240)
 
@@ -193,7 +202,7 @@ struct BondTableView: View {
             .width(min: 60, ideal: 80)
 
             TableColumn("Maturity Date", value: \.maturityDate) { s in
-                Text(Formatters.shortDate.string(from: s.maturityDate))
+                Text(s.records.first?.contractualMaturityFormatted ?? "–")
                     .multilineTextAlignment(.center)
             }
             .width(min: 80)
@@ -210,11 +219,14 @@ struct BondTableView: View {
 struct BondSummaryDetailView: View {
     let summary: BondSummary
     @Environment(\.managedObjectContext) private var moc
+    @Environment(\.portfolioContainer) private var portfolioContainer
     @Environment(\.dismiss) private var dismiss
 
     @State private var editingBond: BondEntity?
     @State private var showDeleteAlert = false
     @State private var bondToDelete: BondEntity?
+    @State private var isDeleting = false
+    @State private var deletionError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -240,12 +252,13 @@ struct BondSummaryDetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if let deletionError { Text(deletionError).foregroundColor(.red) }
                     Divider()
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Issuer: \(summary.issuer)")
                         Text("Coupon: \(summary.couponFormatted)")
-                        Text("Maturity: \(Formatters.shortDate.string(from: summary.maturityDate))")
+                        Text("Maturity: \(summary.records.first?.contractualMaturityFormatted ?? "–")")
                         Text("Total Nominal: \(summary.formattedTotalNominal)")
                         Text("Expected Profit: \(summary.expectedProfitFormatted)")
                             .fontWeight(.semibold)
@@ -268,7 +281,8 @@ struct BondSummaryDetailView: View {
                                 Text("Price:   \(bond.acquisitionPriceFormatted)")
                                 Text("Acquisition: \(bond.acquisitionDateFormatted)")
                                 Text("Bank: \(bond.depotBank)")
-                                Text("YTM: \(bond.ytmFormatted)")
+                                Text("Estimated YTM: \(bond.ytmFormatted)")
+                                BondTermsStatus(bond: bond)
                             }
                             Spacer()
                             Button("Edit") { editingBond = bond }
@@ -290,8 +304,9 @@ struct BondSummaryDetailView: View {
                 .padding()
             }
         }
+        .disabled(isDeleting)
         .frame(minWidth: 400, minHeight: 300)
-        .popover(item: $editingBond, arrowEdge: .top) { bond in
+        .sheet(item: $editingBond) { bond in
             EditBondView(bond: bond)
                 .environment(\.managedObjectContext, moc)
                 .frame(minWidth: 400, minHeight: 500)
@@ -299,15 +314,28 @@ struct BondSummaryDetailView: View {
         }
         .alert("Delete this record?", isPresented: $showDeleteAlert, presenting: bondToDelete) { bond in
             Button("Delete", role: .destructive) {
-                dismiss()
-                DispatchQueue.main.async {
-                    moc.delete(bond)
-                    try? moc.save()
-                }
+                deleteBond(bond)
             }
             Button("Cancel", role: .cancel) {}
         } message: { bond in
             Text("This will permanently remove the bond acquired on \(Formatters.shortDate.string(from: bond.acquisitionDate)).")
+        }
+    }
+
+    private func deleteBond(_ bond: BondEntity) {
+        guard !isDeleting else { return }
+        guard let container = portfolioContainer else {
+            deletionError = "Portfolio store is unavailable."
+            return
+        }
+        let id = bond.objectID
+        isDeleting = true; deletionError = nil
+        Task { @MainActor in
+            defer { isDeleting = false }
+            do {
+                try await PortfolioTransaction.run(in: container) { try BondDeletion.stage(ids: [id], context: $0) }
+                dismiss()
+            } catch { deletionError = "Could not delete bond: \(error.localizedDescription)" }
         }
     }
 }

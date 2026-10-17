@@ -14,38 +14,70 @@ import CoreData
 // MARK: – ExportManager
 
 public class ExportManager {
-    public init() {}
+    private let write: (Data, URL) throws -> Void
+    public init(write: @escaping (Data, URL) throws -> Void = { data, url in
+        try data.write(to: url, options: .atomic)
+    }) { self.write = write }
 
-    /// Export both JSON files into `folderURL`, handling security-scoped access.
-    /// Throws on any error.
-    public func exportAll(
-        to folderURL: URL,
-        from context: NSManagedObjectContext
-    ) throws {
-        // ① Acquire permission for the entire folder
+    public func exportAll(to folderURL: URL, from context: NSManagedObjectContext) async throws -> URL {
+        try await exportAllWithReport(to: folderURL, from: context).folder
+    }
+    func exportAllWithReport(to folderURL: URL, from context: NSManagedObjectContext) async throws -> (folder: URL, excludedCount: Int) {
         let granted = folderURL.startAccessingSecurityScopedResource()
-        defer {
-            if granted {
-                folderURL.stopAccessingSecurityScopedResource()
-            }
+        defer { if granted { folderURL.stopAccessingSecurityScopedResource() } }
+        let snapshot = try await context.perform {
+            guard !context.hasChanges else { throw PortfolioError("Save pending portfolio changes before exporting.") }
+            return (try Self.snapshot(from: context), try context.fetch(BondEntity.fetchRequest()).filter { !BondTermsStore.isReady($0) }.count)
         }
+        return try await Task.detached(priority: .userInitiated) {
+            let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+            let folder = try self.publish(files: [("bonds.json", encoder.encode(snapshot.0.bonds)),
+                ("etfs.json", encoder.encode(snapshot.0.etfs))], to: folderURL, now: Date())
+            return (folder, snapshot.1)
+        }.value
+    }
+    func exportBonds(to folderURL: URL, from context: NSManagedObjectContext) async throws -> URL {
+        let granted = folderURL.startAccessingSecurityScopedResource()
+        defer { if granted { folderURL.stopAccessingSecurityScopedResource() } }
+        let snapshot = try await context.perform { try BondTransfer.snapshot(from: context) }
+        return try await Task.detached(priority: .userInitiated) {
+            let files = try BondTransfer.encode(snapshot)
+            return try self.publish(files: [("bonds.json", files.bonds), ("bond-terms.json", files.sidecar)], to: folderURL, now: Date())
+        }.value
+    }
+    private func publish(files: [(name: String, data: Data)], to folderURL: URL, now: Date) throws -> URL {
+        let staging = folderURL.appendingPathComponent(".positions-" + UUID().uuidString)
+        let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian); formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        let name = "positions-" + formatter.string(from: now)
+        var published = folderURL.appendingPathComponent(name), suffix = 2
+        while FileManager.default.fileExists(atPath: published.path) {
+            published = folderURL.appendingPathComponent("\(name)-\(suffix)"); suffix += 1
+        }
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
+        do {
+            for file in files { try write(file.data, staging.appendingPathComponent(file.name)) }
+            try FileManager.default.moveItem(at: staging, to: published)
+            return published
+        } catch {
+            do { try FileManager.default.removeItem(at: staging) }
+            catch { NSLog("Could not remove failed transfer staging directory: %@", error.localizedDescription) }
+            throw error
+        }
+    }
 
-        // ② Do the writes
-        try exportBonds(from: context, to: folderURL)
-        try exportETFs(from: context, to: folderURL)
+    static func snapshot(from context: NSManagedObjectContext) throws -> PositionsPayload {
+        PositionsPayload(bonds: try snapshotBonds(from: context), etfs: try snapshotETFs(from: context))
     }
 
     // ─── Bonds ──────────────────────────────────────────────────────────
 
-    private func exportBonds(
-        from context: NSManagedObjectContext,
-        to folderURL: URL
-    ) throws {
+    static func snapshotBonds(from context: NSManagedObjectContext) throws -> [BondCodable] {
         let req: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
         let bonds = try context.fetch(req)
 
         let codables = bonds.map { bond in
-            let flows = bond.cashFlowsArray.map {
+            let flows = (BondTermsStore.isReady(bond) ? bond.cashFlowsArray : []).map {
                 CashFlowCodable(date: $0.date,
                                 amount: $0.amount,
                                 nature: $0.nature)
@@ -67,20 +99,12 @@ public class ExportManager {
             )
         }
 
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(codables)
-
-        let fileURL = folderURL.appendingPathComponent("bonds.json", isDirectory: false)
-        try data.write(to: fileURL, options: .atomic)
+        return codables
     }
 
     // ─── ETFs ───────────────────────────────────────────────────────────
 
-    private func exportETFs(
-        from context: NSManagedObjectContext,
-        to folderURL: URL
-    ) throws {
+    private static func snapshotETFs(from context: NSManagedObjectContext) throws -> [ETFEntityCodable] {
         let req: NSFetchRequest<ETFEntity> = ETFEntity.fetchRequest()
         let etfs = try context.fetch(req)
 
@@ -116,11 +140,6 @@ public class ExportManager {
             )
         }
 
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(codables)
-
-        let fileURL = folderURL.appendingPathComponent("etfs.json", isDirectory: false)
-        try data.write(to: fileURL, options: .atomic)
+        return codables
     }
 }

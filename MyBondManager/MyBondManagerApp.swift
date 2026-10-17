@@ -12,34 +12,45 @@ import CoreData
 
 @main
 struct BondPortfolioManagerApp: App {
-    let persistenceController = PersistenceController.shared
+    let persistenceController: PersistenceController
+    private let isTesting: Bool
+    @StateObject private var priceUpdater: ETFPriceUpdater
     @StateObject private var notifier: LaunchNotifier
     private let viewContext: NSManagedObjectContext
 
     init() {
+        isTesting = ProcessInfo.processInfo.environment["MYBONDMANAGER_TESTING"] == "1"
+            || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        persistenceController = isTesting ? PersistenceController(inMemory: true) : .shared
         let context = persistenceController.container.viewContext
         self.viewContext = context
-        _notifier = StateObject(wrappedValue: LaunchNotifier(context: context))
-        persistenceController.deleteEmptyETFs()
- //       runHistoricalSnapshotOnce(context: context)
+        let notifier = LaunchNotifier()
+        _notifier = StateObject(wrappedValue: notifier)
+        let updater = ETFPriceUpdater(container: persistenceController.container)
+        _priceUpdater = StateObject(wrappedValue: updater)
+        if !isTesting { persistenceController.deleteEmptyETFs() }
     }
 
     var body: some Scene {
         Window("", id: "main") {
             MainTabView()
                 .environment(\.managedObjectContext, viewContext)
+                .environment(\.portfolioContainer, persistenceController.container)
                 .environmentObject(notifier)
+                .environmentObject(priceUpdater)
                 .preferredColorScheme(.dark)
                 .accentColor(.white)
                 .background(Color.black)
                 .toolbarBackground(.visible, for: .windowToolbar)
                 .toolbarBackground(Color.panelBackground, for: .windowToolbar)
                 .task {
-                    let updater = ETFPriceUpdater(context: viewContext)
+                    guard !isTesting else { return }
+                    await notifier.processLaunch(in: persistenceController.container)
                     do {
-                        try await updater.refreshAllPrices()
+                        try await priceUpdater.refreshAllPrices()
                     } catch {
-                        // optionally set notifier.alertMessage
+                        let previous = notifier.alertMessage.map { $0 + "\n\n" } ?? ""
+                        notifier.alertMessage = previous + "Price refresh failed: \(error.localizedDescription)"
                     }
                 }
                 .alert(
@@ -63,18 +74,4 @@ struct BondPortfolioManagerApp: App {
         .defaultSize(width: 1200, height: 800)
     }
 
-    /// Runs a one-time snapshot of the current portfolio if not yet done
-//    private func runHistoricalSnapshotOnce(context: NSManagedObjectContext) {
-//        let key = "didRunInitialSnapshot"
-//        let hasRun = UserDefaults.standard.bool(forKey: key)
-//        guard !hasRun else { return }
-
- //       do {
- //           try HistoricalSnapshotService.snapshotCurrentPortfolio(context: context)
- //           UserDefaults.standard.set(true, forKey: key)
- //           print("✅ Initial historical snapshot recorded.")
- //       } catch {
- //           print("❌ Snapshot error: \(error)")
- //       }
- //   }
 }
