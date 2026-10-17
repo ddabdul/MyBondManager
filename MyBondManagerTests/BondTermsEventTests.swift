@@ -9,6 +9,21 @@ final class BondTermsEventTests: XCTestCase {
         terms.accrualStart = try MarketDay("2026-01-01"); terms.redemptionPercent = 105
         return terms
     }
+    func testDeferrablePaymentsStayForecastsAndAreNotRecordedAsReceipts() throws {
+        let container = try TestPortfolio.make()
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(BondTermsFixtures.fixed())) as? [String: Any])
+        json["interestDeferral"] = true
+        let terms = try JSONDecoder().decode(BondTerms.self, from: JSONSerialization.data(withJSONObject: json))
+        let now = TestPortfolio.date("2026-02-03T12:00:00Z")
+        let deferred = try TestPortfolio.readyBond(in: container.viewContext, terms: terms, now: now)
+        var regularTerms = try BondTermsFixtures.fixed(); regularTerms.isin = "DE0000000003"
+        _ = try TestPortfolio.readyBond(in: container.viewContext, terms: regularTerms, now: now)
+        XCTAssertFalse(try BondTermsStore.projectedPayments(deferred, from: MarketDay("2026-02-03")).isEmpty)
+        _ = try LaunchEventProcessor.stage(context: container.viewContext, since: now, until: TestPortfolio.date("2028-01-01T12:00:00Z"))
+        let records = try container.viewContext.fetch(HistoricalValuation.fetchRequest())
+        XCTAssertEqual(records.count, 3)
+        XCTAssertFalse(records.contains { $0.eventKey?.hasPrefix(deferred.id.uuidString) == true })
+    }
     func testAdjustedMaturityNeverPostsEarlyAndUsesActualRedemption() throws {
         let container = try TestPortfolio.make()
         _ = try TestPortfolio.readyBond(in: container.viewContext, terms: januaryTerms(),

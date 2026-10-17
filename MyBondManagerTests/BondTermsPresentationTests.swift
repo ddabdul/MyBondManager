@@ -3,6 +3,18 @@ import XCTest
 
 @MainActor
 final class BondTermsPresentationTests: XCTestCase {
+    func testReviewGroupsDuplicatePurchasesByNormalizedISIN() throws {
+        let container = try TestPortfolio.make()
+        let first = TestPortfolio.bond(in: container.viewContext)
+        let second = TestPortfolio.bond(in: container.viewContext); second.isin = " de0000000001 "
+        let third = TestPortfolio.bond(in: container.viewContext); third.isin = "DE0000000003"
+        let groups = BondTermsReviewInstrument.grouped([first, second, third], preferredID: second.id)
+        XCTAssertEqual(groups.count, 2)
+        let shared = try XCTUnwrap(groups.first { $0.isin == "DE0000000001" })
+        XCTAssertEqual(shared.purchases.count, 2)
+        XCTAssertEqual(shared.representative.id, second.id)
+        XCTAssertTrue(shared.needsReview)
+    }
     func testUnsupportedAndUnapprovedForecastsAreClearlyExcluded() {
         let missing = TermsAssessment(reasons: ["Coupon frequency is missing."], warnings: [])
         XCTAssertEqual(BondTermsPresentation.status(assessment: missing, approved: true), "Needs review")
@@ -35,4 +47,17 @@ final class BondTermsPresentationTests: XCTestCase {
         XCTAssertTrue(text.contains("0 incoming")); XCTAssertTrue(text.contains("2 removed"))
         XCTAssertTrue(text.contains("all bond positions")); XCTAssertTrue(text.contains("Needs review"))
     }
+    func testCloseAndINGActionsRequireDiscardOnlyForActualUnsavedEdits() {
+        var navigation = BondTermsReviewNavigation()
+        let actions: [BondTermsReviewNavigation.Action] = [.close, .collectMissing, .refresh, .manual]
+        for action in actions {
+            XCTAssertEqual(navigation.request(action, hasUnsavedChanges: false), action)
+            XCTAssertNil(navigation.pending)
+            XCTAssertNil(navigation.request(action, hasUnsavedChanges: true))
+            XCTAssertEqual(navigation.pending, action)
+            navigation.cancel()
+            XCTAssertNil(navigation.pending, "Keeping edits must cancel the requested action")
+        }
+    }
+
 }

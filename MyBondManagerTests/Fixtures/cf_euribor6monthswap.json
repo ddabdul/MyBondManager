@@ -1,0 +1,57 @@
+{
+  "Rates": [
+    {
+      "LengthInMonths": 12,
+      "PreviousDay": "3.172",
+      "PreviousMonth": "3.038",
+      "PreviousYear": "2.079"
+    },
+    {
+      "LengthInMonths": 24,
+      "PreviousDay": "3.331",
+      "PreviousMonth": "3.210",
+      "PreviousYear": "2.100"
+    },
+    {
+      "LengthInMonths": 36,
+      "PreviousDay": "3.384",
+      "PreviousMonth": "3.255",
+      "PreviousYear": "2.176"
+    },
+    {
+      "LengthInMonths": 60,
+      "PreviousDay": "3.395",
+      "PreviousMonth": "3.294",
+      "PreviousYear": "2.330"
+    },
+    {
+      "LengthInMonths": 84,
+      "PreviousDay": "3.424",
+      "PreviousMonth": "3.329",
+      "PreviousYear": "2.463"
+    },
+    {
+      "LengthInMonths": 120,
+      "PreviousDay": "3.486",
+      "PreviousMonth": "3.399",
+      "PreviousYear": "2.631"
+    },
+    {
+      "LengthInMonths": 180,
+      "PreviousDay": "3.555",
+      "PreviousMonth": "3.491",
+      "PreviousYear": "2.811"
+    },
+    {
+      "LengthInMonths": 360,
+      "PreviousDay": "3.383",
+      "PreviousMonth": "3.396",
+      "PreviousYear": "2.852"
+    }
+  ],
+  "CurrentDate": "2026-10-09",
+  "PreviousDayDate": "2026-10-08",
+  "PreviousMonthDate": "2026-09-09",
+  "PreviousYearDate": "2025-10-09",
+  "Updated": "2026-10-09 | 18:45:08"
+}

@@ -3,6 +3,41 @@ import XCTest
 
 final class INGBondTermsTests: XCTestCase {
     override func tearDown() { INGBondFixtures.clear(); super.tearDown() }
+    func testEveryISINUsesProviderDataWithoutSupplementation() async throws {
+        let session = INGBondFixtures.session(); defer { session.invalidateAndCancel() }
+        for isin in ["FR001400ZQ88", "FR001400H9B5", "XS2767489391", "XS3081821699", "DE0000000001"] {
+            let details = try await BondDataScraper(session: session).fetchDetails(isin: isin)
+            let terms = try XCTUnwrap(details.terms)
+            XCTAssertEqual(terms.structure, .fixed); XCTAssertEqual(terms.couponRate, 3.375)
+            XCTAssertEqual(terms.frequency, 2); XCTAssertEqual(terms.maturity?.rawValue, "2027-01-15")
+            XCTAssertNil(terms.firstCoupon); XCTAssertNil(terms.interestDeferral)
+            XCTAssertNil(terms.floatingStart); XCTAssertNil(terms.verifiedTermsSource)
+        }
+    }
+    func testSparseINGDataRemainsMissingForEveryISIN() async throws {
+        var map = INGBondFixtures.responses
+        map["masterdata"] = #"{"currencyIsoCode":{"value":"EUR"}}"#
+        map["dates"] = #"{"issueDate":{"value":"2024-02-15"}}"#
+        map["interestrates"] = #"{"data":[]}"#
+        let session = INGBondFixtures.session(responses: map); defer { session.invalidateAndCancel() }
+        for isin in ["FR001400ZQ88", "FR001400H9B5", "XS2767489391", "XS3081821699"] {
+            let details = try await BondDataScraper(session: session).fetchDetails(isin: isin)
+            let terms = try XCTUnwrap(details.terms)
+            XCTAssertEqual(terms.structure, .unknown)
+            XCTAssertNil(details.couponRate); XCTAssertNil(details.maturityDate)
+            XCTAssertNil(terms.frequency); XCTAssertNil(terms.redemptionPercent); XCTAssertNil(terms.callable)
+            XCTAssertNil(terms.accrualStart); XCTAssertNil(terms.firstCoupon); XCTAssertNil(terms.nextCoupon)
+        }
+    }
+    func testDifferentPastedISINsAndExtraTextAreRejectedWithAnActionableError() async throws {
+        let session = INGBondFixtures.session(); defer { session.invalidateAndCancel() }
+        for value in ["EU000A2SCAK5\nFR001400P1Y4", "ISIN: FR001400P1Y4", "FR001400P1Y"] {
+            do {
+                _ = try await BondDataScraper(session: session).fetchDetails(isin: value)
+                XCTFail("Extra identifiers or text must not be selected silently")
+            } catch ScrapError.invalidISIN {} catch { XCTFail("Expected an actionable ISIN validation error, got \(error)") }
+        }
+    }
     func testRetainsPrecisionDistinctDatesFrequencyAndUnknownState() async throws {
         for (label, frequency) in [("Jährlich",1),("Halbjährlich",2),("Vierteljährlich",4)] {
             var map = INGBondFixtures.responses
@@ -61,6 +96,6 @@ final class INGBondTermsTests: XCTestCase {
         let terms = try XCTUnwrap(details.terms)
         XCTAssertNil(terms.frequency); XCTAssertNil(terms.callable)
         XCTAssertEqual(terms.currency, "USD"); XCTAssertEqual(terms.couponRate, 3.375)
-        XCTAssertEqual(terms.structure, .unknown); XCTAssertFalse(terms.restrictions.isEmpty)
+        XCTAssertEqual(terms.structure, .floating); XCTAssertFalse(terms.restrictions.isEmpty)
     }
 }

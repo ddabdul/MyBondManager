@@ -24,6 +24,39 @@ final class BondTransferTests: XCTestCase {
         XCTAssertThrowsError(try BondTransfer.prepare(bonds: files.bonds + Data("\n".utf8), sidecar: files.sidecar))
         for bytes in [Data("bad".utf8), Data("{}".utf8)] { XCTAssertThrowsError(try BondTransfer.prepare(bonds: files.bonds, sidecar: bytes)) }
     }
+    func testVerifiedFirstCouponAndDeferralSurviveNativeTransferWithoutChangingLegacyJSON() async throws {
+        let source = try TestPortfolio.make()
+        var terms = try BondTermsFixtures.fixed(frequency: 1, maturity: "2036-02-23", next: "2027-02-23")
+        terms.isin = "FR001400ZQ88"; terms.couponRate = 4.625
+        terms.accrualStart = try MarketDay("2025-05-23"); terms.issueDay = terms.accrualStart
+        terms.checkpointObservedOn = try MarketDay("2026-10-16")
+        terms.firstCoupon = try MarketDay("2026-02-23")
+        terms.interestDeferral = true
+        terms.verifiedTermsSource = "https://example.com/instrument-terms.pdf"
+        _ = try TestPortfolio.readyBond(in: source.viewContext, terms: terms,
+            now: TestPortfolio.date("2026-10-16T12:00:00Z"), nominal: 100000, cost: 100000)
+        try source.viewContext.save()
+        let files = try BondTransfer.encode(BondTransfer.snapshot(from: source.viewContext))
+        let oldRows = try XCTUnwrap(JSONSerialization.jsonObject(with: files.bonds) as? [[String: Any]])
+        XCTAssertNil(oldRows.first?["firstCoupon"]); XCTAssertNil(oldRows.first?["interestDeferral"])
+        let target = try TestPortfolio.make()
+        try await ImportManager().applyBonds(BondTransfer.prepare(bonds: files.bonds, sidecar: files.sidecar), into: target,
+            now: TestPortfolio.date("2026-10-17T12:00:00Z"))
+        let reader = target.newBackgroundContext()
+        try await reader.perform {
+            let imported = try XCTUnwrap(reader.fetch(BondEntity.fetchRequest()).first)
+            let saved = try XCTUnwrap(BondTermsStore.read(imported))
+            XCTAssertEqual(saved.firstCoupon?.rawValue, "2026-02-23")
+            XCTAssertEqual(saved.interestDeferral, true)
+            XCTAssertEqual(saved.verifiedTermsSource, "https://example.com/instrument-terms.pdf")
+            XCTAssertTrue(BondTermsStore.isReady(imported))
+            let preview = try XCTUnwrap(BondTermsStore.validatedPreview(imported, from: MarketDay("2026-10-17")))
+            XCTAssertEqual(preview.payments.first?.amount, 4625)
+            XCTAssertTrue(preview.assessment.warnings.contains { $0.contains("automatic receipt recording is disabled") })
+            XCTAssertTrue(try LaunchEventProcessor.stage(context: reader, since: TestPortfolio.date("2026-10-17T12:00:00Z"), until: TestPortfolio.date("2037-01-01T12:00:00Z")).isEmpty)
+            XCTAssertEqual(try reader.count(for: HistoricalValuation.fetchRequest()), 0)
+        }
+    }
     func testNativeRoundTripKeepsApprovedYieldAndUsesDestinationActivation() async throws {
         let source = try TestPortfolio.make()
         var terms = try BondTermsFixtures.fixed(); terms.redemptionPercent = 105

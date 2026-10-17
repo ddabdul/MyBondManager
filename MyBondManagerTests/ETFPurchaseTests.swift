@@ -4,6 +4,12 @@ import CoreData
 
 @MainActor
 final class ETFPurchaseTests: XCTestCase {
+    func testRepeatedClipboardISINLinesResolveToOneInstrumentWithoutChoosingBetweenDifferentCodes() {
+        XCTAssertEqual(ETFPurchase.normalizedISIN(" eu000a2scak5\r\nEU000A2SCAK5 "), "EU000A2SCAK5")
+        XCTAssertEqual(ETFPurchase.normalizedISIN("FR001400P1Y4\nFR001400P1Y4"), "FR001400P1Y4")
+        XCTAssertNotEqual(ETFPurchase.normalizedISIN("EU000A2SCAK5\nFR001400P1Y4"), "EU000A2SCAK5")
+        XCTAssertNotEqual(ETFPurchase.normalizedISIN("EU000A2SCAK5\nFR001400P1Y4"), "FR001400P1Y4")
+    }
     func testRejectsInvalidValuesBeforeInsertion() throws {
         for price in [0.0, -1, Double.nan, Double.infinity] {
             XCTAssertThrowsError(try ETFPurchase.validate(price: price, shares: 1))

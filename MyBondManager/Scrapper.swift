@@ -11,6 +11,7 @@ import Foundation
 
 public enum ScrapError: Error {
     case invalidURL
+    case invalidISIN
     case noData
     case httpError(Int)
     case decodingError(Error)
@@ -21,6 +22,8 @@ public enum ScrapError: Error {
 extension ScrapError: LocalizedError {
     public var errorDescription: String? {
         switch self {
+        case .invalidISIN:
+            return "Enter one 12-character ISIN. Remove extra text or different identifiers pasted together."
         case .invalidURL:
             return "The ISIN you entered isn’t a valid URL."
         case .noData:
@@ -192,8 +195,11 @@ private struct INGRichRates: Decodable {
 extension BondDataScraper {
     func fetchDetails(isin: String, observedAt: Date = Date()) async throws -> BondDetails {
         let normalized = ETFPurchase.normalizedISIN(isin)
-        guard !normalized.isEmpty, normalized.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) }) else {
-            throw ScrapError.invalidURL
+        guard normalized.utf8.count == 12,
+              normalized.prefix(2).utf8.allSatisfy({ (65...90).contains($0) }),
+              normalized.suffix(1).utf8.allSatisfy({ (48...57).contains($0) }),
+              normalized.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) }) else {
+            throw ScrapError.invalidISIN
         }
         let header: INGInstrumentHeaderResponse = try await fetchTermsComponent("components/localheader", isin: normalized)
         let master: INGRichMaster = try await fetchTermsComponent("bond/masterdata", isin: normalized)
@@ -215,6 +221,7 @@ extension BondDataScraper {
             terms.structure = .zero
             if let rate = terms.couponRate, rate != 0 { terms.restrictions.append("Zero-coupon flag contradicts supplied coupon.") }
         } else if terms.rawStructure == "Fest" { terms.structure = .fixed }
+        else if terms.rawStructure?.localizedCaseInsensitiveContains("variabel") == true { terms.structure = .floating }
         else if let raw = terms.rawStructure { terms.restrictions.append("Unsupported interest structure: " + raw) }
         for marker in ["floating", "variabel", "inflation", "index", "perpetual", "ewig", "amort", "ex-coupon"] {
             if (header.name + " " + (terms.rawStructure ?? "")).localizedCaseInsensitiveContains(marker) { terms.restrictions.append(marker) }

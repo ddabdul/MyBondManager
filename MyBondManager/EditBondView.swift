@@ -11,7 +11,6 @@ struct EditBondView: View {
     @Environment(\.managedObjectContext) private var moc
     @Environment(\.portfolioContainer) private var portfolioContainer
     @State private var isSaving = false
-    @State private var showingTermsReview = false
     @State private var termsReview: BondTermsReview?
     @Environment(\.dismiss)      private var dismiss
 
@@ -80,17 +79,23 @@ struct EditBondView: View {
         }
         .padding()
         .frame(minWidth: 400, minHeight: 500)
-        .sheet(isPresented: $showingTermsReview) {
-            if let termsReview { BondTermsReviewView(review: termsReview, initialSelection: bond.id) }
+        .sheet(item: $termsReview) { review in
+            BondTermsReviewView(review: review, initialSelection: bond.id)
         }
     }
     private func openTermsReview() {
         guard let container = portfolioContainer else { errorMessage = "Portfolio store is unavailable."; return }
-        let review = BondTermsReview(container: container)
         Task { @MainActor in
-            do { try await review.beginManualReview(ids: [bond.id]); termsReview = review; showingTermsReview = true }
+            do { termsReview = try await Self.prepareTermsReview(in: container) }
             catch { errorMessage = error.localizedDescription }
         }
+    }
+
+    @MainActor
+    static func prepareTermsReview(in container: NSPersistentContainer) async throws -> BondTermsReview {
+        let review = BondTermsReview(container: container)
+        try await review.load()
+        return review
     }
 
     private func saveChanges() {
@@ -133,6 +138,8 @@ struct EditBondView: View {
             let previousDay = entity.termsAcquisitionDay
             let previousZone = entity.termsLegacyDateZone
             let previousTerms = try BondTermsStore.readDraft(entity)?.proposed ?? BondTermsStore.read(entity)
+            let instrumentChanged = identityChanged || entity.couponRate != values.couponRate || entity.maturityDate != values.maturityDate
+            let instrumentApproval = instrumentChanged ? nil : entity.termsData
             let financialChange = identityChanged || entity.parValue != values.parValue || entity.initialPrice != values.initialPrice
                 || entity.couponRate != values.couponRate || entity.depotBank != values.depotBank
                 || entity.acquisitionDate != values.acquisitionDate || entity.maturityDate != values.maturityDate
@@ -147,7 +154,11 @@ struct EditBondView: View {
                 }
             }
             let localAliases = identityChanged ? [:] : try BondTermsStore.captureLegacyAliases(entity)
-            if financialChange { BondTermsStore.clear(entity) }
+            if financialChange {
+                BondTermsStore.clear(entity)
+                // Keep the approved instrument terms while invalidating this purchase's projections.
+                entity.termsData = instrumentApproval
+            }
             entity.id = values.id; entity.name = values.name; entity.isin = values.isin
             entity.issuer = values.issuer; entity.depotBank = values.depotBank
             entity.acquisitionDate = values.acquisitionDate; entity.maturityDate = values.maturityDate

@@ -237,16 +237,21 @@ extension ImportManager {
                 bond.legacyEventAliasesData = aliases[bond.id]
                 bond.termsAcquisitionDay = entry.acquisitionDay.rawValue; bond.termsLegacyDateZone = entry.legacyDateZone
                 if let terms = entry.terms, terms.approvedAt != nil {
-                    let preview = try BondSchedule.preview(trade: BondTermsStore.trade(bond), terms: terms, from: MarketDay(date: now))
+                    let projectionContext = try BondTransfer.projectionContext(for: entry, in: native)
+                    let preview = try BondSchedule.preview(trade: BondTermsStore.trade(bond), terms: terms,
+                        from: MarketDay(date: now), context: projectionContext)
                     try BondTermsStore.replaceProjections(for: bond, terms: terms, preview: preview, now: now,
-                        acquisitionDay: entry.acquisitionDay, legacyDateZone: entry.legacyDateZone, context: context)
+                        acquisitionDay: entry.acquisitionDay, legacyDateZone: entry.legacyDateZone, context: context,
+                        projectionContext: projectionContext)
                     guard bond.termsReady else { throw PortfolioError(bond.termsIssue ?? "Imported terms need review.") }
                     bond.eventsActivateAfter = now
                 }
                 if let proposed = entry.draft ?? (entry.terms?.approvedAt == nil ? entry.terms : nil) {
                     var terms = proposed; if terms.isin.isEmpty { terms.isin = entry.isin }; terms.approvedAt = nil
                     try BondTermsStore.stageDraft(BondTermsDraft(baseline: BondBaseline.capture(bond), trade: BondTermsStore.trade(bond),
-                        legacyDateZone: entry.legacyDateZone, proposed: terms, previewDay: MarketDay(date: now)), for: bond)
+                        legacyDateZone: entry.legacyDateZone, proposed: terms,
+                        previewDay: entry.draftPreviewDay ?? MarketDay(date: now),
+                        projectionContext: BondTransfer.projectionContext(for: entry, in: native, draft: true)), for: bond)
                 }
                 if !bond.termsReady { bond.termsIssue = entry.needsReviewReasons.joined(separator: "\n") }
             }

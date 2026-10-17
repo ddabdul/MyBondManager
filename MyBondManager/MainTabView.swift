@@ -29,6 +29,7 @@ struct MainTabView: View {
     @State private var showingImportConfirmation = false
     @State private var isTransferring = false
 
+    @State private var showingMarketData = false
     @State private var showingAddBond = false
     @State private var showingMatured = false
     @State private var showingSellETF = false
@@ -37,12 +38,11 @@ struct MainTabView: View {
 
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.name, ascending: true)]) private var allBonds: FetchedResults<BondEntity>
     @State private var reviewModel: BondTermsReview?
-    @State private var showingTermsReview = false
     @State private var pendingBondImport: PreparedBondTransfer?
     @State private var expectedBondIDs: Set<UUID> = []
     @State private var showingBondImportConfirmation = false
     @State private var recalculationMessage = ""
-    private var unresolvedCount: Int { BondEligibility.excludedCount(Array(allBonds), on: MarketDay(date: Date())) }
+    private var unresolvedCount: Int { BondTermsReviewInstrument.grouped(allBonds.filter { BondEligibility.isActive($0, on: MarketDay(date: Date())) }).filter(\.needsReview).count }
 
     enum Tab: String, CaseIterable, Identifiable {
         case portfolio, cashflows, etf, history
@@ -76,6 +76,7 @@ struct MainTabView: View {
                         Button("Import Bonds") { chooseImport(bondOnly: true) }
                         Button("Import All Positions", action: chooseFolderAndImport)
                     }.disabled(isTransferring)
+                    Button("Market Data") { showingMarketData = true }
                     Button("Review Terms (\(unresolvedCount))", action: openTermsReview).disabled(isTransferring)
                     Button {
                         showingAddBond = true
@@ -141,9 +142,10 @@ struct MainTabView: View {
                 .environment(\.managedObjectContext, viewContext)
                 .environmentObject(notifier)
         }
-        .sheet(isPresented: $showingTermsReview) {
-            if let reviewModel { BondTermsReviewView(review: reviewModel) }
+        .sheet(item: $reviewModel) { review in
+            BondTermsReviewView(review: review)
         }
+        .sheet(isPresented: $showingMarketData) { MarketDataView() }
         .sheet(isPresented: $showingAddBond) {
             AddBondViewAsync()
                 .environment(\.managedObjectContext, viewContext)
@@ -276,7 +278,7 @@ struct MainTabView: View {
 
     private func openTermsReview() {
         guard let container = portfolioContainer else { notifier.alertMessage = "Portfolio store is unavailable."; return }
-        reviewModel = BondTermsReview(container: container); showingTermsReview = true
+        reviewModel = BondTermsReview(container: container)
     }
     private func applyPendingBondImport() {
         guard let container = portfolioContainer, let transfer = pendingBondImport else { notifier.alertMessage = "Portfolio store or prepared transfer is unavailable."; return }

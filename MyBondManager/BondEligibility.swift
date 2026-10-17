@@ -21,7 +21,7 @@ enum BondEligibility {
             guard row.generatedFromTerms, let contractual = row.contractualDay, row.natureEnum != .expectedProfit,
                   let value = expected[contractual + "|" + row.nature]?.first,
                   value.paymentDay <= through, row.date == value.paymentDay.instant,
-                  row.amount == value.amount, row.eventIdentity == value.eventIdentity else { return false }
+                  abs(row.amount - value.amount) <= 1e-8, row.eventIdentity == value.eventIdentity else { return false }
             return true
         }
     }

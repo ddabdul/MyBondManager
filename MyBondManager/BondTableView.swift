@@ -306,7 +306,7 @@ struct BondSummaryDetailView: View {
         }
         .disabled(isDeleting)
         .frame(minWidth: 400, minHeight: 300)
-        .popover(item: $editingBond, arrowEdge: .top) { bond in
+        .sheet(item: $editingBond) { bond in
             EditBondView(bond: bond)
                 .environment(\.managedObjectContext, moc)
                 .frame(minWidth: 400, minHeight: 500)

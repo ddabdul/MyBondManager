@@ -3,7 +3,13 @@ import CoreData
 // Purchase staging runs on the operation context; the caller saves once.
 enum ETFPurchase {
     static func normalizedISIN(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let tokens = trimmed.split(whereSeparator: { $0.isWhitespace })
+        if let first = tokens.first, first.count == 12, tokens.count > 1,
+           tokens.allSatisfy({ $0 == first }), first.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) }) {
+            return String(first)
+        }
+        return trimmed
     }
     static func validate(price: Double, shares: Int32) throws {
         guard price.isFinite, price > 0, shares > 0 else {

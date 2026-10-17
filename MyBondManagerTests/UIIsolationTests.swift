@@ -6,6 +6,25 @@ import CoreData
 
 @MainActor
 final class UIIsolationTests: XCTestCase {
+    func testOpeningReviewFromEditDoesNotReplaceSiblingDrafts() async throws {
+        let container = try TestPortfolio.make()
+        let first = TestPortfolio.bond(in: container.viewContext)
+        let second = TestPortfolio.bond(in: container.viewContext)
+        var terms = try BondTermsFixtures.fixed(); terms.couponRate = 7
+        terms.confirmedFields.insert("couponRate")
+        let draft = try BondTermsDraft(baseline: BondBaseline.capture(second), trade: BondTermsStore.trade(second),
+            legacyDateZone: "Europe/Berlin", proposed: terms, previewDay: MarketDay("2026-02-03"))
+        try BondTermsStore.stageDraft(draft, for: second)
+        try container.viewContext.save()
+        let firstID = first.id, secondID = second.id, savedDraft = second.termsDraftData
+        _ = try await EditBondView.prepareTermsReview(in: container)
+        let reader = container.newBackgroundContext()
+        try await reader.perform {
+            let bonds = try reader.fetch(BondEntity.fetchRequest())
+            XCTAssertNil(bonds.first { $0.id == firstID }?.termsDraftData)
+            XCTAssertEqual(bonds.first { $0.id == secondID }?.termsDraftData, savedDraft)
+        }
+    }
     func testHostedAppUsesOnlyMemory() {
         let app = BondPortfolioManagerApp()
         XCTAssertEqual(app.persistenceController.container.persistentStoreCoordinator.persistentStores.first?.type,
@@ -38,12 +57,12 @@ final class UIIsolationTests: XCTestCase {
         let now = TestPortfolio.date("2026-10-15T12:00:00Z")
         let regular = try TestPortfolio.readyBond(in: container.viewContext, terms: BondTermsFixtures.fixed(), now: now)
         regular.name = "Regular semiannual"
-        var zero = try BondTermsFixtures.fixed(); zero.structure = .zero; zero.couponRate = 0
+        var zero = try BondTermsFixtures.fixed(); zero.structure = .zero; zero.couponRate = 0; zero.isin = "DE0000000005"
         let zeroBond = try TestPortfolio.readyBond(in: container.viewContext, terms: zero, now: now); zeroBond.name = "Zero coupon"
         var callable = try BondTermsFixtures.fixed(frequency: 1, maturity: "2027-01-01", next: "2027-01-01")
-        callable.accrualStart = try MarketDay("2026-01-01"); callable.callable = true
+        callable.accrualStart = try MarketDay("2026-01-01"); callable.callable = true; callable.isin = "DE0000000006"
         let callBond = try TestPortfolio.readyBond(in: container.viewContext, terms: callable, now: now); callBond.name = "Callable regular"
-        let unresolved = TestPortfolio.bond(in: container.viewContext); unresolved.name = "Needs review"
+        let unresolved = TestPortfolio.bond(in: container.viewContext); unresolved.name = "Needs review"; unresolved.isin = "DE0000000007"
         _ = TestPortfolio.holding(in: container.viewContext)
         try container.viewContext.save()
         var fetches = 0
@@ -99,6 +118,31 @@ final class UIIsolationTests: XCTestCase {
         // The invalid numeric input and its error share the same replaced field state.
         XCTAssertEqual(state.terms.couponRate, 3.375)
         XCTAssertEqual(state.terms.redemptionPercent, 100)
+    }
+    func testUnchangedNativeFieldNotificationsDoNotDirtyReviewedTerms() async throws {
+        var original = try BondTermsFixtures.fixed()
+        original.currency = nil; original.couponRate = 2.5
+        let state = TermsEditorFixture(terms: original)
+        let view = NSHostingView(rootView: TermsEditorFixtureView(state: state))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 1000),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = view
+        defer { window.orderOut(nil) }
+        func descendants(_ root: NSView) -> [NSView] { [root] + root.subviews.flatMap(descendants) }
+        await Task.yield(); view.layoutSubtreeIfNeeded()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(state.terms, original, "Mounting the form must not edit its terms")
+        for value in ["", "2.5", "2027-01-15", "2026-07-15"] {
+            let field = try XCTUnwrap(descendants(view).compactMap { $0 as? NSTextField }.first {
+                $0.isEditable && $0.stringValue == value
+            })
+            XCTAssertTrue(window.makeFirstResponder(field))
+            let input = try XCTUnwrap(field.currentEditor() as? NSTextView)
+            input.didChangeText()
+            window.makeFirstResponder(nil)
+            await Task.yield()
+            XCTAssertEqual(state.terms, original, "An unchanged field must not add confirmations or alter checkpoint dates: " + value)
+        }
     }
     private func render<V: View>(_ root: V, to path: String) async throws {
         let view = NSHostingView(rootView: root)

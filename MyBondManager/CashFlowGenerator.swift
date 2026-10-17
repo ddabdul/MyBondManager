@@ -14,6 +14,7 @@ struct CashFlowGenerator {
             return
         }
         try BondTermsStore.replaceProjections(for: bond, terms: terms, preview: preview, now: now,
-            acquisitionDay: BondTermsStore.trade(bond).acquisitionDay, legacyDateZone: zone, context: context)
+            acquisitionDay: BondTermsStore.trade(bond).acquisitionDay, legacyDateZone: zone, context: context,
+            projectionContext: BondTermsStore.projectionContext(bond))
     }
 }

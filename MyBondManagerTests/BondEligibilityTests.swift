@@ -45,4 +45,47 @@ final class BondEligibilityTests: XCTestCase {
         flow.amount += 1
         XCTAssertFalse(try BondEligibility.includes(flow, from: MarketDay("2026-02-03"), through: MarketDay("2027-02-01")))
     }
+    func testRoundingNoiseDoesNotHideStoredCouponOrNextCoupon() throws {
+        let container = try TestPortfolio.make()
+        let bond = try TestPortfolio.readyBond(in: container.viewContext, terms: BondTermsFixtures.fixed(),
+            now: TestPortfolio.date("2026-02-03T12:00:00Z"))
+        let flow = try XCTUnwrap(bond.cashFlowsArray.first { $0.natureEnum == .interest })
+        let amount = flow.amount
+        let start = try MarketDay("2026-02-03"), end = try MarketDay("2027-02-01")
+        for noise in [1e-10, -1e-10] {
+            flow.amount = amount + noise
+            XCTAssertTrue(try BondEligibility.includes(flow, from: start, through: end))
+            XCTAssertTrue(try BondEligibility.flows(bond, from: start, through: end).contains(flow))
+            XCTAssertEqual(BondEligibility.nextCoupon([bond], on: start), flow)
+            XCTAssertEqual(flow.amount, amount + noise)
+        }
+    }
+    func testAmountToleranceStillRejectsChangedAmountsAndInvalidValues() throws {
+        let container = try TestPortfolio.make()
+        let bond = try TestPortfolio.readyBond(in: container.viewContext, terms: BondTermsFixtures.fixed(),
+            now: TestPortfolio.date("2026-02-03T12:00:00Z"))
+        let flow = try XCTUnwrap(bond.cashFlowsArray.first { $0.natureEnum == .interest })
+        let amount = flow.amount
+        let start = try MarketDay("2026-02-03"), end = try MarketDay("2027-02-01")
+        for wrongAmount in [amount + 0.001, amount - 0.001, amount + 0.01, Double.nan, Double.infinity, -Double.infinity] {
+            flow.amount = wrongAmount
+            XCTAssertFalse(try BondEligibility.includes(flow, from: start, through: end))
+        }
+    }
+    func testToleratedAmountDoesNotBypassDateAndIdentityChecks() throws {
+        let container = try TestPortfolio.make()
+        let bond = try TestPortfolio.readyBond(in: container.viewContext, terms: BondTermsFixtures.fixed(),
+            now: TestPortfolio.date("2026-02-03T12:00:00Z"))
+        let flow = try XCTUnwrap(bond.cashFlowsArray.first { $0.natureEnum == .interest })
+        let start = try MarketDay("2026-02-03"), end = try MarketDay("2027-02-01")
+        flow.amount += 1e-10
+        let identity = flow.eventIdentity, date = flow.date
+        flow.eventIdentity = "different-event"
+        XCTAssertFalse(try BondEligibility.includes(flow, from: start, through: end))
+        flow.eventIdentity = identity; flow.date = date.addingTimeInterval(1)
+        XCTAssertFalse(try BondEligibility.includes(flow, from: start, through: end))
+        flow.date = date; flow.generatedFromTerms = false
+        XCTAssertFalse(try BondEligibility.includes(flow, from: start, through: end))
+    }
+
 }

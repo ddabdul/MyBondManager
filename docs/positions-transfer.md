@@ -7,7 +7,9 @@ Both export actions create a new local-time directory such as `positions-2026-10
 Choose **Export > Export Bonds (webapp + Mac)**. The folder contains exactly:
 
 - `bonds.json`: the existing webapp root array and legacy position/cash-flow schema, including whole-second ISO-8601 dates. No native fields were added.
-- `bond-terms.json`: version-1 native terms linked by holding UUID and normalized ISIN, including convention provenance, approval or incomplete draft state, acquisition-day interpretation and source projection boundary. Its SHA-256 digest binds it to the exact companion `bonds.json` bytes.
+- `bond-terms.json`: native terms linked by holding UUID and normalized ISIN, including convention provenance, approval or incomplete draft state, acquisition-day interpretation and source projection boundary. Its SHA-256 digest binds it to the exact companion `bonds.json` bytes.
+
+Fixed-only exports retain native version 1. Genuine floating or fixed-to-floating forecasts use version 2 with deduplicated, immutable market snapshots and separate approved/draft valuation context. Import verifies content hashes, calibration, tenor, dates and recomputed payments offline; incomplete drafts remain unapproved. Floating yields use the existing legacy zero sentinel, while the app shows no fixed-bond YTM for them. The legacy JSON key set is unchanged.
 
 Keep both files together for Mac-to-Mac reading. The webapp can continue reading `bonds.json` alone. Approved rows reflect regular frequency, actual redemption and adjusted payment dates. Needs review holdings remain in that file with an empty `cashFlows` array; the Mac reports the count of excluded schedules. The legacy file cannot communicate native readiness or call warnings to the webapp.
 

@@ -1,6 +1,40 @@
 import SwiftUI
 import CoreData
 
+struct BondTermsReviewNavigation {
+    enum Action: Equatable { case close, collectMissing, refresh, manual, reuseApproved }
+    private(set) var pending: Action?
+
+    mutating func request(_ action: Action, hasUnsavedChanges: Bool) -> Action? {
+        if hasUnsavedChanges { pending = action; return nil }
+        pending = nil
+        return action
+    }
+    mutating func cancel() { pending = nil }
+}
+
+struct BondTermsReviewInstrument: Identifiable {
+    let isin: String
+    let purchases: [BondEntity]
+    let representative: BondEntity
+    var id: String { isin }
+    var needsReview: Bool { purchases.contains { !BondTermsStore.isReady($0) } }
+
+    static func grouped(_ bonds: [BondEntity], preferredID: UUID? = nil, draftIDs: Set<UUID> = []) -> [Self] {
+        Dictionary(grouping: bonds, by: { ETFPurchase.normalizedISIN($0.isin) }).map { isin, records in
+            let sorted = records.sorted {
+                if $0.acquisitionDate != $1.acquisitionDate { return $0.acquisitionDate < $1.acquisitionDate }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+            let representative = sorted.first { $0.id == preferredID } ?? sorted.first { draftIDs.contains($0.id) } ?? sorted[0]
+            return Self(isin: isin, purchases: sorted, representative: representative)
+        }.sorted {
+            if $0.representative.name != $1.representative.name { return $0.representative.name < $1.representative.name }
+            return $0.isin < $1.isin
+        }
+    }
+}
+
 struct BondTermsReviewView: View {
     @ObservedObject var review: BondTermsReview
     var initialSelection: UUID? = nil
@@ -15,13 +49,15 @@ private struct BondTermsReviewContent: View {
     let initialSelection: UUID?
     @Environment(\.dismiss) private var dismiss
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.name, ascending: true)]) private var bonds: FetchedResults<BondEntity>
-    @State private var selected: Set<UUID> = []
+    @State private var selected: Set<String> = []
     @State private var focused: UUID?
     @State private var edited: BondTermsDraft?
     @State private var editorRevision = UUID()
     @State private var message = ""
     @State private var busy = false
     @State private var confirmApproval = false
+    @State private var rebuildContext: ProjectionContext?
+    @State private var navigation = BondTermsReviewNavigation()
 
     init(review: BondTermsReview, initialSelection: UUID?) {
         self.review = review; self.initialSelection = initialSelection
@@ -29,48 +65,59 @@ private struct BondTermsReviewContent: View {
         _edited = State(initialValue: initialSelection.flatMap { review.drafts[$0] })
     }
 
-    private var visibleBonds: [BondEntity] { bonds.filter { BondEligibility.isActive($0, on: review.today) || $0.id == initialSelection } }
-    private var dirty: Bool { edited != focused.flatMap { review.drafts[$0] } }
-    private var canApply: Bool {
-        !selected.isEmpty && !dirty && selected.allSatisfy { id in
-            guard let draft = review.drafts[id], draft.previewDay == review.today else { return false }
-            do { return try review.preview(draft).assessment.supported } catch { return false }
-        }
+    private var instruments: [BondTermsReviewInstrument] {
+        let eligible = Set(bonds.filter { BondEligibility.isActive($0, on: review.today) || $0.id == initialSelection }.map { ETFPurchase.normalizedISIN($0.isin) })
+        return BondTermsReviewInstrument.grouped(bonds.filter { eligible.contains(ETFPurchase.normalizedISIN($0.isin)) }, preferredID: initialSelection, draftIDs: Set(review.drafts.keys))
     }
+    private var visibleBonds: [BondEntity] { instruments.map(\.representative) }
+    private var selectedIDs: [UUID] { instruments.filter { selected.contains($0.isin) }.map { $0.representative.id } }
+    private var focusedPurchases: [BondEntity] { instruments.first { $0.purchases.contains { $0.id == focused } }?.purchases ?? [] }
+    private var dirty: Bool { edited != focused.flatMap { review.drafts[$0] } }
+    private var canApply: Bool { !selected.isEmpty && !dirty }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Review Bond Terms").font(.title2)
                 Spacer()
-                Button("Close") {
-                    if dirty { message = "Save the draft or revert your edits before closing." } else { dismiss() }
-                }.keyboardShortcut(.cancelAction).disabled(busy || review.isWorking)
+                Button("Close") { request(.close) }.keyboardShortcut(.cancelAction).disabled(busy || review.isWorking)
             }
-            Text("Review existing holdings once, at your pace. Saved drafts resume here. Only approved payments enter forecasts; financial history is preserved and automatic recording starts prospectively.")
+            Text("Review each ISIN once for all its purchases. Acquisition dates, costs, schedules and yields stay separate. Successful bulk approvals are saved independently; failed instruments stay open for correction.")
                 .foregroundStyle(.secondary)
             HStack {
-                Button("Select unresolved") { selected = Set(visibleBonds.filter { !BondTermsStore.isReady($0) }.map(\.id)) }
-                Button("Collect missing terms") { collect(refresh: false) }
-                Button("Refresh selected from ING") { collect(refresh: true) }
-                Button("Enter terms manually") { manualReview() }
+                Button("Select unresolved") { selected = Set(instruments.filter(\.needsReview).map(\.isin)) }
+                Button("Collect missing terms") { request(.collectMissing) }
+                Button("Refresh selected from ING") { request(.refresh) }
+                Button("Enter terms manually") { request(.manual) }
                 Spacer()
-                Text("\(visibleBonds.filter { !BondTermsStore.isReady($0) }.count) holdings need review")
-            }.disabled(busy || review.isWorking || dirty)
+                Text("\(instruments.filter(\.needsReview).count) ISINs need review")
+            }.disabled(busy || review.isWorking)
+            DisclosureGroup("Market data for rebuilding approved floating forecasts") {
+                MarketSnapshotPicker(context: $rebuildContext)
+                Button("Rebuild selected approved forecasts") { rebuildForecasts() }
+                    .disabled(rebuildContext == nil || selected.isEmpty || dirty || busy || review.isWorking)
+            }
             if review.isWorking || busy { ProgressView() }
             if !message.isEmpty { Text(message).foregroundStyle(.orange).textSelection(.enabled) }
-            ForEach(review.errors.keys.sorted(), id: \.self) { key in Text(key + ": " + (review.errors[key] ?? "")).foregroundStyle(.red) }
+            if !review.errors.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading) {
+                        ForEach(review.errors.keys.sorted(), id: \.self) { key in Text(key + ": " + (review.errors[key] ?? "")).foregroundStyle(.red).textSelection(.enabled) }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }.frame(maxHeight: 120)
+            }
             HSplitView {
                 List {
-                    ForEach(visibleBonds, id: \.objectID) { bond in
+                    ForEach(instruments) { instrument in
+                        let bond = instrument.representative
                         HStack {
-                            Toggle("", isOn: Binding(get: { selected.contains(bond.id) }, set: {
-                                if $0 { selected.insert(bond.id) } else { selected.remove(bond.id) }
+                            Toggle("", isOn: Binding(get: { selected.contains(instrument.isin) }, set: {
+                                if $0 { selected.insert(instrument.isin) } else { selected.remove(instrument.isin) }
                             })).toggleStyle(.checkbox).labelsHidden()
                             Button { focus(bond.id) } label: {
                                 VStack(alignment: .leading) {
                                     Text(bond.name)
-                                    Text(bond.isin + " · " + bond.depotBank).font(.caption).foregroundStyle(.secondary)
-                                    Text(BondTermsStore.isReady(bond) ? "Ready" : "Needs review").font(.caption).foregroundStyle(BondTermsStore.isReady(bond) ? .green : .orange)
+                                    Text(instrument.isin + " · \(instrument.purchases.count) purchases").font(.caption).foregroundStyle(.secondary)
+                                    Text(instrument.needsReview ? "Needs review" : "Ready").font(.caption).foregroundStyle(instrument.needsReview ? .orange : .green)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                             }.buttonStyle(.plain)
                         }
@@ -79,26 +126,42 @@ private struct BondTermsReviewContent: View {
                 ScrollView { editor.padding() }.frame(minWidth: 500)
             }
             HStack {
-                Button("Revert local edits") { refreshEditor() }.disabled(!dirty || busy)
+                Button("Revert local edits") { refreshEditor(); message = "" }.disabled(!dirty || busy)
+                Button("Reuse approved terms") { request(.reuseApproved) }.disabled(selected.isEmpty || busy || review.isWorking)
                 Spacer()
                 Button("Save draft and preview") { saveDraft() }.disabled(edited == nil || busy || review.isWorking)
-                Button("Apply Selected Terms (\(selected.count))") { confirmApproval = true }.disabled(!canApply || busy || review.isWorking)
+                Button("Apply Selected ISINs (\(selected.count))") { confirmApproval = true }.disabled(!canApply || busy || review.isWorking)
             }
         }
         .padding().frame(minWidth: 960, minHeight: 720)
         .background(AppTheme.panelBackground)
         .interactiveDismissDisabled(dirty || busy || review.isWorking)
-        .confirmationDialog("Apply reviewed terms to \(selected.count) holdings?", isPresented: $confirmApproval) {
+        .alert("Discard unsaved local edits?", isPresented: Binding(
+            get: { navigation.pending != nil },
+            set: { if !$0 { navigation.cancel() } }
+        ), presenting: navigation.pending) { action in
+            Button("Discard local edits and continue", role: .destructive) {
+                navigation.cancel()
+                refreshEditor(); message = ""
+                perform(action)
+            }
+            Button("Keep editing", role: .cancel) { navigation.cancel() }
+        } message: { _ in
+            Text("Only unsaved changes in this editor will be discarded. Saved drafts, approved terms and financial history are kept.")
+        }
+        .confirmationDialog("Apply terms for \(selected.count) ISINs?", isPresented: $confirmApproval) {
             Button("Apply Terms") { apply() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Apply the saved dated previews, including any contractual maturity changes shown in the review. Trade inputs and recorded history stay unchanged. Automatic payments activate from this local approval; past or earlier-today receipts are not recorded.")
+            Text("Apply each saved instrument draft to all purchases of its ISIN. Successful ISINs are saved; failed ones remain selected for correction. Trade inputs and recorded history stay unchanged. Automatic payments activate prospectively; past and earlier-today receipts are not recorded.")
         }
         .task {
             do {
                 try await review.load()
                 focused = initialSelection ?? visibleBonds.first?.id
-                if let initialSelection { selected = [initialSelection] }
+                if let initialSelection, let group = instruments.first(where: { $0.purchases.contains { $0.id == initialSelection } }) {
+                    focused = group.representative.id; selected = [group.isin]
+                }
                 refreshEditor()
             } catch { message = error.localizedDescription }
         }
@@ -108,21 +171,42 @@ private struct BondTermsReviewContent: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(draft.baseline.name).font(.headline)
                 Text("Current holding: coupon \(draft.baseline.rate)% · maturity \(Formatters.shortDate.string(from: draft.baseline.maturity))")
-                Text("Trade: \(draft.trade.nominal) nominal · \(draft.trade.cost) cost · acquired \(draft.trade.acquisitionDay.rawValue) · \(draft.trade.bank)").font(.caption)
+                Text("Shared instrument terms for \(focusedPurchases.count) purchases. Each purchase has its own preview below.").font(.caption)
                 Text("Legacy date interpretation: " + draft.legacyDateZone).font(.caption).foregroundStyle(.secondary)
                 BondTermsFields(terms: Binding(get: { edited?.proposed ?? draft.proposed }, set: { edited?.proposed = $0 }), resetID: editorRevision)
+                if [.floating, .fixedToFloating].contains(draft.proposed.structure) {
+                    MarketSnapshotPicker(context: Binding(get: { edited?.projectionContext }, set: { edited?.projectionContext = $0 })).id(editorRevision)
+                }
                 Divider()
                 Text("Preview from " + draft.previewDay.rawValue).font(.headline)
                 if draft.previewDay != review.today { Text("The preview day changed. Save the draft to refresh its preview before applying.").foregroundStyle(.orange) }
-                switch Result(catching: { try review.preview(draft) }) {
+                ForEach(focusedPurchases, id: \.objectID) { bond in
+                    purchasePreview(bond, terms: draft.proposed, from: draft.previewDay)
+                    Divider()
+                }
+            }.disabled(busy || review.isWorking)
+        } else {
+            Text("Select an instrument and collect missing terms, or enter them manually. Collection only runs when you request it.")
+                .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    @ViewBuilder private func purchasePreview(_ bond: BondEntity, terms: BondTerms, from day: MarketDay) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(bond.depotBank + " · " + bond.parValueFormatted + " nominal · " + bond.acquisitionPriceFormatted + " cost").font(.headline)
+            Text("Acquired: " + bond.acquisitionDateFormatted).font(.caption)
+                switch Result(catching: { try BondSchedule.preview(trade: BondTermsStore.trade(bond), terms: terms, from: day, context: edited?.projectionContext) }) {
                 case .success(let preview):
                     if preview.assessment.supported {
                         Text("Supported preview; approval is required.").foregroundStyle(.green)
+                        ForEach(preview.assessment.warnings, id: \.self) { Text($0).foregroundStyle(.orange) }
                         if let date = preview.redemptionDay { Text("Redemption payment: " + date.rawValue) }
                         if let yield = preview.estimatedYTM { Text(String(format: "Estimated YTM: %.3f%%", yield)) }
                         ForEach(Array(preview.payments.enumerated()), id: \.offset) { _, payment in
                             HStack {
                                 Text(payment.kind == .interest ? "Coupon" : "Redemption")
+                                if let source = payment.rateSource, payment.kind == .interest {
+                                    Text(source == .projected ? "Projected" : (source == .publishedFixing ? "Published fixing" : "Fixed")).font(.caption).foregroundStyle(.secondary)
+                                }
                                 Text(payment.paymentDay.rawValue)
                                 Spacer()
                                 Text(Formatters.paymentCurrency.string(from: NSNumber(value: payment.amount)) ?? String(payment.amount))
@@ -131,10 +215,18 @@ private struct BondTermsReviewContent: View {
                     } else { ForEach(preview.assessment.reasons, id: \.self) { Text($0).foregroundStyle(.orange) } }
                 case .failure(let error): Text(error.localizedDescription).foregroundStyle(.red)
                 }
-            }.disabled(busy || review.isWorking)
-        } else {
-            Text("Select holdings and collect missing terms, or enter them manually. Collection only runs when you request it.")
-                .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    private func request(_ action: BondTermsReviewNavigation.Action) {
+        if let immediate = navigation.request(action, hasUnsavedChanges: dirty) { perform(immediate) }
+    }
+    private func perform(_ action: BondTermsReviewNavigation.Action) {
+        switch action {
+        case .close: dismiss()
+        case .collectMissing: collect(refresh: false)
+        case .refresh: collect(refresh: true)
+        case .manual: manualReview()
+        case .reuseApproved: apply(reuse: true)
         }
     }
     private func refreshEditor() {
@@ -146,16 +238,17 @@ private struct BondTermsReviewContent: View {
         focused = id; refreshEditor()
     }
     private func collect(refresh: Bool) {
-        let ids = selected.filter { id in refresh || (review.drafts[id] == nil && !bonds.contains { $0.id == id && BondTermsStore.isReady($0) }) }
-        guard !ids.isEmpty else { message = "Select holdings without a draft, or use Refresh for a new collection."; return }
+        let ids = selectedIDs.filter { id in refresh || (review.drafts[id] == nil && instruments.contains { $0.representative.id == id && $0.needsReview }) }
+        guard !ids.isEmpty else { message = "Select ISINs without a draft, or use Refresh for a new collection."; return }
         Task { await review.collect(ids: Array(ids)); refreshEditor() }
     }
     private func manualReview() {
-        guard !selected.isEmpty else { message = "Select at least one holding."; return }
+        guard !selected.isEmpty else { message = "Select at least one ISIN."; return }
+        let ids = selectedIDs
         busy = true
         Task { @MainActor in
             defer { busy = false }
-            do { try await review.beginManualReview(ids: Array(selected)); if focused == nil { focused = selected.first }; refreshEditor() }
+            do { try await review.beginManualReview(ids: ids); if focused == nil { focused = ids.first }; refreshEditor() }
             catch { message = error.localizedDescription }
         }
     }
@@ -168,12 +261,34 @@ private struct BondTermsReviewContent: View {
             catch { message = error.localizedDescription }
         }
     }
-    private func apply() {
-        let ids = Array(selected); busy = true
+    private func rebuildForecasts() {
+        guard let context = rebuildContext else { return }
+        let ids = selectedIDs; busy = true
         Task { @MainActor in
             defer { busy = false }
-            do { try await review.apply(ids: ids); refreshEditor(); message = "Terms applied. History was preserved." }
+            do { finishApply(try await review.refreshForecasts(ids: ids, context: context)) }
             catch { message = error.localizedDescription }
         }
     }
+    private func apply(reuse: Bool = false) {
+        let ids = selectedIDs; busy = true
+        Task { @MainActor in
+            defer { busy = false }
+            do {
+                let report = try await (reuse ? review.reuseApproved(ids: ids) : review.apply(ids: ids))
+                finishApply(report)
+            } catch {
+                if let report = review.lastApplyReport { finishApply(report) }
+                else { message = error.localizedDescription }
+            }
+        }
+    }
+    private func finishApply(_ report: BondTermsApplyReport) {
+        selected.subtract(report.appliedISINs)
+        if focused.map({ report.appliedHoldingIDs.contains($0) }) == true {
+            focused = instruments.first { selected.contains($0.isin) }?.representative.id
+        }
+        refreshEditor(); message = report.summary + " Financial history was preserved."
+    }
+
 }

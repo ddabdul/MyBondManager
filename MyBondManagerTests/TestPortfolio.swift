@@ -53,6 +53,7 @@ extension TestPortfolio {
     static func readyBond(in context: NSManagedObjectContext, terms: BondTerms, now: Date,
                           nominal: Double = 1000, cost: Double = 900) throws -> BondEntity {
         let bond = bond(in: context, cost: cost, par: nominal)
+        bond.isin = terms.isin
         bond.acquisitionDate = date("2026-02-01T00:00:00Z")
         var approved = terms; approved.approvedAt = terms.approvedAt ?? now
         let day = try MarketDay("2026-02-01")

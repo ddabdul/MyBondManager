@@ -11,6 +11,9 @@ final class TargetCalendarTests: XCTestCase {
             XCTAssertEqual(try TargetCalendar.following(MarketDay(input)).rawValue, expected)
         }
     }
+    func testQuantLibLowerDateBoundaryIsEnforcedByTheAppFacade() throws {
+        XCTAssertThrowsError(try TargetCalendar.following(MarketDay("1900-01-01")))
+    }
     func testOutOfRangeAdjustmentFailsExplicitly() throws {
         XCTAssertThrowsError(try TargetCalendar.following(MarketDay("2200-01-01")))
     }

@@ -1,0 +1,53 @@
+{
+  "Rates": [
+    {
+      "Index": 15,
+      "LengthInMonths": 1,
+      "PreviousDay": "2.41400",
+      "PreviousMonth": "2.36900",
+      "PreviousYear": "1.92600",
+      "CurrentDate": "2026-10-09",
+      "PreviousDayDate": "2026-10-08",
+      "PreviousMonthDate": "2026-09-09",
+      "PreviousYearDate": "2025-10-09"
+    },
+    {
+      "Index": 2,
+      "LengthInMonths": 3,
+      "PreviousDay": "2.64200",
+      "PreviousMonth": "2.62600",
+      "PreviousYear": "2.02500",
+      "CurrentDate": "2026-10-09",
+      "PreviousDayDate": "2026-10-08",
+      "PreviousMonthDate": "2026-09-09",
+      "PreviousYearDate": "2025-10-09"
+    },
+    {
+      "Index": 14,
+      "LengthInMonths": 6,
+      "PreviousDay": "2.93600",
+      "PreviousMonth": "2.80000",
+      "PreviousYear": "2.10400",
+      "CurrentDate": "2026-10-09",
+      "PreviousDayDate": "2026-10-08",
+      "PreviousMonthDate": "2026-09-09",
+      "PreviousYearDate": "2025-10-09"
+    },
+    {
+      "Index": 92,
+      "LengthInMonths": 12,
+      "PreviousDay": "3.21300",
+      "PreviousMonth": "3.13800",
+      "PreviousYear": "2.20900",
+      "CurrentDate": "2026-10-09",
+      "PreviousDayDate": "2026-10-08",
+      "PreviousMonthDate": "2026-09-09",
+      "PreviousYearDate": "2025-10-09"
+    }
+  ],
+  "CurrentDate": "2026-10-09",
+  "PreviousDayDate": "2026-10-08",
+  "PreviousMonthDate": "2026-09-09",
+  "PreviousYearDate": "2025-10-09",
+  "Updated": "2026-10-10 | 05:30:06"
+}

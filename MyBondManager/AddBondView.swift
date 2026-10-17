@@ -13,6 +13,7 @@ struct AddBondViewAsync: View {
     @State private var terms = BondTerms()
     @State private var previewDay = MarketDay(date: Date())
     @State private var approve = false
+    @State private var projectionContext: ProjectionContext?
     @State private var isSaving = false
     @State private var errorMessage = ""
 
@@ -20,7 +21,7 @@ struct AddBondViewAsync: View {
         Result {
             guard let nominal = Double(parValueStr), let cost = Double(acquisitionPrice) else { throw PortfolioError("Enter nominal and acquisition cost to preview payments.") }
             return try BondSchedule.preview(trade: BondTrade(id: positionID, isin: ETFPurchase.normalizedISIN(collection.isin),
-                nominal: nominal, cost: cost, acquisitionDay: MarketDay(date: acquisitionDate, calendar: .current), bank: depotBank), terms: terms, from: previewDay)
+                nominal: nominal, cost: cost, acquisitionDay: MarketDay(date: acquisitionDate, calendar: .current), bank: depotBank), terms: terms, from: previewDay, context: projectionContext)
         }
     }
     private var supported: Bool { if case .success(let value) = preview { return value.assessment.supported }; return false }
@@ -47,6 +48,7 @@ struct AddBondViewAsync: View {
                             Text(details.name); Text(details.issuer + " / " + details.wkn)
                             BondTermsFields(terms: $terms).id(ETFPurchase.normalizedISIN(collection.isin) + String(describing: terms.collectedAt))
                         }
+                        if [.floating, .fixedToFloating].contains(terms.structure) { Section("Frozen market data") { MarketSnapshotPicker(context: $projectionContext) } }
                         Section("Payment Preview") {
                             switch preview {
                             case .success(let result):
@@ -75,6 +77,7 @@ struct AddBondViewAsync: View {
             }.padding()
         }
         .frame(minWidth: 650, minHeight: 650).background(AppTheme.panelBackground)
+        .onChange(of: projectionContext) { _, _ in approve = false }
         .onChange(of: terms) { _, _ in approve = false }
         .onChange(of: collection.isin) { _, _ in terms = BondTerms(); approve = false }
         .onChange(of: parValueStr) { _, _ in resetPreview() }
@@ -85,7 +88,8 @@ struct AddBondViewAsync: View {
     private func resetPreview() { approve = false; previewDay = MarketDay(date: Date()) }
     private func saveBond() {
         guard !isSaving, let container = portfolioContainer else { errorMessage = "Portfolio store is unavailable."; return }
-        guard let details = collection.details, let rate = terms.couponRate, rate.isFinite, rate >= 0,
+        let rate = terms.couponRate ?? 0
+        guard let details = collection.details, rate.isFinite, rate >= 0,
               let maturity = terms.maturity, acquisitionDate <= maturity.instant,
               let nominal = Double(parValueStr), nominal.isFinite, nominal > 0,
               let cost = Double(acquisitionPrice), cost.isFinite, cost > 0,
@@ -101,7 +105,7 @@ struct AddBondViewAsync: View {
         Task { @MainActor in
             defer { isSaving = false }
             do {
-                _ = try await BondTermsReview(container: container).saveNew(values: values, terms: savedTerms, legacyDateZone: TimeZone.current.identifier)
+                _ = try await BondTermsReview(container: container).saveNew(values: values, terms: savedTerms, legacyDateZone: TimeZone.current.identifier, projectionContext: projectionContext)
                 dismiss()
             } catch { errorMessage = "Could not save bond: " + error.localizedDescription }
         }
