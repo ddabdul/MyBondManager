@@ -82,7 +82,7 @@ final class BondTransferTests: XCTestCase {
             XCTAssertEqual(try reader.count(for: HistoricalValuation.fetchRequest()), 0)
         }
     }
-    func testLegacyReplacementClearsSameUUIDApprovalAndEmptyImportKeepsETFsAndHistory() async throws {
+    func testLegacyReplacementKeepsSameUUIDApprovalAndEmptyImportKeepsETFsAndHistory() async throws {
         let target = try TestPortfolio.make()
         let bond = try TestPortfolio.readyBond(in: target.viewContext, terms: BondTermsFixtures.fixed(), now: TestPortfolio.date("2026-02-03T12:00:00Z"))
         _ = TestPortfolio.holding(in: target.viewContext)
@@ -94,7 +94,7 @@ final class BondTransferTests: XCTestCase {
         let reader = target.newBackgroundContext()
         try await reader.perform {
             let stored = try XCTUnwrap(reader.fetch(BondEntity.fetchRequest()).first)
-            XCTAssertFalse(BondTermsStore.isReady(stored)); XCTAssertNil(try BondTermsStore.read(stored))
+            XCTAssertTrue(BondTermsStore.isReady(stored)); XCTAssertNotNil(try BondTermsStore.read(stored))
         }
         try await ImportManager().applyBonds(BondTransfer.prepare(bonds: Data("[]".utf8), sidecar: nil), into: target)
         let check = target.newBackgroundContext()
@@ -282,7 +282,7 @@ final class BondTransferTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: previous.appendingPathComponent("bonds.json")), original)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path).count, 1)
     }
-    func testApprovalOverlappingImportRejectsStaleTradeWithoutPartialWrites() async throws {
+    func testApprovalOverlappingImportRejectsStaleHoldingWithoutPartialWrites() async throws {
         let target = try TestPortfolio.make()
         let now = TestPortfolio.date("2026-02-03T12:00:00Z")
         let bond = try TestPortfolio.readyBond(in: target.viewContext, terms: BondTermsFixtures.fixed(), now: now)
@@ -295,7 +295,7 @@ final class BondTransferTests: XCTestCase {
         let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
         let bytes = try encoder.encode(ExportManager.snapshot(from: target.viewContext).bonds)
         var objects = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [[String: Any]])
-        objects[0]["initialPrice"] = 950
+        objects[0]["name"] = "Updated description"
         let transfer = try BondTransfer.prepare(bonds: JSONSerialization.data(withJSONObject: objects), sidecar: nil)
         let saving = expectation(description: "Import holds serialized write through save")
         let release = DispatchSemaphore(value: 0)
@@ -312,17 +312,108 @@ final class BondTransferTests: XCTestCase {
         let approving = Task { try await review.apply(ids: [id]) }
         try await Task.sleep(nanoseconds: 100_000_000)
         release.signal()
-        try await importing.value
-        do { try await approving.value; XCTFail("Stale approval should fail") }
+        _ = try await importing.value
+        do { _ = try await approving.value; XCTFail("Stale approval should fail") }
         catch { XCTAssertTrue(error.localizedDescription.contains("Holding changed")) }
         let reader = target.newBackgroundContext()
         try await reader.perform {
             let stored = try XCTUnwrap(reader.fetch(BondEntity.fetchRequest()).first)
-            XCTAssertEqual(stored.initialPrice, 950)
-            XCTAssertFalse(BondTermsStore.isReady(stored)); XCTAssertNil(try BondTermsStore.read(stored))
+            XCTAssertEqual(stored.initialPrice, 900)
+            XCTAssertEqual(stored.name, "Updated description")
+            XCTAssertTrue(BondTermsStore.isReady(stored)); XCTAssertNotNil(try BondTermsStore.read(stored))
             XCTAssertEqual(try reader.count(for: ETFEntity.fetchRequest()), 1)
             XCTAssertEqual(try reader.count(for: HistoricalValuation.fetchRequest()), 1)
         }
     }
 
+}
+
+
+extension BondTransferTests {
+    func testExistingStoredApproximationDoesNotLeakIntoNewExportOrRewriteHistory() throws {
+        let source = try TestPortfolio.make()
+        var terms = try BondTermsFixtures.fixed(); terms.redemptionPercent = 105
+        let bond = try TestPortfolio.readyBond(in: source.viewContext, terms: terms,
+            now: TestPortfolio.date("2026-02-03T12:00:00Z"), nominal: 100000, cost: 100000)
+        bond.yieldToMaturity = 8.409027193720213
+        try HistoricalDataRecorder.recordBondAcquisition(bond: bond, context: source.viewContext)
+        try source.viewContext.save()
+        let history = try source.viewContext.fetch(HistoricalValuation.fetchRequest())
+        let expected = try XCTUnwrap(BondTermsStore.estimatedYTM(bond))
+        let snapshot = try BondTransfer.snapshot(from: source.viewContext)
+        XCTAssertEqual(try XCTUnwrap(snapshot.bonds.first).yieldToMaturity, expected, accuracy: 1e-10)
+        let files = try BondTransfer.encode(snapshot)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: files.sidecar) as? [String: Any])
+        let entry = try XCTUnwrap((object["bonds"] as? [[String: Any]])?.first)
+        XCTAssertEqual(entry["yieldMethod"] as? String, "annualEffectiveActual365FixedCleanPrice")
+        XCTAssertFalse(source.viewContext.hasChanges)
+        XCTAssertEqual(bond.yieldToMaturity, 8.409027193720213)
+        XCTAssertEqual(try source.viewContext.fetch(HistoricalValuation.fetchRequest()), history)
+    }
+    func testOldNativeExportImportsApproximationAndRecalculatesPurchaseYield() async throws {
+        let source = try TestPortfolio.make()
+        var terms = try BondTermsFixtures.fixed(); terms.redemptionPercent = 105
+        _ = try TestPortfolio.readyBond(in: source.viewContext, terms: terms,
+            now: TestPortfolio.date("2026-02-03T12:00:00Z"), nominal: 100000, cost: 100000)
+        try source.viewContext.save()
+        let files = try BondTransfer.encode(BondTransfer.snapshot(from: source.viewContext))
+        var positions = try XCTUnwrap(JSONSerialization.jsonObject(with: files.bonds) as? [[String: Any]])
+        positions[0]["yieldToMaturity"] = 8.409027193720213
+        let bytes = try JSONSerialization.data(withJSONObject: positions)
+        var envelope = try XCTUnwrap(JSONSerialization.jsonObject(with: files.sidecar) as? [String: Any])
+        var entries = try XCTUnwrap(envelope["bonds"] as? [[String: Any]])
+        entries[0].removeValue(forKey: "yieldMethod")
+        envelope["bonds"] = entries; envelope["bondsSHA256"] = BondTransfer.digest(bytes)
+        let prepared = try BondTransfer.prepare(bonds: bytes, sidecar: JSONSerialization.data(withJSONObject: envelope))
+        let target = try TestPortfolio.make()
+        try await ImportManager().applyBonds(prepared, into: target, now: TestPortfolio.date("2026-10-17T12:00:00Z"))
+        let reader = target.newBackgroundContext()
+        try await reader.perform {
+            let imported = try XCTUnwrap(reader.fetch(BondEntity.fetchRequest()).first)
+            XCTAssertNotEqual(imported.yieldToMaturity, 8.409027193720213)
+            XCTAssertEqual(imported.yieldToMaturity, try XCTUnwrap(BondTermsStore.estimatedYTM(imported)), accuracy: 1e-10)
+        }
+        entries[0]["yieldMethod"] = "unknown-convention"; envelope["bonds"] = entries
+        XCTAssertThrowsError(try BondTransfer.prepare(bonds: bytes, sidecar: JSONSerialization.data(withJSONObject: envelope)))
+        entries[0].removeValue(forKey: "yieldMethod"); envelope["bonds"] = entries
+        positions[0]["yieldToMaturity"] = 12345
+        let corrupt = try JSONSerialization.data(withJSONObject: positions)
+        envelope["bondsSHA256"] = BondTransfer.digest(corrupt)
+        XCTAssertThrowsError(try BondTransfer.prepare(bonds: corrupt, sidecar: JSONSerialization.data(withJSONObject: envelope)))
+    }
+}
+
+
+extension BondTransferTests {
+    func testPreviousCashOutlayConventionImportIsValidatedAndRecalculatedFromCleanPrice() async throws {
+        let source = try TestPortfolio.make()
+        let terms = try BondTermsFixtures.fixed()
+        let bond = try TestPortfolio.readyBond(in: source.viewContext, terms: terms,
+            now: TestPortfolio.date("2026-02-03T12:00:00Z"), nominal: 100000, cost: 100000)
+        try source.viewContext.save()
+        let correct = try XCTUnwrap(BondTermsStore.estimatedYTM(bond))
+        let previous = try XCTUnwrap(QuantLibBondMath.purchaseYield(payments: QuantLibBondMath.payments(terms: terms, nominal: 100000),
+            acquisitionDay: MarketDay("2026-02-01"), cost: 100000))
+        XCTAssertNotEqual(correct, previous)
+        let files = try BondTransfer.encode(BondTransfer.snapshot(from: source.viewContext))
+        var positions = try XCTUnwrap(JSONSerialization.jsonObject(with: files.bonds) as? [[String: Any]])
+        positions[0]["yieldToMaturity"] = previous
+        let bytes = try JSONSerialization.data(withJSONObject: positions)
+        var envelope = try XCTUnwrap(JSONSerialization.jsonObject(with: files.sidecar) as? [String: Any])
+        var entries = try XCTUnwrap(envelope["bonds"] as? [[String: Any]])
+        entries[0]["yieldMethod"] = "annualEffectiveActual365Fixed"
+        envelope["bonds"] = entries; envelope["bondsSHA256"] = BondTransfer.digest(bytes)
+        let prepared = try BondTransfer.prepare(bonds: bytes, sidecar: JSONSerialization.data(withJSONObject: envelope))
+        let target = try TestPortfolio.make()
+        try await ImportManager().applyBonds(prepared, into: target, now: TestPortfolio.date("2026-10-17T12:00:00Z"))
+        let reader = target.newBackgroundContext()
+        try await reader.perform {
+            let imported = try XCTUnwrap(reader.fetch(BondEntity.fetchRequest()).first)
+            XCTAssertEqual(imported.yieldToMaturity, correct, accuracy: 1e-10)
+            XCTAssertEqual(imported.initialPrice, 100000)
+            XCTAssertEqual(try reader.count(for: HistoricalValuation.fetchRequest()), 0)
+        }
+        entries[0]["yieldMethod"] = "annualEffectiveActual365FixedCleanPrice"; envelope["bonds"] = entries
+        XCTAssertThrowsError(try BondTransfer.prepare(bonds: bytes, sidecar: JSONSerialization.data(withJSONObject: envelope)))
+    }
 }

@@ -71,16 +71,19 @@ public class ImportManager {
 
     // MARK: • Bonds
 
+    @discardableResult
     private func importBonds(
         _ jsonBonds: [BondCodable],
-        into context: NSManagedObjectContext
-    ) throws {
+        into context: NSManagedObjectContext,
+        approvedReplacementIDs: Set<UUID> = []
+    ) throws -> Set<UUID> {
         // Track existing IDs
         let fetchAll: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
         let existingBonds = try context.fetch(fetchAll)
         let existingIDs = Set(existingBonds.map(\.id))
         guard existingIDs.count == existingBonds.count else { throw PortfolioError("Stored bonds contain duplicate identifiers.") }
         var jsonIDs = Set<UUID>()
+        var preservedReviews = Set<UUID>()
 
         for jb in jsonBonds {
             jsonIDs.insert(jb.id)
@@ -89,6 +92,31 @@ public class ImportManager {
             req.predicate = NSPredicate(format: "id == %@", jb.id as CVarArg)
             let matches = try context.fetch(req)
             let bond: BondEntity = matches.first ?? BondEntity(context: context)
+
+            if let existing = matches.first, existing.termsData != nil || existing.termsDraftData != nil {
+                let unchanged = ETFPurchase.normalizedISIN(existing.isin) == ETFPurchase.normalizedISIN(jb.isin)
+                    && existing.parValue == jb.parValue && existing.initialPrice == jb.initialPrice
+                    && existing.couponRate == jb.couponRate && existing.depotBank == jb.depotBank
+                    && Int(existing.acquisitionDate.timeIntervalSince1970) == Int(jb.acquisitionDate.timeIntervalSince1970)
+                    && Int(existing.maturityDate.timeIntervalSince1970) == Int(jb.maturityDate.timeIntervalSince1970)
+                if unchanged {
+                    // Legacy JSON cannot carry approvals, drafts or payment provenance.
+                    let baseline = BondBaseline.capture(existing)
+                    let draft = try BondTermsStore.readDraft(existing)
+                    existing.name = jb.name; existing.issuer = jb.issuer; existing.wkn = jb.wkn
+                    if let draft, draft.baseline == baseline, BondBaseline.capture(existing) != baseline {
+                        try BondTermsStore.stageDraft(BondTermsDraft(baseline: BondBaseline.capture(existing),
+                            trade: draft.trade, legacyDateZone: draft.legacyDateZone, proposed: draft.proposed,
+                            previewDay: draft.previewDay, projectionContext: draft.projectionContext), for: existing)
+                    }
+                    preservedReviews.insert(existing.id)
+                    continue
+                }
+                guard approvedReplacementIDs.contains(existing.id) else {
+                    throw PortfolioError("Import would discard a saved review for " + existing.name
+                        + ". Financial values or instrument identity changed. Import matching positions or a native export with approved replacement terms. No positions were changed.")
+                }
+            }
 
             let retainedAliases: Data?
             if let existing = matches.first, ETFPurchase.normalizedISIN(existing.isin) == ETFPurchase.normalizedISIN(jb.isin) {
@@ -127,6 +155,7 @@ public class ImportManager {
         for bond in existingBonds where toDeleteIDs.contains(bond.id) {
             context.delete(bond)
         }
+        return preservedReviews
     }
 
     // MARK: • ETFs
@@ -203,9 +232,10 @@ extension ImportManager {
             return try BondTransfer.prepare(bonds: bonds, sidecar: sidecar)
         }.value
     }
-    func applyBonds(_ transfer: PreparedBondTransfer, into container: NSPersistentContainer, now: Date = Date(), expectedDestinationIDs: Set<UUID>? = nil) async throws {
+    @discardableResult
+    func applyBonds(_ transfer: PreparedBondTransfer, into container: NSPersistentContainer, now: Date = Date(), expectedDestinationIDs: Set<UUID>? = nil) async throws -> Int {
         try BondTransfer.validate(transfer)
-        try await PortfolioTransaction.run(in: container) { context in
+        return try await PortfolioTransaction.run(in: container) { context in
             var aliases: [UUID: Data] = [:]
             let existing = try context.fetch(BondEntity.fetchRequest())
             if let expectedDestinationIDs, Set(existing.map(\.id)) != expectedDestinationIDs {
@@ -229,11 +259,30 @@ extension ImportManager {
                         maturity: incomingTerms?.maturity))
                 }
             }
-            try self.importBonds(transfer.bonds, into: context)
-            guard let native = transfer.native else { return }
+            let replacements = Set((transfer.native?.bonds ?? []).filter { $0.terms?.approvedAt != nil }.map(\.id))
+            let preserved = try self.importBonds(transfer.bonds, into: context, approvedReplacementIDs: replacements)
+            func unresolvedCount() throws -> Int {
+                BondEligibility.excludedCount(try context.fetch(BondEntity.fetchRequest()), on: MarketDay(date: now))
+            }
+            guard let native = transfer.native else { return try unresolvedCount() }
             for entry in native.bonds {
                 let request = BondEntity.fetchRequest(); request.predicate = NSPredicate(format: "id == %@", entry.id as CVarArg)
                 guard let bond = try context.fetch(request).first else { throw PortfolioError("Imported holding is missing.") }
+                if preserved.contains(entry.id), bond.termsDraftData == nil,
+                   var proposed = entry.draft ?? (entry.terms?.approvedAt == nil ? entry.terms : nil) {
+                    if proposed.isin.isEmpty { proposed.isin = entry.isin }; proposed.approvedAt = nil
+                    try BondTermsStore.stageDraft(BondTermsDraft(baseline: BondBaseline.capture(bond),
+                        trade: BondTermsStore.trade(bond), legacyDateZone: entry.legacyDateZone, proposed: proposed,
+                        previewDay: entry.draftPreviewDay ?? MarketDay(date: now),
+                        projectionContext: BondTransfer.projectionContext(for: entry, in: native, draft: true)), for: bond)
+                }
+                if preserved.contains(entry.id), entry.terms?.approvedAt == nil { continue }
+                if preserved.contains(entry.id), let incoming = entry.terms, let local = try BondTermsStore.read(bond),
+                   BondTermsStore.isReady(bond), BondTermsStore.sameInstrumentTerms(local, incoming),
+                   try BondTermsStore.projectionContext(bond) == BondTransfer.projectionContext(for: entry, in: native) {
+                    continue
+                }
+                let retainedDraft = try BondTermsStore.readDraft(bond)
                 bond.legacyEventAliasesData = aliases[bond.id]
                 bond.termsAcquisitionDay = entry.acquisitionDay.rawValue; bond.termsLegacyDateZone = entry.legacyDateZone
                 if let terms = entry.terms, terms.approvedAt != nil {
@@ -246,7 +295,12 @@ extension ImportManager {
                     guard bond.termsReady else { throw PortfolioError(bond.termsIssue ?? "Imported terms need review.") }
                     bond.eventsActivateAfter = now
                 }
-                if let proposed = entry.draft ?? (entry.terms?.approvedAt == nil ? entry.terms : nil) {
+                if let retainedDraft {
+                    try BondTermsStore.stageDraft(BondTermsDraft(baseline: BondBaseline.capture(bond),
+                        trade: BondTermsStore.trade(bond), legacyDateZone: entry.legacyDateZone,
+                        proposed: retainedDraft.proposed, previewDay: retainedDraft.previewDay,
+                        projectionContext: retainedDraft.projectionContext), for: bond)
+                } else if let proposed = entry.draft ?? (entry.terms?.approvedAt == nil ? entry.terms : nil) {
                     var terms = proposed; if terms.isin.isEmpty { terms.isin = entry.isin }; terms.approvedAt = nil
                     try BondTermsStore.stageDraft(BondTermsDraft(baseline: BondBaseline.capture(bond), trade: BondTermsStore.trade(bond),
                         legacyDateZone: entry.legacyDateZone, proposed: terms,
@@ -255,6 +309,7 @@ extension ImportManager {
                 }
                 if !bond.termsReady { bond.termsIssue = entry.needsReviewReasons.joined(separator: "\n") }
             }
+            return try unresolvedCount()
         }
     }
 }

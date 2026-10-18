@@ -13,7 +13,13 @@ import CoreData
 
 struct CashFlowView: View {
     @Binding var selectedDepotBank: String
-    @Environment(\.managedObjectContext) private var moc
+    var reviewTerms: (() -> Void)? = nil
+    var displayModeSelection: Binding<String>? = nil
+    var navigationSelection: Binding<CashFlowCalendarNavigation>? = nil
+    @State private var localDisplayMode = "List"
+    private var displayMode: String { displayModeSelection?.wrappedValue ?? localDisplayMode }
+    @State private var allFuturePayments = true
+    @State private var calendarNavigation = CashFlowCalendarNavigation()
 
     // — Filter state
     @State private var searchText        = ""
@@ -23,15 +29,100 @@ struct CashFlowView: View {
     @State private var startDate = Date()
     @State private var endDate   = Calendar.current.date(byAdding: .year, value: 1, to: Date())!
 
-    // — Core Data fetched array
-    @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)],
-                  predicate: NSPredicate(value: false), animation: .default)
-    private var cashFlows: FetchedResults<CashFlowEntity>
-
     // — Pickable natures
     private let natures: [CashFlowEntity.Nature] = [
         .principal, .capitalGains, .interest
     ]
+
+    var body: some View {
+        VStack(spacing: 16) {
+            // 1) Title Bar
+            HStack {
+                Text("My Cash Flows")
+                    .font(.system(.largeTitle, design: .rounded))
+                    .foregroundColor(.white)
+                Spacer()
+                Picker("Cash-flow view", selection: displayModeSelection ?? $localDisplayMode) {
+                    Text("List").tag("List")
+                    Text("Calendar").tag("Calendar")
+                }.pickerStyle(.segmented).fixedSize()
+            }
+            .padding()
+            .background(AppTheme.tileBackground)
+
+            // 2) Filter Bar
+            filterBar
+
+            // 3) Scrollable List
+            if displayMode == "Calendar" {
+                CashFlowCalendarResults(searchText: searchText, bank: selectedDepotBank,
+                    from: allFuturePayments ? MarketDay(date: Date()) : MarketDay(date: startDate),
+                    through: allFuturePayments ? try! MarketDay("2199-12-31") : MarketDay(date: endDate),
+                    kind: selectedNature == .interest ? .interest : (selectedNature == .principal ? .maturity : nil),
+                    navigation: navigationSelection ?? $calendarNavigation, reviewTerms: reviewTerms)
+            } else {
+                CashFlowResultsView(searchText: searchText, nature: selectedNature, bank: selectedDepotBank,
+                                    startDate: startDate, endDate: endDate)
+            }
+        }
+        .onChange(of: displayMode) {
+            if displayMode == "Calendar", selectedNature == .capitalGains { selectedNature = nil }
+        }
+        .onChange(of: startDate)         {
+            if startDate > endDate { endDate = startDate }
+        }
+        .onChange(of: endDate)           {
+            if endDate < startDate { startDate = endDate }
+        }
+        .background(
+            AppTheme.panelBackground
+                .edgesIgnoringSafeArea(.all)
+        )
+    }
+
+    // MARK: – Sub-view #1: Filter Bar
+
+    private var filterBar: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                TextField("Search bond…", text: $searchText).textFieldStyle(.roundedBorder)
+                Picker(displayMode == "Calendar" ? "Payments" : "Nature", selection: $selectedNature) {
+                    Text("All").tag(CashFlowEntity.Nature?.none)
+                    if displayMode == "Calendar" {
+                        Text("Coupons").tag(CashFlowEntity.Nature?.some(.interest))
+                        Text("Repayments").tag(CashFlowEntity.Nature?.some(.principal))
+                    } else {
+                        ForEach(natures, id: \.self) { Text($0.label).tag(CashFlowEntity.Nature?.some($0)) }
+                    }
+                }.pickerStyle(.menu).fixedSize()
+            }
+            HStack {
+                if displayMode == "Calendar" { Toggle("All future payments", isOn: $allFuturePayments).toggleStyle(.checkbox) }
+                if displayMode == "List" || !allFuturePayments {
+                    DatePicker("From", selection: $startDate, displayedComponents: .date)
+                    DatePicker("To", selection: $endDate, displayedComponents: .date)
+                }
+                Spacer(minLength: 0)
+            }
+        }.padding(.horizontal).background(AppTheme.panelBackground)
+    }
+
+}
+
+private struct CashFlowResultsView: View {
+    @FetchRequest private var cashFlows: FetchedResults<CashFlowEntity>
+    let startDate: Date
+    let endDate: Date
+
+    init(searchText: String, nature: CashFlowEntity.Nature?, bank: String, startDate: Date, endDate: Date) {
+        self.startDate = startDate
+        self.endDate = endDate
+        // Keep the fetch configured from current inputs across parent view updates.
+        _cashFlows = FetchRequest(
+            sortDescriptors: [NSSortDescriptor(keyPath: \CashFlowEntity.date, ascending: true)],
+            predicate: CashFlowSelection.predicate(searchText: searchText, nature: nature,
+                bank: bank, start: startDate, end: endDate), animation: .default)
+    }
 
     // — Build year/month groups
     private var yearGroups: [YearGroup] {
@@ -44,70 +135,6 @@ struct CashFlowView: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            // 1) Title Bar
-            HStack {
-                Text("My Cash Flows")
-                    .font(.system(.largeTitle, design: .rounded))
-                    .foregroundColor(.white)
-                Spacer()
-            }
-            .padding()
-            .background(AppTheme.tileBackground)
-
-            // 2) Filter Bar
-            filterBar
-
-            // 3) Scrollable List
-            cashFlowList
-        }
-        .onAppear { fetchCashFlows() }
-        .onChange(of: searchText)        { fetchCashFlows() }
-        .onChange(of: selectedNature)    { fetchCashFlows() }
-        .onChange(of: startDate)         {
-            if startDate > endDate { endDate = startDate }
-            fetchCashFlows()
-        }
-        .onChange(of: endDate)           {
-            if endDate < startDate { startDate = endDate }
-            fetchCashFlows()
-        }
-        .onChange(of: selectedDepotBank) { fetchCashFlows() }
-        .background(
-            AppTheme.panelBackground
-                .edgesIgnoringSafeArea(.all)
-        )
-    }
-
-    // MARK: – Sub-view #1: Filter Bar
-
-    private var filterBar: some View {
-        HStack(spacing: 12) {
-            TextField("Search bond…", text: $searchText)
-                .textFieldStyle(.roundedBorder)
-     //           .frame(minWidth: 200)
-
-            Picker("Nature", selection: Binding(
-                get:  { selectedNature },
-                set:  { selectedNature = $0 }
-            )) {
-                Text("All").tag(CashFlowEntity.Nature?.none)
-                ForEach(natures, id: \.self) { nat in
-                    Text(nat.label).tag(CashFlowEntity.Nature?.some(nat))
-                }
-            }
-            .pickerStyle(.menu)
-
-            DatePicker("From", selection: $startDate, displayedComponents: .date)
-            DatePicker("To",   selection: $endDate,   displayedComponents: .date)
-        }
-        .padding(.horizontal)
-        .background(AppTheme.panelBackground)
-    }
-
-    // MARK: – Sub-view #2: Cash‐flow List
-
-    private var cashFlowList: some View {
         ScrollView {
             VStack(spacing: 16) {
                 ForEach(yearGroups) { yg in
@@ -116,13 +143,6 @@ struct CashFlowView: View {
             }
             .padding(.horizontal)
         }
-    }
-
-    // MARK: – Fetch Logic
-
-    private func fetchCashFlows() {
-        cashFlows.nsPredicate = CashFlowSelection.predicate(searchText: searchText, nature: selectedNature,
-            bank: selectedDepotBank, start: startDate, end: endDate)
     }
 }
 
@@ -408,5 +428,29 @@ private extension CashFlowEntity.Nature {
         case .capitalGains: return .yellow
         default:            return .secondary
         }
+    }
+}
+
+private struct CashFlowCalendarResults: View {
+    @FetchRequest private var bonds: FetchedResults<BondEntity>
+    let from: MarketDay
+    let through: MarketDay
+    let kind: BondPayment.Kind?
+    @Binding var navigation: CashFlowCalendarNavigation
+    let reviewTerms: (() -> Void)?
+
+    init(searchText: String, bank: String, from: MarketDay, through: MarketDay, kind: BondPayment.Kind?,
+         navigation: Binding<CashFlowCalendarNavigation>, reviewTerms: (() -> Void)?) {
+        var predicates: [NSPredicate] = []
+        if bank != "All" { predicates.append(NSPredicate(format: "depotBank == %@", bank)) }
+        if !searchText.isEmpty { predicates.append(NSPredicate(format: "name CONTAINS[cd] %@", searchText)) }
+        _bonds = FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.name, ascending: true)],
+            predicate: NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
+        self.from = from; self.through = through; self.kind = kind
+        _navigation = navigation; self.reviewTerms = reviewTerms
+    }
+    var body: some View {
+        let data = CashFlowCalendarData.build(bonds: Array(bonds), from: from, through: through, kind: kind)
+        CashFlowCalendarView(data: data, navigation: $navigation, reviewTerms: reviewTerms)
     }
 }

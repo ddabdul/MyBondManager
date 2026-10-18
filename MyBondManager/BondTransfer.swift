@@ -15,6 +15,7 @@ struct BondTermsEntry: Codable, Equatable, Sendable {
     var draftValuationDay: MarketDay? = nil
     var draftSnapshotID: String? = nil
     var draftPreviewDay: MarketDay? = nil
+    var yieldMethod: String? = nil
 }
 struct BondTermsEnvelope: Codable, Equatable, Sendable {
     let version: Int
@@ -66,7 +67,7 @@ enum BondTransfer {
                 needsReviewReasons: ready ? [] : [bond.termsIssue ?? "Needs review"],
                 valuationDay: approvedContext?.valuationDay, snapshotID: approvedContext?.marketData.id,
                 draftValuationDay: draftContext?.valuationDay, draftSnapshotID: draftContext?.marketData.id,
-                draftPreviewDay: savedDraft?.previewDay)
+                draftPreviewDay: savedDraft?.previewDay, yieldMethod: ready ? BondSchedule.yieldMethod : nil)
         }
         return PreparedBondTransfer(bonds: try ExportManager.snapshotBonds(from: context), bondsBytes: nil,
             native: BondTermsEnvelope(version: snapshots.isEmpty ? 1 : 2, bondsSHA256: "", bonds: entries,
@@ -109,6 +110,10 @@ enum BondTransfer {
               Set(native.bonds.map(\.id)) == Set(transfer.bonds.map(\.id)) else { throw PortfolioError("Native bond entries contain duplicate, missing or extra identifiers.") }
         let positions = Dictionary(uniqueKeysWithValues: transfer.bonds.map { ($0.id, $0) })
         for entry in native.bonds {
+            guard entry.yieldMethod == nil || entry.yieldMethod == BondSchedule.yieldMethod
+                    || entry.yieldMethod == BondSchedule.previousYieldMethod else {
+                throw PortfolioError("Unsupported native purchase yield convention.")
+            }
             let bond = positions[entry.id]!
             guard entry.isin == ETFPurchase.normalizedISIN(bond.isin), let zone = TimeZone(identifier: entry.legacyDateZone) else {
                 throw PortfolioError("Native bond identity or legacy date time zone is invalid.")
@@ -135,7 +140,12 @@ enum BondTransfer {
             }
             let preview = try BondSchedule.preview(trade: trade, terms: terms, from: from, context: context)
             guard preview.assessment.supported else { throw PortfolioError("Claimed approved native terms are unsupported: " + preview.assessment.reasons.joined(separator: "; ")) }
-            let yield = preview.estimatedYTM ?? 0
+            let yield: Double
+            if entry.yieldMethod == nil { yield = legacyEstimatedYTM(trade: trade, terms: terms) }
+            else if entry.yieldMethod == BondSchedule.previousYieldMethod, preview.estimatedYTM != nil {
+                yield = try QuantLibBondMath.purchaseYield(payments: QuantLibBondMath.payments(terms: terms, nominal: trade.nominal),
+                    acquisitionDay: trade.acquisitionDay, cost: trade.cost) ?? 0
+            } else { yield = preview.estimatedYTM ?? 0 }
             guard abs(bond.yieldToMaturity - yield) <= 1e-10 * max(1, abs(yield)) else { throw PortfolioError("Approved estimated yield conflicts with native terms.") }
             let actual = bond.cashFlows.filter { MarketDay(date: $0.date) >= from }
             let expected = preview.flows.map { CashFlowCodable(date: $0.paymentDay.instant, amount: $0.amount, nature: $0.nature.rawValue) }
@@ -143,6 +153,17 @@ enum BondTransfer {
             guard matching else { throw PortfolioError("Approved cash flows conflict with the native payment schedule.") }
         }
     }
+    private static func legacyEstimatedYTM(trade: BondTrade, terms: BondTerms) -> Double {
+        // Unmarked exports predate the purchase-yield solver; validate their original derived value only on import.
+        guard terms.structure == .fixed || terms.structure == .zero, let maturity = terms.maturity,
+              let redemptionPercent = terms.redemptionPercent else { return 0 }
+        let years = maturity.instant.timeIntervalSince(trade.acquisitionDay.instant) / (365 * 86400)
+        guard years > 0 else { return 0 }
+        let redemption = trade.nominal * redemptionPercent / 100
+        return ((trade.nominal * (terms.couponRate ?? 0) / 100 + (redemption - trade.cost) / years)
+            / ((redemption + trade.cost) / 2)) * 100
+    }
+
     static func projectionContext(for entry: BondTermsEntry, in envelope: BondTermsEnvelope,
                                   draft: Bool = false) throws -> ProjectionContext? {
         let day = draft ? entry.draftValuationDay : entry.valuationDay

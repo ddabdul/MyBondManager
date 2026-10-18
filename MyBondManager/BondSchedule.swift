@@ -35,6 +35,8 @@ struct BondSchedulePreview: Equatable, Sendable {
     let estimatedYTM: Double?
 }
 enum BondSchedule {
+    static let previousYieldMethod = "annualEffectiveActual365Fixed"
+    static let yieldMethod = "annualEffectiveActual365FixedCleanPrice"
     static func preview(trade: BondTrade, terms: BondTerms, from: MarketDay, context: ProjectionContext? = nil) throws -> BondSchedulePreview {
         guard trade.nominal.isFinite, trade.nominal > 0, trade.cost.isFinite, trade.cost > 0 else {
             throw PortfolioError("Nominal and acquisition cost must be finite positive amounts.")
@@ -107,7 +109,6 @@ enum BondSchedule {
             } catch let failure as PortfolioError { reasons.append(failure.localizedDescription); return unsupported() }
             catch let failure as MarketDataError { reasons.append(failure.localizedDescription); return unsupported() }
         }
-        let rate = terms.couponRate ?? 0
         let dates = [terms.maturity, terms.accrualStart, terms.firstCoupon, terms.nextCoupon,
                      terms.checkpointObservedOn, Optional(trade.acquisitionDay), Optional(from)].compactMap { $0 }
         guard dates.allSatisfy({ (1901...2199).contains($0.year) }) else {
@@ -118,6 +119,7 @@ enum BondSchedule {
         catch let failure as PortfolioError {
             reasons.append(failure.localizedDescription); return unsupported()
         }
+        var completePurchaseSchedule = true
         if terms.structure == .fixed {
             guard let checkpoint = terms.nextCoupon, let observed = terms.checkpointObservedOn else {
                 reasons.append("Next coupon checkpoint is missing."); return unsupported()
@@ -136,6 +138,7 @@ enum BondSchedule {
                           !opening.contains(where: { $0.contractualDay >= trade.acquisitionDay && $0.paymentDay >= from }) else {
                         reasons.append("Irregular opening coupon needs a confirmed first-coupon date for Actual/Actual (ICMA) calculation."); return unsupported()
                     }
+                    completePurchaseSchedule = !opening.contains { $0.contractualDay >= trade.acquisitionDay }
                     let excluded = Set(opening.map(\.contractualDay))
                     calculated.removeAll { $0.kind == .interest && excluded.contains($0.contractualDay) }
                     warnings.append("Historical opening coupon periods are excluded; only the remaining regular coupons are calculated.")
@@ -163,9 +166,15 @@ enum BondSchedule {
             let interest = payments.filter { $0.kind == .interest }.reduce(0) { $0 + $1.amount }
             flows.append(ProjectedFlow(contractualDay: maturity, paymentDay: paid, amount: interest + delta, nature: .expectedProfit, eventIdentity: nil))
         }
-        let years = maturity.instant.timeIntervalSince(trade.acquisitionDay.instant) / (365 * 86400)
-        let estimate: Double? = years > 0 ? ((trade.nominal * rate / 100 + delta / years) / ((redemption + trade.cost) / 2)) * 100 : nil
-        guard estimate?.isFinite != false, flows.allSatisfy({ $0.amount.isFinite }) else { throw PortfolioError("Calculated return is out of range.") }
+        var estimate: Double?
+        if completePurchaseSchedule {
+            let accrued = try QuantLibBondMath.accruedInterest(terms: terms, nominal: trade.nominal, acquisitionDay: trade.acquisitionDay)
+            estimate = try QuantLibBondMath.purchaseYield(payments: calculated, acquisitionDay: trade.acquisitionDay, cost: trade.cost + accrued)
+        }
+        if !completePurchaseSchedule {
+            warnings.append("Purchase yield is unavailable because opening coupons entitled at acquisition are unknown.")
+        }
+        guard flows.allSatisfy({ $0.amount.isFinite }) else { throw PortfolioError("Calculated return is out of range.") }
         return BondSchedulePreview(assessment: TermsAssessment(reasons: [], warnings: warnings), payments: payments, flows: flows, redemptionDay: paid, estimatedYTM: estimate)
     }
 }

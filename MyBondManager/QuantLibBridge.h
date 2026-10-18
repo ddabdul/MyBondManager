@@ -46,6 +46,11 @@ int MBMQLFloatingCouponDays(const MBMQLFloatingRequest *request, int32_t *output
 int MBMQLFloatingPayments(const MBMQLFloatingRequest *request, const MBMQLCurveRequest *curve,
     const MBMQLPublishedFixing *fixings, size_t fixingCount, MBMQLFloatingPayment *output,
     size_t capacity, size_t *count, char *error, size_t errorCapacity);
+int MBMQLAccruedInterest(const MBMQLRequest *request, int32_t acquisitionDay,
+    double *amount, char *error, size_t errorCapacity);
+// Annual effective purchase yield from dirty cash outlay (Actual/365 Fixed). available is zero when undefined.
+int MBMQLPurchaseYield(const MBMQLPayment *payments, size_t count, int32_t acquisitionDay,
+    double cost, double *yield, int32_t *available, char *error, size_t errorCapacity);
 const char *MBMQLVersion(void);
 int MBMQLAdjust(int32_t day, int32_t adjustment, int32_t *output, char *error, size_t errorCapacity);
 int MBMQLFollowing(int32_t day, int32_t *output, char *error, size_t errorCapacity);

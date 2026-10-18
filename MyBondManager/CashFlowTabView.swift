@@ -21,13 +21,17 @@ struct CashFlowTabView: View {
     let exportAction: () -> Void
     let importAction: () -> Void
     let recalculateAction: () -> Void
+    var reviewTermsAction: (() -> Void)? = nil
+    var displayModeSelection: Binding<String>? = nil
+    var navigationSelection: Binding<CashFlowCalendarNavigation>? = nil
 
     // MARK: - Local State
     @State private var showingRecalc = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            CashFlowView(selectedDepotBank: $selectedDepotBank)
+            CashFlowView(selectedDepotBank: $selectedDepotBank, reviewTerms: reviewTermsAction,
+                displayModeSelection: displayModeSelection, navigationSelection: navigationSelection)
                 .environment(\.managedObjectContext, viewContext)
                 .environmentObject(notifier)
                 .background(AppTheme.panelBackground)

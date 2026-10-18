@@ -9,7 +9,7 @@ enum BondTermsPresentation {
     static func callWarning(_ terms: BondTerms) -> String? { terms.callable == true ? "Early redemption is not modeled." : nil }
     static func importSummary(_ transfer: PreparedBondTransfer, existingIDs: Set<UUID>) -> String {
         let removed = existingIDs.subtracting(transfer.bonds.map(\.id)).count
-        let mode = transfer.native == nil ? "Legacy positions: all imported holdings need Needs review approval." : "Native terms: \(transfer.unresolvedCount) holdings need review."
+        let mode = transfer.native == nil ? "Legacy positions: new holdings are marked Needs review. Saved reviews and drafts are kept for unchanged positions; changes that would discard a review are rejected." : "Native terms: \(transfer.unresolvedCount) incoming holdings lack approval. Saved local reviews and drafts are kept for unchanged positions."
         let empty = transfer.bonds.isEmpty ? " This removes all bond positions." : ""
         return "\(transfer.bonds.count) incoming bonds; \(removed) removed; \(existingIDs.count) current bonds replaced.\(empty) \(mode) ETFs and existing financial history are kept. This is not a history backup."
     }

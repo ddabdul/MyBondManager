@@ -34,7 +34,7 @@ struct AddBondViewAsync: View {
                         TextField("ISIN", text: $collection.isin)
                         DatePicker("Acquisition Date", selection: $acquisitionDate, displayedComponents: .date)
                         TextField("Par Value", text: $parValueStr)
-                        TextField("Acquisition Price", text: $acquisitionPrice)
+                        TextField("Clean Acquisition Price", text: $acquisitionPrice)
                         TextField("Depot Bank", text: $depotBank)
                         Button("Collect Data") {
                             Task {
@@ -56,7 +56,7 @@ struct AddBondViewAsync: View {
                                 ForEach(Array(result.payments.enumerated()), id: \.offset) { _, payment in
                                     Text("\(payment.paymentDay.rawValue) - \(payment.kind.rawValue): \(String(format: "%.2f", payment.amount)) EUR")
                                 }
-                                if let yield = result.estimatedYTM { Text(String(format: "Estimated YTM: %.3f%%", yield)) }
+                                if let yield = result.estimatedYTM { Text(String(format: "Estimated YTM at purchase: %.3f%%", yield)) }
                             case .failure(let error): Text(error.localizedDescription).foregroundStyle(.secondary)
                             }
                             Toggle("I reviewed these terms, conventions and payments.", isOn: $approve).disabled(!supported)
