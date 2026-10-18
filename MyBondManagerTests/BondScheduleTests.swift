@@ -286,3 +286,106 @@ final class BondScheduleTests: XCTestCase {
     }
 
 }
+
+
+extension BondScheduleTests {
+    func testPurchaseYieldDiscountsEachEntitledCouponAndDoesNotChangeWithForecastDay() throws {
+        let terms = try BondTermsFixtures.fixed()
+        // Dirty PV at 8% is 96,123.33994013291; subtract 17/181 of the 1,687.5 coupon for clean cost.
+        let trade = try BondTermsFixtures.trade(cost: 96123.33994013291 - 1687.5 * 17 / 181)
+        for day in ["2026-02-01", "2026-10-17", "2028-01-01"] {
+            let preview = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay(day))
+            XCTAssertTrue(preview.assessment.supported, preview.assessment.reasons.joined())
+            XCTAssertEqual(try XCTUnwrap(preview.estimatedYTM), 8, accuracy: 1e-8, day)
+        }
+    }
+    func testPurchaseYieldUsesICMAOpeningCouponAndActualPaymentDate() throws {
+        var terms = try BondTermsFixtures.fixed(frequency: 2, maturity: "2026-11-30", next: "2026-11-30")
+        terms.accrualStart = try MarketDay("2026-05-13"); terms.firstCoupon = terms.maturity
+        terms.couponRate = 6.875; terms.roll = .endOfMonth
+        terms.checkpointObservedOn = try MarketDay("2026-06-01")
+        // ICMA coupon 3,777.4725274725274 plus par, paid 182 days after purchase.
+        let trade = BondTrade(id: UUID(), isin: terms.isin, nominal: 100000, cost: 99743.04231213038,
+            acquisitionDay: try MarketDay("2026-06-01"), bank: "Fixture")
+        let preview = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay("2026-06-01"))
+        XCTAssertEqual(try XCTUnwrap(preview.estimatedYTM), 7.5, accuracy: 1e-8)
+    }
+    func testZeroCouponPurchaseYieldUsesAdjustedRedemptionAndCalendarDays() throws {
+        var terms = try BondTermsFixtures.fixed(maturity: "2027-01-01")
+        terms.structure = .zero; terms.couponRate = 0; terms.redemptionPercent = 105
+        // Jan 1 redemption is paid Jan 4, exactly 365 calendar days after purchase.
+        for (cost, expected) in [(100000.0, 5.0), (210000.0, -50.0)] {
+            let trade = BondTrade(id: UUID(), isin: terms.isin, nominal: 100000, cost: cost,
+                acquisitionDay: try MarketDay("2026-01-04"), bank: "Fixture")
+            let preview = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay("2026-01-04"))
+            XCTAssertEqual(try XCTUnwrap(preview.estimatedYTM), expected, accuracy: 1e-8)
+        }
+    }
+    func testSameDayEntitledCouponIsOffsetByAccruedInterestPaid() throws {
+        var terms = try BondTermsFixtures.fixed(maturity: "2027-01-15")
+        terms.couponRate = 10
+        let trade = BondTrade(id: UUID(), isin: terms.isin, nominal: 100000, cost: 105000,
+            acquisitionDay: try MarketDay("2026-07-15"), bank: "Fixture")
+        // Accrued 5,000 offsets the same-day receipt; clean outlay and final receipt are both 105,000.
+        let expected = 0.0
+        let preview = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay("2026-07-15"))
+        XCTAssertEqual(try XCTUnwrap(preview.estimatedYTM), expected, accuracy: 1e-8)
+    }
+    func testZeroDurationPurchaseHasNoYieldButKeepsRedemptionForecast() throws {
+        var terms = try BondTermsFixtures.fixed(maturity: "2027-01-15")
+        terms.structure = .zero; terms.couponRate = 0
+        let trade = BondTrade(id: UUID(), isin: terms.isin, nominal: 100000, cost: 99000,
+            acquisitionDay: try MarketDay("2027-01-15"), bank: "Fixture")
+        let preview = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay("2027-01-15"))
+        XCTAssertTrue(preview.assessment.supported)
+        XCTAssertNil(preview.estimatedYTM)
+        XCTAssertEqual(preview.payments.count, 1)
+    }
+    func testUnknownOpeningCouponCannotProducePurchaseYieldFromOnlyLaterCoupons() throws {
+        var terms = try BondTermsFixtures.fixed(frequency: 1, maturity: "2031-10-03", next: "2026-10-03")
+        terms.accrualStart = try MarketDay("2024-04-03")
+        terms.checkpointObservedOn = try MarketDay("2026-02-01")
+        let trade = BondTrade(id: UUID(), isin: terms.isin, nominal: 100000, cost: 100000,
+            acquisitionDay: try MarketDay("2024-05-01"), bank: "Fixture")
+        let preview = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay("2026-02-01"))
+        XCTAssertTrue(preview.assessment.supported, preview.assessment.reasons.joined())
+        XCTAssertFalse(preview.payments.isEmpty)
+        XCTAssertNil(preview.estimatedYTM)
+        XCTAssertTrue(preview.assessment.warnings.contains { $0.contains("Purchase yield") })
+    }
+}
+
+
+extension BondScheduleTests {
+    func testQuarterlyPurchaseYieldUsesActualDaysAcrossLeapYearAndDST() throws {
+        var terms = try BondTermsFixtures.fixed(frequency: 4, maturity: "2025-02-28", next: "2024-05-28")
+        terms.accrualStart = try MarketDay("2024-02-28"); terms.couponRate = 8
+        terms.checkpointObservedOn = terms.accrualStart
+        let trade = BondTrade(id: UUID(), isin: terms.isin, nominal: 100000, cost: 100000,
+            acquisitionDay: try MarketDay("2024-02-28"), bank: "Fixture")
+        let preview = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay("2024-02-28"))
+        let yield = try XCTUnwrap(preview.estimatedYTM) / 100
+        // May28, Aug28, Nov28, Feb28 are 90, 182, 274, 366 calendar days after purchase.
+        let price = [(90.0, 2000.0), (182.0, 2000.0), (274.0, 2000.0), (366.0, 102000.0)]
+            .reduce(0.0) { $0 + $1.1 / pow(1 + yield, $1.0 / 365) }
+        XCTAssertEqual(price, 100000, accuracy: 1e-6)
+        XCTAssertEqual(preview.payments.filter { $0.kind == .interest }.count, 4)
+    }
+}
+
+
+extension BondScheduleTests {
+    func testCleanCarrefourPurchaseAddsAccruedInterestInsteadOfTreatingFullNextCouponAsProfit() throws {
+        var terms = try BondTermsFixtures.fixed(frequency: 1, maturity: "2027-05-04", next: "2026-05-04")
+        terms.accrualStart = try MarketDay("2025-05-04"); terms.couponRate = 4.08
+        terms.checkpointObservedOn = try MarketDay("2026-04-15")
+        let trade = BondTrade(id: UUID(), isin: terms.isin, nominal: 100000, cost: 100750,
+            acquisitionDay: try MarketDay("2026-04-15"), bank: "Fixture")
+        for day in ["2026-04-15", "2026-10-17", "2028-01-01"] {
+            let preview = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay(day))
+            XCTAssertTrue(preview.assessment.supported, preview.assessment.reasons.joined())
+            // 100,750 clean + 4,080 * 346/365 accrued = 104,617.61643835617 paid.
+            XCTAssertEqual(try XCTUnwrap(preview.estimatedYTM), 3.3394097440254678, accuracy: 1e-8)
+        }
+    }
+}

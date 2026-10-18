@@ -28,6 +28,7 @@ struct BondTermsDraft: Codable, Equatable, Sendable {
     var projectionContext: ProjectionContext? = nil
 }
 enum BondTermsStore {
+    private static let previewCache = BondPreviewCache()
     private struct Envelope<T: Codable>: Codable { let version: Int; let value: T }
     private struct Profile: Codable {
         let terms: BondTerms
@@ -140,7 +141,9 @@ enum BondTermsStore {
               profile.acquisitionInstant == bond.acquisitionDate,
               (profile.terms.couponRate ?? 0) == bond.couponRate,
               profile.terms.maturity == MarketDay(date: bond.maturityDate) else { return nil }
-        let preview = try BondSchedule.preview(trade: profile.trade, terms: profile.terms, from: day, context: profile.projectionContext)
+        let preview = try previewCache.preview(profile: data, from: day) {
+            try BondSchedule.preview(trade: profile.trade, terms: profile.terms, from: day, context: profile.projectionContext)
+        }
         return preview.assessment.supported ? preview : nil
     }
     static func isReady(_ bond: BondEntity) -> Bool {

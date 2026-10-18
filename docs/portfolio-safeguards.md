@@ -1,6 +1,14 @@
 # Portfolio safeguards
 
-QuantLib 1.44 supplies native schedule/calendar and coupon calculations. The app supports reviewed EUR fixed-rate annual, semiannual and quarterly schedules, zero-coupon redemption, and explicitly configured plain EURIBOR floating or fixed-to-floating forecasts using frozen dated market inputs. Yield remains an explicitly labeled Estimated YTM, using actual redemption rather than an exact pricing/yield solver.
+QuantLib 1.44 supplies native schedule/calendar and coupon calculations. The app supports reviewed EUR fixed-rate annual, semiannual and quarterly schedules, zero-coupon redemption, and explicitly configured plain EURIBOR floating or fixed-to-floating forecasts using frozen dated market inputs. Reviewed fixed-rate and zero-coupon holdings use QuantLib to solve their Estimated YTM at purchase from dated cash payments.
+
+## Purchase yield
+
+Estimated YTM is the annual effective return at purchase, solved with QuantLib from the clean acquisition cost plus accrued interest and all entitled coupon/redemption payments on their TARGET-adjusted payment days. Accrued interest uses the reviewed Actual/Actual ICMA coupon schedule, including stub reference periods; discounting uses Actual/365 Fixed calendar days and annual compounding. The acquisition date is the valuation date (no separate settlement date is stored). Clean cost is not rewritten and fees are not invented. This investment return can differ from a broker's quoted market YTM, and it does not update with market prices or the current forecast cutoff. Callable holdings still assume redemption at contractual maturity.
+
+Coupon entitlement keeps the existing contractual-date-on-or-after-acquisition rule. An entitled coupon on the acquisition day has its full accrued amount added to the initial outlay and its receipt netted by the yield solver, avoiding a free coupon. Payment delay adds no accrual. Yield is unavailable when there is no future positive payment or unknown historical opening coupons prevent reconstructing the purchase's full entitled schedule. The latter can still have a valid future forecast. Floating and fixed-to-floating holdings retain unavailable YTM. Missing yields are excluded from the portfolio's nominal-weighted average, which remains an average of purchase yields.
+
+Saved derived yields are recalculated when terms/projections are applied; display and export derive the current result from approved terms without rewriting clean cost or stored history. Native sidecars mark approved entries with `yieldMethod: annualEffectiveActual365FixedCleanPrice`. Older unmarked native exports are checked against their original approximation; the prior `annualEffectiveActual365Fixed` marker is checked against the former cash-outlay solver. Both are recalculated from clean cost on import. Unknown conventions or inconsistent yields are rejected. The legacy `bonds.json` keys remain unchanged; old app versions may reject a new native export because they do not understand the corrected convention. The standalone quick calculator remains explicitly approximate because it has no reviewed payment schedule.
 
 ## First review and subsequent refreshes
 
@@ -33,6 +41,20 @@ Terms approval/recalculation preserves past-day cash-flow values and every recor
 Economic payment keys use holding UUID, event kind and contractual day. Safe aliases retain exact local legacy keys before projections/import replacement; old rows and keys are not rewritten. Recalculation retains approval and activation. Approval or native import activates automatic recording prospectively at the actual local operation instant: past and earlier-today payments are never claimed as newly received. A failed event save cannot advance the launch checkpoint.
 
 Ambiguous unlinked legacy receipts overlapping a revised payment window require history review rather than automatic attribution or a possible duplicate. Historical reconciliation remains a separate feature; this phase does not repair old records.
+
+## Cash-flow calendar
+
+Cash Flows offers List and Calendar. The existing list retains its analytical principal/gain breakdown. The calendar shows actual scheduled receipts: coupons plus full contractual redemption, with gain/loss shown only as purchase information and never counted twice. It reads validated approved payment schedules without changing stored projections, history or export formats.
+
+Years shows compact clickable annual tiles in a responsive grid, with total receipts, coupons and repayments and no month calendars; selecting a year opens its twelve month calendars and month totals; Month shows a Monday-first day grid and native payment-day popovers grouped by ISIN with individual purchase breakdowns. Navigation uses adjusted payment dates and reveals contractual dates in details. Coupons, repayments, bank/search and an optional date range filter the calendar; All future payments is the default. Calendar mode and selected period survive main-tab switches during the session.
+
+Projected and conditional payments are labeled, and canonical schedule warnings (including call assumptions and stale frozen market data) remain available in details. Active holdings whose approvals cannot be validated are excluded with their reasons and a Review terms action. Empty periods show explicit no-payment information; archived invalid records do not inflate active exclusions.
+
+## Import review preservation
+
+Both legacy import modes preserve local approved terms, saved drafts, activation boundaries and generated cash-flow provenance when the same holding UUID has unchanged ISIN, nominal, acquisition cost, coupon, bank and dates. Descriptive fields may update; imported legacy cash flows and derived yields do not overwrite the reviewed schedule. Dates differing only by the subsecond precision omitted by legacy JSON retain their original stored instants. A native entry without approval also retains the matching local review. Identical approved native terms and frozen market context keep the local approval, activation and generated rows. Existing local drafts take priority; an incoming native draft is restored when no local draft exists. Descriptive updates refresh the saved draft baseline so reopening it remains usable, while reviews already open still reject stale changes.
+
+A change that would discard saved review data rejects the entire transaction with an actionable error, unless a validated native entry supplies approved replacement terms. The completion count reflects active holdings still needing review after import. Explicit category replacement still removes omitted positions as stated in its confirmation. These safeguards prevent future loss; they do not reconstruct review data already missing from the database.
 
 ## ETF transaction dates and deletion
 

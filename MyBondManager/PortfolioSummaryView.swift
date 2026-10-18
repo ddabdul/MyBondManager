@@ -269,8 +269,9 @@ struct PortfolioSummaryView: View {
                                    .string(from: NSNumber(value: totalExpectedProfitCF))
                                    ?? "–")
                     MetricView(icon: "percent",
-                               title: "Estimated YTM",
+                               title: "Purchase YTM",
                                value: weightedAverageYTMFormatted)
+                        .help("Nominal-weighted annual effective return from clean purchase costs plus accrued interest and scheduled payments; may differ from quoted market yields.")
                 }
 
                 Divider().background(Color.white.opacity(0.3))
@@ -327,11 +328,13 @@ struct PortfolioSummaryView: View {
                                displayedComponents: .date)
                         .datePickerStyle(.compact)
 
+                    Text("Quick approximation using annual coupons. Reviewed holdings use dated payments and purchase cost.")
+                        .font(.caption).foregroundStyle(.secondary)
                     Button("Calculate YTM", action: calculateYTM)
                         .buttonStyle(.borderedProminent)
 
                     if let ytm = calculatedYTM {
-                        Text("Yield to Maturity: \(String(format: "%.2f", ytm))%")
+                        Text("Approximate YTM: \(String(format: "%.2f", ytm))%")
                             .font(.subheadline).bold()
                     }
                 }

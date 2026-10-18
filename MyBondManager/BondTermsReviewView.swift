@@ -200,7 +200,7 @@ private struct BondTermsReviewContent: View {
                         Text("Supported preview; approval is required.").foregroundStyle(.green)
                         ForEach(preview.assessment.warnings, id: \.self) { Text($0).foregroundStyle(.orange) }
                         if let date = preview.redemptionDay { Text("Redemption payment: " + date.rawValue) }
-                        if let yield = preview.estimatedYTM { Text(String(format: "Estimated YTM: %.3f%%", yield)) }
+                        if let yield = preview.estimatedYTM { Text(String(format: "Estimated YTM at purchase: %.3f%%", yield)) }
                         ForEach(Array(preview.payments.enumerated()), id: \.offset) { _, payment in
                             HStack {
                                 Text(payment.kind == .interest ? "Coupon" : "Redemption")

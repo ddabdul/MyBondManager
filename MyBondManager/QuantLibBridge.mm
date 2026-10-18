@@ -6,6 +6,10 @@
 #include <ql/time/schedule.hpp>
 #include <ql/time/daycounters/actualactual.hpp>
 #include <ql/cashflows/fixedratecoupon.hpp>
+#include <ql/cashflows/simplecashflow.hpp>
+#include <ql/cashflows/cashflows.hpp>
+#include <ql/time/daycounters/actual365fixed.hpp>
+#include <ql/math/solvers1d/brent.hpp>
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -37,7 +41,8 @@ int MBMQLFollowing(int32_t day, int32_t *output, char *error, size_t capacity) {
 }
 
 namespace {
-std::vector<MBMQLPayment> fixedPayments(const MBMQLRequest &request, bool endOfMonth) {
+std::vector<MBMQLPayment> fixedPayments(const MBMQLRequest &request, bool endOfMonth,
+                                      QuantLib::Date acquisition = QuantLib::Date(), double *accrued = nullptr) {
     using namespace QuantLib;
     const Date maturity = date(request.maturityDay);
     const TARGET calendar;
@@ -89,6 +94,9 @@ std::vector<MBMQLPayment> fixedPayments(const MBMQLRequest &request, bool endOfM
             result.push_back({0, encoded(coupon->accrualEndDate()), encoded(coupon->date()),
                 couponIndex == 0 && !schedule.isRegular(1) ? 1 : 0,
                 coupon->nominal() * coupon->rate() * coupon->accrualPeriod()});
+            // Retain the existing on/after-contractual-day entitlement, including same-day receipts.
+            if (accrued && coupon->accrualEndDate() >= acquisition)
+                *accrued += coupon->accruedAmount(acquisition);
             ++couponIndex;
         }
     }
@@ -99,6 +107,28 @@ std::vector<MBMQLPayment> fixedPayments(const MBMQLRequest &request, bool endOfM
     }
     return result;
 }
+std::vector<MBMQLPayment> checkedPayments(const MBMQLRequest &request,
+                                        QuantLib::Date acquisition = QuantLib::Date(), double *accrued = nullptr) {
+    if (request.structure != 0 && request.structure != 1) throw std::invalid_argument("Unsupported interest structure.");
+    if (request.roll < 0 || request.roll > 2) throw std::invalid_argument("Invalid coupon roll.");
+    if (!std::isfinite(request.nominal) || request.nominal <= 0 ||
+        !std::isfinite(request.redemptionPercent) || request.redemptionPercent <= 0 ||
+        !std::isfinite(request.annualRate) || request.annualRate < 0)
+        throw std::invalid_argument("Invalid native payment amount or rate.");
+    auto payments = fixedPayments(request, request.roll == 1, acquisition, accrued);
+    if (request.structure == 0 && request.roll == 2) {
+        double alternativeAccrued = 0;
+        const auto alternative = fixedPayments(request, true, acquisition, accrued ? &alternativeAccrued : nullptr);
+        bool differs = alternative.size() != payments.size();
+        for (size_t i = 0; !differs && i < payments.size(); ++i) {
+            differs = alternative[i].contractualDay != payments[i].contractualDay ||
+                      std::abs(alternative[i].amount - payments[i].amount) > 1e-8;
+        }
+        if (accrued && std::abs(*accrued - alternativeAccrued) > 1e-8) differs = true;
+        if (differs) throw std::invalid_argument("Confirm the coupon month-end roll.");
+    }
+    return payments;
+}
 }
 int MBMQLPayments(const MBMQLRequest *request, MBMQLPayment *output, size_t capacity,
                   size_t *count, char *error, size_t errorCapacity) {
@@ -106,22 +136,7 @@ int MBMQLPayments(const MBMQLRequest *request, MBMQLPayment *output, size_t capa
     try {
         std::lock_guard<std::recursive_mutex> guard(mutex());
         if (!request || !count || (!output && capacity)) throw std::invalid_argument("Missing native payment buffers.");
-        if (request->structure != 0 && request->structure != 1) throw std::invalid_argument("Unsupported interest structure.");
-        if (request->roll < 0 || request->roll > 2) throw std::invalid_argument("Invalid coupon roll.");
-        if (!std::isfinite(request->nominal) || request->nominal <= 0 ||
-            !std::isfinite(request->redemptionPercent) || request->redemptionPercent <= 0 ||
-            !std::isfinite(request->annualRate) || request->annualRate < 0)
-            throw std::invalid_argument("Invalid native payment amount or rate.");
-        auto payments = fixedPayments(*request, request->roll == 1);
-        if (request->structure == 0 && request->roll == 2) {
-            const auto alternative = fixedPayments(*request, true);
-            bool differs = alternative.size() != payments.size();
-            for (size_t i = 0; !differs && i < payments.size(); ++i) {
-                differs = alternative[i].contractualDay != payments[i].contractualDay ||
-                          std::abs(alternative[i].amount - payments[i].amount) > 1e-8;
-            }
-            if (differs) throw std::invalid_argument("Confirm the coupon month-end roll.");
-        }
+        auto payments = checkedPayments(*request);
         if (capacity < payments.size()) {
             diagnostic(error, errorCapacity, "Native payment output capacity is insufficient.");
             return 2;
@@ -134,5 +149,80 @@ int MBMQLPayments(const MBMQLRequest *request, MBMQLPayment *output, size_t capa
         diagnostic(error, errorCapacity, failure.what()); return 1;
     } catch (...) {
         diagnostic(error, errorCapacity, "Unexpected native payment failure."); return 3;
+    }
+}
+
+int MBMQLPurchaseYield(const MBMQLPayment *payments, size_t count, int32_t acquisitionDay,
+                      double cost, double *yield, int32_t *available, char *error, size_t errorCapacity) {
+    using namespace QuantLib;
+    if (available) *available = 0;
+    try {
+        std::lock_guard<std::recursive_mutex> guard(mutex());
+        if (!yield || !available || (!payments && count) || count > 1201)
+            throw std::invalid_argument("Invalid native purchase yield buffers.");
+        if (!std::isfinite(cost) || cost <= 0)
+            throw std::invalid_argument("Purchase cost must be finite and positive.");
+        const Date acquisition = date(acquisitionDay);
+        Leg leg;
+        double outlay = cost;
+        for (size_t i = 0; i < count; ++i) {
+            const auto &payment = payments[i];
+            if ((payment.kind != 0 && payment.kind != 1) || !std::isfinite(payment.amount) || payment.amount < 0)
+                throw std::invalid_argument("Invalid native purchase yield payment.");
+            const Date contractual = date(payment.contractualDay), paid = date(payment.paymentDay);
+            if (paid < contractual) throw std::invalid_argument("Payment precedes its contractual date.");
+            if (contractual < acquisition || paid < acquisition || payment.amount == 0) continue;
+            if (paid == acquisition) outlay -= payment.amount;
+            else leg.push_back(ext::make_shared<SimpleCashFlow>(payment.amount, paid));
+        }
+        if (leg.empty() || outlay <= 0) {
+            diagnostic(error, errorCapacity, "");
+            return 0;
+        }
+        std::stable_sort(leg.begin(), leg.end(), [](const auto &left, const auto &right) {
+            return left->date() < right->date();
+        });
+        // Normalize money to keep solver precision independent of holding size.
+        for (auto &flow : leg) {
+            const double amount = flow->amount() / outlay;
+            if (!std::isfinite(amount)) throw std::invalid_argument("Purchase yield amount is out of range.");
+            flow = ext::make_shared<SimpleCashFlow>(amount, flow->date());
+        }
+        Brent solver;
+        solver.setLowerBound(std::nextafter(-1.0, 0.0));
+        solver.setMaxEvaluations(1000);
+        const Actual365Fixed dayCount;
+        const double result = CashFlows::yield(solver, leg, 1.0, dayCount, Compounded, Annual,
+                                               false, acquisition, acquisition, 1e-12, 0.05);
+        const double price = CashFlows::npv(leg, result, dayCount, Compounded, Annual, false, acquisition, acquisition);
+        if (!std::isfinite(result) || result <= -1 || !std::isfinite(price) || std::abs(price - 1) > 1e-8)
+            throw std::runtime_error("Purchase yield did not converge to the acquisition cost.");
+        *yield = result;
+        *available = 1;
+        diagnostic(error, errorCapacity, "");
+        return 0;
+    } catch (const std::exception &failure) {
+        diagnostic(error, errorCapacity, failure.what()); return 1;
+    } catch (...) {
+        diagnostic(error, errorCapacity, "Unexpected native purchase yield failure."); return 3;
+    }
+}
+
+int MBMQLAccruedInterest(const MBMQLRequest *request, int32_t acquisitionDay,
+                       double *amount, char *error, size_t errorCapacity) {
+    try {
+        std::lock_guard<std::recursive_mutex> guard(mutex());
+        if (!request || !amount) throw std::invalid_argument("Missing native accrued-interest input or output.");
+        double result = 0;
+        checkedPayments(*request, date(acquisitionDay), &result);
+        if (!std::isfinite(result) || result < 0)
+            throw std::invalid_argument("Accrued interest is out of range.");
+        *amount = result;
+        diagnostic(error, errorCapacity, "");
+        return 0;
+    } catch (const std::exception &failure) {
+        diagnostic(error, errorCapacity, failure.what()); return 1;
+    } catch (...) {
+        diagnostic(error, errorCapacity, "Unexpected native accrued-interest failure."); return 3;
     }
 }

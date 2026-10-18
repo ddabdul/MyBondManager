@@ -76,8 +76,9 @@ public class ExportManager {
         let req: NSFetchRequest<BondEntity> = BondEntity.fetchRequest()
         let bonds = try context.fetch(req)
 
-        let codables = bonds.map { bond in
-            let flows = (BondTermsStore.isReady(bond) ? bond.cashFlowsArray : []).map {
+        let codables = try bonds.map { bond in
+            let preview = try BondTermsStore.validatedPreview(bond, from: MarketDay(date: Date()))
+            let flows = (preview != nil ? bond.cashFlowsArray : []).map {
                 CashFlowCodable(date: $0.date,
                                 amount: $0.amount,
                                 nature: $0.nature)
@@ -93,7 +94,7 @@ public class ExportManager {
                 couponRate: bond.couponRate,
                 parValue: bond.parValue,
                 initialPrice: bond.initialPrice,
-                yieldToMaturity: bond.yieldToMaturity,
+                yieldToMaturity: preview != nil ? (preview?.estimatedYTM ?? 0) : bond.yieldToMaturity,
                 wkn: bond.wkn,
                 cashFlows: flows
             )

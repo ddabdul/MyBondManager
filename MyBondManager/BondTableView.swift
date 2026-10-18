@@ -281,7 +281,7 @@ struct BondSummaryDetailView: View {
                                 Text("Price:   \(bond.acquisitionPriceFormatted)")
                                 Text("Acquisition: \(bond.acquisitionDateFormatted)")
                                 Text("Bank: \(bond.depotBank)")
-                                Text("Estimated YTM: \(bond.ytmFormatted)")
+                                Text("Estimated YTM at purchase: \(bond.ytmFormatted)")
                                 BondTermsStatus(bond: bond)
                             }
                             Spacer()

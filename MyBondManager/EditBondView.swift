@@ -52,9 +52,9 @@ struct EditBondView: View {
 
             Section("Financials") {
                 TextField("Par Value", text: $parValue)
-                TextField("Initial Price", text: $initialPrice)
+                TextField("Clean Purchase Cost", text: $initialPrice)
                 Text("Coupon: " + bond.couponFormatted)
-                Text("Estimated YTM: " + bond.ytmFormatted)
+                Text("Estimated YTM at purchase: " + bond.ytmFormatted)
                 BondTermsStatus(bond: bond)
                 Button("Review instrument terms") { openTermsReview() }
             }

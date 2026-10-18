@@ -23,6 +23,8 @@ struct MainTabView: View {
 
     @State private var selectedDepotBank: String = "All"
     @State private var selectedTab: Tab = .portfolio
+    @State private var cashFlowDisplayMode = "List"
+    @State private var cashFlowNavigation = CashFlowCalendarNavigation()
     @State private var validationSelection: FolderSelection?
 
     @State private var pendingImport: PositionsPayload?
@@ -61,7 +63,7 @@ struct MainTabView: View {
                     
                 }
                 .pickerStyle(SegmentedPickerStyle())
-                .frame(width: 300)
+                .fixedSize(horizontal: true, vertical: true)
 
                 Spacer()
 
@@ -122,6 +124,8 @@ struct MainTabView: View {
                                     EmptyView()
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 28)
             .padding()
             .background(AppTheme.panelBackground)
 
@@ -182,7 +186,7 @@ struct MainTabView: View {
             Button("Replace", role: .destructive) { applyPendingImport() }
             Button("Cancel", role: .cancel) { pendingImport = nil }
         } message: {
-            Text("This replaces all current bond and ETF positions (\(pendingImport?.bonds.count ?? 0) bonds, \(pendingImport?.etfs.count ?? 0) ETFs). Existing history is kept; this transfer does not restore history. These legacy files do not restore approved native bond terms: imported bonds need review.")
+            Text("This replaces all current bond and ETF positions (\(pendingImport?.bonds.count ?? 0) bonds, \(pendingImport?.etfs.count ?? 0) ETFs). Existing history is kept; this transfer does not restore history. Saved reviews and drafts are kept for unchanged bonds. Changes that would discard a review are rejected; new bonds need review.")
         }
         .environment(\.managedObjectContext, viewContext)
     }
@@ -206,7 +210,10 @@ struct MainTabView: View {
                     selectedDepotBank: $selectedDepotBank,
                     exportAction: chooseFolderAndExport,
                     importAction: chooseFolderAndImport,
-                    recalculateAction: recalculateAllCashFlows
+                    recalculateAction: recalculateAllCashFlows,
+                    reviewTermsAction: openTermsReview,
+                    displayModeSelection: $cashFlowDisplayMode,
+                    navigationSelection: $cashFlowNavigation
                 )
             case .etf:
                 ETFTabView(
@@ -286,9 +293,9 @@ struct MainTabView: View {
         Task { @MainActor in
             defer { isTransferring = false }
             do {
-                try await ImportManager().applyBonds(transfer, into: container, expectedDestinationIDs: identities)
+                let unresolved = try await ImportManager().applyBonds(transfer, into: container, expectedDestinationIDs: identities)
                 pendingBondImport = nil
-                notifier.alertMessage = "Bonds imported. ETFs and financial history were kept. \(transfer.unresolvedCount) holdings need terms review."
+                notifier.alertMessage = "Bonds imported. ETFs and financial history were kept. \(unresolved) active holdings need terms review."
             } catch { notifier.alertMessage = "Bond import failed: \(error.localizedDescription)" }
         }
     }
@@ -317,10 +324,7 @@ struct MainTabView: View {
         Task { @MainActor in
             do {
                 let excluded = try await PortfolioTransaction.run(in: container) { context in
-                    let bonds = try context.fetch(BondEntity.fetchRequest())
-                    let generator = CashFlowGenerator(context: context)
-                    for bond in bonds { try generator.regenerateCashFlows(for: bond) }
-                    return bonds.filter { !BondTermsStore.isReady($0) }.count
+                    try CashFlowGenerator(context: context).regenerateAllCashFlows()
                 }
                 recalculationMessage = BondTermsPresentation.exclusions(excluded) ?? "Approved schedules were recalculated from saved terms."
                 showRecalculatedAlert = true

@@ -93,3 +93,114 @@ final class QuantLibBondMathTests: XCTestCase {
         XCTAssertEqual(output.amount, 42); XCTAssertEqual(output.kind, 99)
     }
 }
+
+
+extension QuantLibBondMathTests {
+    func testPurchaseYieldIsIndependentOfHoldingSizeAndSupportsDeepNegativeYield() throws {
+        for scale in [0.000001, 1.0, 1000000.0] {
+            let payment = QuantLibPayment(kind: .maturity, contractualDay: try MarketDay("2027-01-04"),
+                paymentDay: try MarketDay("2027-01-04"), amount: 100000 * scale, irregularOpening: false)
+            for (cost, expected) in [(80000.0, 25.0), (100000.0, 0.0), (20000000.0, -99.5)] {
+                let yield = try QuantLibBondMath.purchaseYield(payments: [payment], acquisitionDay: MarketDay("2026-01-04"), cost: cost * scale)
+                XCTAssertEqual(try XCTUnwrap(yield), expected, accuracy: 1e-8)
+            }
+        }
+    }
+    func testPurchaseYieldExcludesCouponsWhoseContractualEntitlementPrecedesAcquisition() throws {
+        let excluded = QuantLibPayment(kind: .interest, contractualDay: try MarketDay("2026-01-01"),
+            paymentDay: try MarketDay("2026-01-05"), amount: 5000, irregularOpening: false)
+        let redemption = QuantLibPayment(kind: .maturity, contractualDay: try MarketDay("2027-01-04"),
+            paymentDay: try MarketDay("2027-01-04"), amount: 105000, irregularOpening: false)
+        let yield = try QuantLibBondMath.purchaseYield(payments: [excluded, redemption],
+            acquisitionDay: MarketDay("2026-01-04"), cost: 100000)
+        XCTAssertEqual(try XCTUnwrap(yield), 5, accuracy: 1e-8)
+    }
+    func testPurchaseYieldWithNoFuturePositivePaymentOrNoNetOutlayIsUnavailable() throws {
+        let day = try MarketDay("2026-01-04")
+        let sameDay = QuantLibPayment(kind: .interest, contractualDay: day, paymentDay: day,
+            amount: 100000, irregularOpening: false)
+        let future = QuantLibPayment(kind: .maturity, contractualDay: try MarketDay("2027-01-04"),
+            paymentDay: try MarketDay("2027-01-04"), amount: 100000, irregularOpening: false)
+        for values in [[], [sameDay], [sameDay, future]] as [[QuantLibPayment]] {
+            XCTAssertNil(try QuantLibBondMath.purchaseYield(payments: values, acquisitionDay: day, cost: 100000))
+        }
+    }
+    func testNativePurchaseYieldRejectsInvalidInputsWithoutPublishingPartialResult() {
+        var flow = MBMQLPayment(kind: 1, contractualDay: 20270104, paymentDay: 20270104, irregularOpening: 0, amount: 100000)
+        var result = 42.0
+        var available: Int32 = 99
+        var bytes = [CChar](repeating: 0, count: 64)
+        func calculate(cost: Double = 100000, count: Int = 1, day: Int32 = 20260104) -> Int32 {
+            bytes.withUnsafeMutableBufferPointer {
+                MBMQLPurchaseYield(&flow, count, day, cost, &result, &available, $0.baseAddress, $0.count)
+            }
+        }
+        for cost in [0, -1, Double.nan, Double.infinity] {
+            XCTAssertNotEqual(calculate(cost: cost), 0)
+            XCTAssertEqual(result, 42); XCTAssertEqual(available, 0)
+        }
+        XCTAssertNotEqual(calculate(count: 1202), 0)
+        XCTAssertNotEqual(calculate(day: 20260231), 0)
+        for amount in [-1, Double.nan, Double.infinity] {
+            flow.amount = amount
+            XCTAssertNotEqual(calculate(), 0)
+        }
+        flow.amount = 100000; flow.kind = 42
+        XCTAssertNotEqual(calculate(), 0)
+        flow.kind = 1; flow.paymentDay = 20260104
+        XCTAssertNotEqual(calculate(), 0)
+        flow.paymentDay = 20270104
+        let status = bytes.withUnsafeMutableBufferPointer {
+            MBMQLPurchaseYield(nil, 1, 20260104, 100000, &result, &available, $0.baseAddress, $0.count)
+        }
+        XCTAssertNotEqual(status, 0)
+        XCTAssertEqual(result, 42); XCTAssertEqual(available, 0)
+        XCTAssertNotEqual(bytes[0], 0)
+    }
+}
+
+
+extension QuantLibBondMathTests {
+    func testAccruedInterestUsesICMAPeriodAndDoesNotAccruePaymentDelay() throws {
+        var annual = try BondTermsFixtures.fixed(frequency: 1, maturity: "2027-05-04", next: "2026-05-04")
+        annual.accrualStart = try MarketDay("2025-05-04"); annual.couponRate = 4.08
+        XCTAssertEqual(try QuantLibBondMath.accruedInterest(terms: annual, nominal: 100000,
+            acquisitionDay: MarketDay("2026-04-15")), 4080 * 346 / 365, accuracy: 1e-8)
+        var stub = try BondTermsFixtures.fixed(frequency: 2, maturity: "2026-11-30", next: "2026-11-30")
+        stub.accrualStart = try MarketDay("2026-05-13"); stub.firstCoupon = stub.maturity
+        stub.couponRate = 6.875; stub.roll = .endOfMonth
+        XCTAssertEqual(try QuantLibBondMath.accruedInterest(terms: stub, nominal: 100000,
+            acquisitionDay: MarketDay("2026-06-01")), 358.75668047799195, accuracy: 1e-8)
+        var delayed = try BondTermsFixtures.fixed(frequency: 1, maturity: "2027-01-01", next: "2027-01-01")
+        delayed.accrualStart = try MarketDay("2026-01-01"); delayed.couponRate = 4
+        XCTAssertEqual(try QuantLibBondMath.accruedInterest(terms: delayed, nominal: 100000,
+            acquisitionDay: MarketDay("2026-01-01")), 0)
+        XCTAssertEqual(try QuantLibBondMath.accruedInterest(terms: delayed, nominal: 100000,
+            acquisitionDay: MarketDay("2027-01-01")), 4000, accuracy: 1e-8)
+        // The old coupon is not entitled after its contractual boundary, despite its delayed payment.
+        XCTAssertEqual(try QuantLibBondMath.accruedInterest(terms: delayed, nominal: 100000,
+            acquisitionDay: MarketDay("2027-01-02")), 0)
+        delayed.structure = .zero; delayed.couponRate = 0
+        XCTAssertEqual(try QuantLibBondMath.accruedInterest(terms: delayed, nominal: 100000,
+            acquisitionDay: MarketDay("2026-06-01")), 0)
+    }
+    func testInvalidNativeAccruedInterestLeavesOutputUntouched() {
+        var request = MBMQLRequest(structure: 1, startDay: 0, maturityDay: 20270115, firstCouponDay: 0,
+            frequency: 0, roll: 2, nominal: 100000, annualRate: 0, redemptionPercent: 100)
+        var result = 42.0
+        var bytes = [CChar](repeating: 0, count: 128)
+        let status = bytes.withUnsafeMutableBufferPointer {
+            MBMQLAccruedInterest(&request, 20260231, &result, $0.baseAddress, $0.count)
+        }
+        XCTAssertNotEqual(status, 0); XCTAssertEqual(result, 42)
+        let missing = bytes.withUnsafeMutableBufferPointer {
+            MBMQLAccruedInterest(nil, 20260104, &result, $0.baseAddress, $0.count)
+        }
+        XCTAssertNotEqual(missing, 0); XCTAssertEqual(result, 42)
+        request.nominal = .nan
+        let invalid = bytes.withUnsafeMutableBufferPointer {
+            MBMQLAccruedInterest(&request, 20260104, &result, $0.baseAddress, $0.count)
+        }
+        XCTAssertNotEqual(invalid, 0); XCTAssertEqual(result, 42)
+    }
+}

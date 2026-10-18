@@ -34,7 +34,7 @@ enum QuantLibBondMath {
         return try decoded(output)
     }
 
-    static func payments(terms: BondTerms, nominal: Double) throws -> [QuantLibPayment] {
+    private static func paymentRequest(terms: BondTerms, nominal: Double) throws -> MBMQLRequest {
         guard let maturity = terms.maturity, let redemption = terms.redemptionPercent else {
             throw PortfolioError("Contractual maturity or redemption percentage is missing.")
         }
@@ -43,13 +43,28 @@ enum QuantLibBondMath {
         guard zero || (terms.accrualStart != nil && terms.couponRate != nil && terms.frequency != nil) else {
             throw PortfolioError("Fixed coupon terms are incomplete.")
         }
-        var request = MBMQLRequest(structure: zero ? 1 : 0,
+        return MBMQLRequest(structure: zero ? 1 : 0,
             startDay: zero ? 0 : terms.accrualStart.map(encoded) ?? 0, maturityDay: encoded(maturity),
             firstCouponDay: zero ? 0 : terms.firstCoupon.map(encoded) ?? 0,
             frequency: zero ? 0 : Int32(exactly: terms.frequency ?? 0) ?? 0,
             roll: terms.roll == .endOfMonth ? 1 : (terms.roll == .dayOfMonth ? 0 : 2),
             nominal: nominal, annualRate: zero ? 0 : (terms.couponRate ?? 0) / 100,
             redemptionPercent: redemption)
+    }
+
+    static func accruedInterest(terms: BondTerms, nominal: Double, acquisitionDay: MarketDay) throws -> Double {
+        var request = try paymentRequest(terms: terms, nominal: nominal)
+        var result = 0.0
+        var error = [CChar](repeating: 0, count: 512)
+        let status = error.withUnsafeMutableBufferPointer {
+            MBMQLAccruedInterest(&request, encoded(acquisitionDay), &result, $0.baseAddress, $0.count)
+        }
+        guard status == 0 else { throw PortfolioError(String(cString: error)) }
+        return result
+    }
+
+    static func payments(terms: BondTerms, nominal: Double) throws -> [QuantLibPayment] {
+        var request = try paymentRequest(terms: terms, nominal: nominal)
         var output = [MBMQLPayment](repeating: MBMQLPayment(), count: 1201)
         var count = 0
         var error = [CChar](repeating: 0, count: 512)
@@ -68,6 +83,26 @@ enum QuantLibBondMath {
                 contractualDay: try decoded(payment.contractualDay), paymentDay: try decoded(payment.paymentDay),
                 amount: payment.amount, irregularOpening: payment.irregularOpening != 0)
         }
+    }
+
+    static func purchaseYield(payments: [QuantLibPayment], acquisitionDay: MarketDay, cost: Double) throws -> Double? {
+        let values = payments.map {
+            MBMQLPayment(kind: $0.kind == .interest ? 0 : 1, contractualDay: encoded($0.contractualDay),
+                paymentDay: encoded($0.paymentDay), irregularOpening: $0.irregularOpening ? 1 : 0, amount: $0.amount)
+        }
+        var result = 0.0
+        var available: Int32 = 0
+        var error = [CChar](repeating: 0, count: 512)
+        let status = values.withUnsafeBufferPointer { values in
+            error.withUnsafeMutableBufferPointer {
+                MBMQLPurchaseYield(values.baseAddress, values.count, encoded(acquisitionDay), cost,
+                    &result, &available, $0.baseAddress, $0.count)
+            }
+        }
+        guard status == 0 else { throw PortfolioError(String(cString: error)) }
+        guard available != 0 else { return nil }
+        guard result.isFinite, (result * 100).isFinite else { throw PortfolioError("Purchase yield is out of range.") }
+        return result * 100
     }
 
     static func forwards(quotes: CurveMarketQuotes, fixingDays: [MarketDay]) throws -> CurveCalculationResult {
