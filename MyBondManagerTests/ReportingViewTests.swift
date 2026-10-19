@@ -4,6 +4,60 @@ import SwiftUI
 
 @MainActor
 final class ReportingViewTests: XCTestCase {
+    func testIssuerHeadersReorderVisibleRowsInBothDirections() async throws {
+        let store = try TestPortfolio.make()
+        let suite = "ReportingSortTests." + UUID().uuidString
+        let preferences = UserDefaults(suiteName: suite)!
+        defer { preferences.removePersistentDomain(forName: suite) }
+        for (name, nominal, date) in [("Alpha Company", 100000.0, "2029-01-19"),
+                                      ("Bravo Company", 300000.0, "2027-01-19"),
+                                      ("Charlie Company", 200000.0, "2030-01-19")] {
+            let bond = TestPortfolio.bond(in: store.viewContext, par: nominal)
+            bond.issuer = name; bond.termsLegacyDateZone = "Europe/Berlin"
+            bond.maturityDate = try MarketDay(date).instant
+        }
+        try store.viewContext.save()
+        let view = NSHostingView(rootView: ReportingView(selectedDepotBank: .constant("All"), today: try MarketDay("2026-10-19"), preferences: preferences)
+            .environment(\.managedObjectContext, store.viewContext).preferredColorScheme(.dark))
+        view.sizingOptions = []
+        let rect = NSRect(x: 0, y: 0, width: 540, height: 1400)
+        let window = NSWindow(contentRect: rect, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = view; view.frame = rect; window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        func settle() async throws { await Task.yield(); try await Task.sleep(nanoseconds: 200_000_000); view.layoutSubtreeIfNeeded() }
+        func order() throws -> [String] {
+            let names = ["Alpha Company", "Bravo Company", "Charlie Company"]
+            return try NativeSnapshotTestSupport.observations(in: view).compactMap { observation -> (String, CGFloat)? in
+                guard let value = observation.topCandidates(1).first?.string,
+                      let name = names.first(where: { value.contains($0) }) else { return nil }
+                return (name, observation.boundingBox.midY)
+            }.sorted { $0.1 > $1.1 }.map { $0.0 }
+        }
+        func clickHeader(_ label: String) async throws {
+            let boxes = try NativeSnapshotTestSupport.observations(in: view).compactMap { observation -> CGRect? in
+                guard let value = observation.topCandidates(1).first, let range = value.string.range(of: label) else { return nil }
+                return try value.boundingBox(for: range)?.boundingBox
+            }
+            let box = try XCTUnwrap(boxes.min { $0.midY < $1.midY })
+            let point = view.convert(NSPoint(x: box.midX * view.bounds.width, y: (view.isFlipped ? 1 - box.midY : box.midY) * view.bounds.height), to: nil)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                window.sendEvent(try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)))
+            }
+            try await settle()
+        }
+        try await settle()
+        XCTAssertEqual(try order(), ["Bravo Company", "Charlie Company", "Alpha Company"])
+        for (header, firstOrder, secondOrder) in [
+            ("Issuer", ["Alpha Company", "Bravo Company", "Charlie Company"], ["Charlie Company", "Bravo Company", "Alpha Company"]),
+            ("Principal", ["Bravo Company", "Charlie Company", "Alpha Company"], ["Alpha Company", "Charlie Company", "Bravo Company"]),
+            ("Avg. Maturity", ["Charlie Company", "Alpha Company", "Bravo Company"], ["Bravo Company", "Alpha Company", "Charlie Company"])
+        ] {
+            try await clickHeader(header); XCTAssertEqual(try order(), firstOrder)
+            try await clickHeader(header); XCTAssertEqual(try order(), secondOrder)
+        }
+    }
+
     func testReportsRenderAtWideAndNarrowWidthsAndRefreshAfterSave() async throws {
         let store = try TestPortfolio.make()
         let suite = "ReportingViewTests." + UUID().uuidString
@@ -25,7 +79,7 @@ final class ReportingViewTests: XCTestCase {
             window.setContentSize(NSSize(width: width, height: 1100)); view.frame = NSRect(x: 0, y: 0, width: width, height: 1100)
             await Task.yield(); try await Task.sleep(nanoseconds: 300_000_000); view.layoutSubtreeIfNeeded()
             let visible = try NativeSnapshotTestSupport.text(in: view)
-            for label in ["My Reporting", "Expected Interest by Year", "Maturity Schedule", "Issuer Breakdown", "Reporting fixture issuer", "100,000"] {
+            for label in ["My Reporting", "Expected Interest by Year", "Maturity Schedule", "Issuer Breakdown", "Avg. Maturity", "Reporting fixture issuer", "100,000"] {
                 XCTAssertTrue(visible.contains(label), visible)
             }
             let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))

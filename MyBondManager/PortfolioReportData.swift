@@ -13,6 +13,7 @@ struct PortfolioReportData {
         let name: String
         let principal: Double
         let share: Double
+        let averageMaturityYears: Double
         var id: String { name }
     }
     struct Interest: Identifiable {
@@ -66,7 +67,13 @@ struct PortfolioReportData {
         for (name, holdings) in issuerGroups {
             let nominal: Double = holdings.reduce(0.0) { $0 + $1.parValue }
             let share: Double = principal > 0 ? nominal / principal : 0
-            issuers.append(Issuer(name: name, principal: nominal, share: share))
+            let weightedDays = holdings.reduce(0.0) { total, bond in
+                let maturity = BondEligibility.contractualMaturityDay(bond)
+                let days = MarketDay.calendar.dateComponents([.day], from: today.instant, to: maturity.instant).day!
+                return total + Double(max(0, days)) * bond.parValue
+            }
+            issuers.append(Issuer(name: name, principal: nominal, share: share,
+                averageMaturityYears: weightedDays / nominal / 365.25))
         }
         issuers.sort {
             if $0.principal == $1.principal { return $0.name < $1.name }

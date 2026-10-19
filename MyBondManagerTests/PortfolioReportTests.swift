@@ -67,6 +67,29 @@ final class PortfolioReportTests: XCTestCase {
         XCTAssertEqual(report.interestReceipts.count, 1)
     }
 
+    func testIssuerMaturityWeightsRemainingCalendarDaysByNominalAndRespectsBankScope() throws {
+        let store = try TestPortfolio.make()
+        let first = TestPortfolio.bond(in: store.viewContext, par: 100000)
+        first.issuer = "Weighted issuer"; first.termsLegacyDateZone = "Europe/Berlin"
+        first.maturityDate = try MarketDay("2027-01-19").instant
+        let second = TestPortfolio.bond(in: store.viewContext, par: 300000)
+        second.issuer = "Weighted issuer"; second.depotBank = "Other"; second.termsLegacyDateZone = "Europe/Berlin"
+        second.maturityDate = try MarketDay("2029-01-19").instant
+        let matured = TestPortfolio.bond(in: store.viewContext, par: 900000)
+        matured.issuer = "Weighted issuer"; matured.termsLegacyDateZone = "Europe/Berlin"
+        matured.maturityDate = try MarketDay("2025-01-19").instant
+        let bonds = [first, second, matured]
+        let report = PortfolioReportData.build(bonds: bonds, bank: "All", today: MarketDay(date: now))
+        let issuer = try XCTUnwrap(report.issuers.first)
+        // Remaining periods are 92 and 823 calendar days; the latter includes leap day.
+        XCTAssertEqual(issuer.averageMaturityYears, 640.25 / 365.25, accuracy: 1e-12)
+        let filtered = PortfolioReportData.build(bonds: bonds, bank: "Bank", today: MarketDay(date: now))
+        XCTAssertEqual(try XCTUnwrap(filtered.issuers.first).averageMaturityYears, 92 / 365.25, accuracy: 1e-12)
+        first.maturityDate = MarketDay(date: now).instant
+        let dueToday = PortfolioReportData.build(bonds: [first], bank: "All", today: MarketDay(date: now))
+        XCTAssertEqual(try XCTUnwrap(dueToday.issuers.first).averageMaturityYears, 0)
+    }
+
     func testEmptyAndInvalidPrincipalAreExplicitAndNeverProduceNaN() throws {
         let empty = PortfolioReportData.build(bonds: [], bank: "All", today: MarketDay(date: now))
         XCTAssertEqual(empty.principal, 0)

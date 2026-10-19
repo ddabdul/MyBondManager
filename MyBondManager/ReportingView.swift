@@ -1,6 +1,5 @@
 import SwiftUI
 import CoreData
-import Charts
 
 struct ReportingView: View {
     @Binding var selectedDepotBank: String
@@ -9,6 +8,7 @@ struct ReportingView: View {
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.issuer, ascending: true)]) private var bonds: FetchedResults<BondEntity>
     @AppStorage("reporting.annualInterestTarget") private var annualTarget = 150000.0
     @State private var showForecastDetails = false
+    @State private var issuerSort = IssuerReportSort()
     private var banks: [String] { Set(bonds.map(\.depotBank) + [selectedDepotBank]).subtracting(["All"]).sorted() }
     private var validTarget: Bool { annualTarget.isFinite && annualTarget >= 0 }
 
@@ -81,31 +81,8 @@ struct ReportingView: View {
             if report.interest.isEmpty {
                 Text("No approved coupon payments remain. Nominal exposure is still shown below.").padding(.vertical)
             } else {
-                GeometryReader { geometry in
-                    ScrollView(.horizontal) {
-                        Chart {
-                            ForEach(report.interest) { row in
-                                BarMark(x: .value("Year", String(row.year)), y: .value("Expected interest", row.amount))
-                                    .foregroundStyle(AppTheme.tileBackground)
-                                    .accessibilityLabel("Expected interest in \(row.year)")
-                                    .accessibilityValue(CashFlowStyle.money(row.amount, precise: true))
-                            }
-                            if validTarget {
-                                RuleMark(y: .value("Annual target", annualTarget))
-                                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [6, 4])).foregroundStyle(.white)
-                            }
-                        }
-                        .chartYAxis {
-                            AxisMarks(position: .leading) { _ in
-                                AxisGridLine()
-                                AxisValueLabel(format: .currency(code: "EUR").notation(.compactName))
-                            }
-                        }
-                        .chartXAxisLabel("Payment year")
-                        .frame(width: max(geometry.size.width, CGFloat(report.interest.count) * 48), height: 260)
-                        .padding(.top, 10)
-                    }
-                }.frame(height: 280)
+                ReportingInterestChart(interest: report.interest, target: validTarget ? annualTarget : nil)
+                    .frame(height: 280)
             }
             Text("\(String(today.year)) includes payments from the report date onward, not a full-year estimate.").font(.caption)
             forecastDetails(report)
@@ -173,25 +150,44 @@ struct ReportingView: View {
         guard let value = row.purchaseYTM else { return "–" }
         return String(format: "%.2f%%", value) + (row.yieldCoveredPrincipal < row.principal ? " *" : "")
     }
+    private func issuerSortHeader(_ title: String, column: IssuerReportSort.Column) -> some View {
+        Button { issuerSort.select(column) } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(title).multilineTextAlignment(column == .issuer ? .leading : .trailing)
+                if issuerSort.column == column {
+                    Image(systemName: issuerSort.ascending ? "chevron.up" : "chevron.down").font(.system(size: 9))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: column == .issuer ? .leading : .trailing)
+            .contentShape(Rectangle())
+        }.buttonStyle(.plain)
+            .help("Sort by " + column.label)
+            .accessibilityLabel("Sort by " + column.label)
+            .accessibilityValue(issuerSort.column == column ? (issuerSort.ascending ? "Ascending" : "Descending") : "Not sorted")
+    }
     private func issuerTable(_ report: PortfolioReportData) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Issuer Breakdown").font(.title2).fontWeight(.semibold)
             HStack {
-                Text("Issuer").frame(maxWidth: .infinity, alignment: .leading)
-                Text("Principal (EUR)").frame(width: 110, alignment: .trailing)
+                issuerSortHeader("Issuer", column: .issuer).frame(maxWidth: .infinity, alignment: .leading)
+                issuerSortHeader("Principal (EUR)", column: .principal).frame(width: 110, alignment: .trailing)
                 Text("Share").frame(width: 55, alignment: .trailing)
+                issuerSortHeader("Avg. Maturity (years)", column: .averageMaturity).frame(width: 90, alignment: .trailing)
             }.font(.caption).fontWeight(.semibold).padding(.horizontal, 8)
             VStack(spacing: 4) {
-                ForEach(Array(report.issuers.enumerated()), id: \.element.id) { index, row in
+                ForEach(Array(issuerSort.sorted(report.issuers).enumerated()), id: \.element.id) { index, row in
                     HStack(alignment: .firstTextBaseline) {
                         Text(row.name).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
                         Text(CashFlowStyle.money(row.principal)).frame(width: 110, alignment: .trailing)
                         Text(row.share, format: .percent.precision(.fractionLength(1))).frame(width: 55, alignment: .trailing)
+                        Text(row.averageMaturityYears, format: .number.precision(.fractionLength(1)))
+                            .frame(width: 90, alignment: .trailing)
+                            .help("Nominal-weighted years remaining to contractual maturity, using calendar days divided by 365.25.")
                     }.font(.callout).monospacedDigit().padding(8)
                         .background(index.isMultiple(of: 2) ? AppTheme.panelBackground : .clear, in: RoundedRectangle(cornerRadius: 6))
                 }
             }
-            Text("Includes all purchases of each issuer, sorted by nominal exposure. Shares use the selected portfolio's total nominal principal.").font(.caption)
+            Text("Includes all purchases of each issuer. Click a column header to sort. Shares use the selected portfolio's total nominal principal. Average maturity is weighted by nominal principal and measures years remaining to contractual maturity.").font(.caption)
         }.padding(16).frame(maxWidth: .infinity, alignment: .topLeading)
             .background(CashFlowStyle.surface, in: RoundedRectangle(cornerRadius: 10))
     }
