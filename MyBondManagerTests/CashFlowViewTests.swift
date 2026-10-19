@@ -24,7 +24,8 @@ final class CashFlowViewTests: XCTestCase {
         let view = NSHostingView(rootView: root)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
             styleMask: [.titled], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false; window.contentView = view
+        view.sizingOptions = []
+        window.isReleasedWhenClosed = false; window.contentView = view; view.frame = NSRect(x: 0, y: 0, width: 1200, height: 800)
         window.orderFront(nil)
         defer { window.orderOut(nil) }
         func settle() async throws {
@@ -34,22 +35,22 @@ final class CashFlowViewTests: XCTestCase {
         func visibleText() throws -> [String] {
             let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
             view.cacheDisplay(in: view.bounds, to: bitmap)
-            let request = VNRecognizeTextRequest()
+            let request = VNRecognizeTextRequest(); request.minimumTextHeight = 0.005; request.recognitionLanguages = ["en-US"]
             try VNImageRequestHandler(cgImage: XCTUnwrap(bitmap.cgImage)).perform([request])
             return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
         }
         func waitForYear(_ visible: Bool) async throws {
             for _ in 0..<10 {
                 try await settle()
-                if try visibleText().contains(paymentYear) == visible { return }
+                if try visibleText().joined(separator: " ").contains(paymentYear) == visible { return }
             }
             XCTFail("Expected scheduled year visibility: \(visible)")
         }
         try await waitForYear(true)
-        XCTAssertTrue(try visibleText().contains(paymentYear), "The scheduled cash-flow year must be visible on opening")
+        XCTAssertTrue(try visibleText().joined(separator: " ").contains(paymentYear), "The scheduled cash-flow year must be visible on opening")
         state.refresh += 1
         try await waitForYear(true)
-        XCTAssertTrue(try visibleText().contains(paymentYear), "Parent updates must not reset the fetch to an empty predicate")
+        XCTAssertTrue(try visibleText().joined(separator: " ").contains(paymentYear), "Parent updates must not reset the fetch to an empty predicate")
         state.bank = "Other bank"
         try await waitForYear(false)
         state.bank = "Bank"
@@ -59,13 +60,13 @@ final class CashFlowViewTests: XCTestCase {
         try await waitForYear(true)
 
         func descendants(_ root: NSView) -> [NSView] { [root] + root.subviews.flatMap(descendants) }
-        let switcher = try XCTUnwrap(descendants(view).compactMap { $0 as? NSSegmentedControl }.first { $0.segmentCount == 2 })
+        let switcher = try XCTUnwrap(descendants(view).compactMap { $0 as? NSSegmentedControl }.first { $0.segmentCount == 2 && $0.label(forSegment: 0) == "List" })
         switcher.selectedSegment = 1; switcher.sendAction(switcher.action, to: switcher.target)
         try await settle()
         let calendarText = try visibleText()
         let calendarLevels = try XCTUnwrap(descendants(view).compactMap { $0 as? NSSegmentedControl }.first { $0.segmentCount == 3 })
         XCTAssertEqual(calendarLevels.selectedSegment, 0, "Calendar must open at the Years overview")
-        XCTAssertTrue(calendarText.contains(paymentYear), "Calendar rendered text: \(calendarText)")
+        XCTAssertTrue(calendarText.joined(separator: " ").contains(paymentYear), "Calendar rendered text: \(calendarText)")
         switcher.selectedSegment = 0; switcher.sendAction(switcher.action, to: switcher.target)
         try await waitForYear(true)
 

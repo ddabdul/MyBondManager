@@ -65,3 +65,21 @@ extension TestPortfolio {
         return bond
     }
 }
+
+extension TestPortfolio {
+    static func historicalOpeningBond(in context: NSManagedObjectContext) throws -> BondEntity {
+        let bond = self.bond(in: context, cost: 99000, par: 100000)
+        bond.acquisitionDate = date("2025-03-01T00:00:00Z")
+        var terms = try BondTermsFixtures.fixed(maturity: "2030-01-15", next: "2027-01-15")
+        terms.accrualStart = try MarketDay("2025-02-10")
+        terms.checkpointObservedOn = try MarketDay("2026-10-18")
+        let now = date("2026-10-18T12:00:00Z"); terms.approvedAt = now
+        let trade = try BondTrade(id: bond.id, isin: bond.isin, nominal: bond.parValue, cost: bond.initialPrice,
+            acquisitionDay: MarketDay("2025-03-01"), bank: bond.depotBank)
+        let preview = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay(date: now))
+        guard preview.assessment.supported else { throw PortfolioError(preview.assessment.reasons.joined(separator: "\n")) }
+        try BondTermsStore.replaceProjections(for: bond, terms: terms, preview: preview, now: now,
+            acquisitionDay: trade.acquisitionDay, legacyDateZone: "Europe/Berlin", context: context)
+        return bond
+    }
+}

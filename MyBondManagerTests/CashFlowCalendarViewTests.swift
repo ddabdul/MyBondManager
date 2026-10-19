@@ -67,16 +67,16 @@ final class CashFlowCalendarViewTests: XCTestCase {
         defer { window.orderOut(nil) }
         func descendants(_ root: NSView) -> [NSView] { [root] + root.subviews.flatMap(descendants) }
         func switchControl(_ count: Int, to segment: Int) async throws {
-            let control = try XCTUnwrap(descendants(view).compactMap { $0 as? NSSegmentedControl }.first { $0.segmentCount == count })
+            let control = try XCTUnwrap(descendants(view).compactMap { $0 as? NSSegmentedControl }.first { $0.segmentCount == count && (count != 2 || $0.label(forSegment: 0) == "List") })
             control.selectedSegment = segment; control.sendAction(control.action, to: control.target)
             await Task.yield(); try await Task.sleep(nanoseconds: 150_000_000); view.layoutSubtreeIfNeeded()
         }
         await Task.yield(); try await Task.sleep(nanoseconds: 150_000_000)
-        try await switchControl(4, to: 1)
+        try await switchControl(5, to: 1)
         try await switchControl(2, to: 1)
         try await switchControl(3, to: 2)
-        try await switchControl(4, to: 0)
-        try await switchControl(4, to: 1)
+        try await switchControl(5, to: 0)
+        try await switchControl(5, to: 1)
         let restored = descendants(view).compactMap { $0 as? NSSegmentedControl }.first { $0.segmentCount == 3 }
         XCTAssertEqual(restored?.selectedSegment, 2, "Returning to Cash Flows must retain Calendar/Month")
     }

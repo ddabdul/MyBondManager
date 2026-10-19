@@ -20,6 +20,25 @@ struct BondTermsReviewInstrument: Identifiable {
     var id: String { isin }
     var needsReview: Bool { purchases.contains { !BondTermsStore.isReady($0) } }
 
+    func reviewIssues(from day: MarketDay) -> [String] {
+        purchases.compactMap { bond in
+            do {
+                if try BondTermsStore.validatedPreview(bond, from: day) != nil { return nil }
+                return try BondTermsStore.exclusionReason(bond, from: day)
+            } catch { return error.localizedDescription }
+        }
+    }
+
+    static func scoped(_ bonds: [BondEntity], today: MarketDay, requestedIDs: Set<UUID>? = nil,
+                       preferredID: UUID? = nil, draftIDs: Set<UUID> = []) -> [Self] {
+        let eligible = Set(bonds.filter {
+            if let requestedIDs { return requestedIDs.contains($0.id) }
+            return BondEligibility.isActive($0, on: today) || $0.id == preferredID
+        }.map { ETFPurchase.normalizedISIN($0.isin) })
+        return grouped(bonds.filter { eligible.contains(ETFPurchase.normalizedISIN($0.isin)) },
+            preferredID: preferredID, draftIDs: draftIDs)
+    }
+
     static func grouped(_ bonds: [BondEntity], preferredID: UUID? = nil, draftIDs: Set<UUID> = []) -> [Self] {
         Dictionary(grouping: bonds, by: { ETFPurchase.normalizedISIN($0.isin) }).map { isin, records in
             let sorted = records.sorted {
@@ -38,8 +57,10 @@ struct BondTermsReviewInstrument: Identifiable {
 struct BondTermsReviewView: View {
     @ObservedObject var review: BondTermsReview
     var initialSelection: UUID? = nil
+    var requestedIDs: Set<UUID>? = nil
+    var reportRange: ClosedRange<MarketDay>? = nil
     var body: some View {
-        BondTermsReviewContent(review: review, initialSelection: initialSelection)
+        BondTermsReviewContent(review: review, initialSelection: initialSelection, requestedIDs: requestedIDs, reportRange: reportRange)
             .environment(\.managedObjectContext, review.container.viewContext)
     }
 }
@@ -47,6 +68,8 @@ struct BondTermsReviewView: View {
 private struct BondTermsReviewContent: View {
     @ObservedObject var review: BondTermsReview
     let initialSelection: UUID?
+    let requestedIDs: Set<UUID>?
+    let reportRange: ClosedRange<MarketDay>?
     @Environment(\.dismiss) private var dismiss
     @FetchRequest(sortDescriptors: [NSSortDescriptor(keyPath: \BondEntity.name, ascending: true)]) private var bonds: FetchedResults<BondEntity>
     @State private var selected: Set<String> = []
@@ -59,15 +82,19 @@ private struct BondTermsReviewContent: View {
     @State private var rebuildContext: ProjectionContext?
     @State private var navigation = BondTermsReviewNavigation()
 
-    init(review: BondTermsReview, initialSelection: UUID?) {
-        self.review = review; self.initialSelection = initialSelection
+    init(review: BondTermsReview, initialSelection: UUID?, requestedIDs: Set<UUID>?, reportRange: ClosedRange<MarketDay>?) {
+        self.review = review; self.initialSelection = initialSelection; self.requestedIDs = requestedIDs; self.reportRange = reportRange
         _focused = State(initialValue: initialSelection)
         _edited = State(initialValue: initialSelection.flatMap { review.drafts[$0] })
     }
 
     private var instruments: [BondTermsReviewInstrument] {
-        let eligible = Set(bonds.filter { BondEligibility.isActive($0, on: review.today) || $0.id == initialSelection }.map { ETFPurchase.normalizedISIN($0.isin) })
-        return BondTermsReviewInstrument.grouped(bonds.filter { eligible.contains(ETFPurchase.normalizedISIN($0.isin)) }, preferredID: initialSelection, draftIDs: Set(review.drafts.keys))
+        BondTermsReviewInstrument.scoped(Array(bonds), today: review.today, requestedIDs: requestedIDs,
+            preferredID: initialSelection, draftIDs: Set(review.drafts.keys))
+    }
+    private func needsReview(_ instrument: BondTermsReviewInstrument) -> Bool {
+        if let reportRange { return !instrument.reviewIssues(from: reportRange.lowerBound).isEmpty }
+        return instrument.needsReview
     }
     private var visibleBonds: [BondEntity] { instruments.map(\.representative) }
     private var selectedIDs: [UUID] { instruments.filter { selected.contains($0.isin) }.map { $0.representative.id } }
@@ -81,15 +108,20 @@ private struct BondTermsReviewContent: View {
                 Spacer()
                 Button("Close") { request(.close) }.keyboardShortcut(.cancelAction).disabled(busy || review.isWorking)
             }
-            Text("Review each ISIN once for all its purchases. Acquisition dates, costs, schedules and yields stay separate. Successful bulk approvals are saved independently; failed instruments stay open for correction.")
+            Text("Review each instrument once for all purchases. Successful changes are saved; instruments needing attention remain open.")
                 .foregroundStyle(.secondary)
+            if requestedIDs != nil {
+                Text(reportRange.map { "Reviewing expected payments from \($0.lowerBound.rawValue) to \($0.upperBound.rawValue). Checks use this historical period." }
+                    ?? "Reviewing instruments excluded from the past report. All report instruments start selected.")
+                    .font(.caption).foregroundStyle(.orange)
+            }
             HStack {
-                Button("Select unresolved") { selected = Set(instruments.filter(\.needsReview).map(\.isin)) }
+                Button("Select unresolved") { selected = Set(instruments.filter { needsReview($0) }.map(\.isin)) }
                 Button("Collect missing terms") { request(.collectMissing) }
                 Button("Refresh selected from ING") { request(.refresh) }
                 Button("Enter terms manually") { request(.manual) }
                 Spacer()
-                Text("\(instruments.filter(\.needsReview).count) ISINs need review")
+                Text("\(instruments.filter { needsReview($0) }.count) ISINs need review")
             }.disabled(busy || review.isWorking)
             DisclosureGroup("Market data for rebuilding approved floating forecasts") {
                 MarketSnapshotPicker(context: $rebuildContext)
@@ -117,7 +149,7 @@ private struct BondTermsReviewContent: View {
                                 VStack(alignment: .leading) {
                                     Text(bond.name)
                                     Text(instrument.isin + " · \(instrument.purchases.count) purchases").font(.caption).foregroundStyle(.secondary)
-                                    Text(instrument.needsReview ? "Needs review" : "Ready").font(.caption).foregroundStyle(instrument.needsReview ? .orange : .green)
+                                    Text(needsReview(instrument) ? "Needs review" : "Ready").font(.caption).foregroundStyle(needsReview(instrument) ? .orange : .green)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                             }.buttonStyle(.plain)
                         }
@@ -162,11 +194,27 @@ private struct BondTermsReviewContent: View {
                 if let initialSelection, let group = instruments.first(where: { $0.purchases.contains { $0.id == initialSelection } }) {
                     focused = group.representative.id; selected = [group.isin]
                 }
+                if requestedIDs != nil { selected = Set(instruments.map(\.isin)) }
                 refreshEditor()
             } catch { message = error.localizedDescription }
         }
     }
     @ViewBuilder private var editor: some View {
+        if let reportRange, let instrument = instruments.first(where: { $0.purchases.contains { $0.id == focused } }) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(instrument.representative.name).font(.headline)
+                Text("Historical report: " + reportRange.lowerBound.rawValue + " to " + reportRange.upperBound.rawValue).font(.caption)
+                Text("Saved terms need attention").font(.callout).foregroundStyle(.secondary)
+                ForEach(Array(instrument.reviewIssues(from: reportRange.lowerBound).enumerated()), id: \.offset) { _, issue in
+                    Text(issue).foregroundStyle(.orange)
+                }
+                if edited == nil {
+                    Button("Edit saved terms") { manualReview() }.disabled(busy || review.isWorking)
+                    Text("Correct the missing or inconsistent terms, then save the draft and apply. Collection from ING is optional.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }
         if let draft = edited {
             VStack(alignment: .leading, spacing: 12) {
                 Text(draft.baseline.name).font(.headline)
@@ -177,6 +225,11 @@ private struct BondTermsReviewContent: View {
                 if [.floating, .fixedToFloating].contains(draft.proposed.structure) {
                     MarketSnapshotPicker(context: Binding(get: { edited?.projectionContext }, set: { edited?.projectionContext = $0 })).id(editorRevision)
                 }
+                if let reportRange {
+                    Divider()
+                    Text("Historical payment preview").font(.headline)
+                    purchasePreviewForReport(draft, range: reportRange)
+                }
                 Divider()
                 Text("Preview from " + draft.previewDay.rawValue).font(.headline)
                 if draft.previewDay != review.today { Text("The preview day changed. Save the draft to refresh its preview before applying.").foregroundStyle(.orange) }
@@ -185,9 +238,24 @@ private struct BondTermsReviewContent: View {
                     Divider()
                 }
             }.disabled(busy || review.isWorking)
-        } else {
+        } else if reportRange == nil {
             Text("Select an instrument and collect missing terms, or enter them manually. Collection only runs when you request it.")
                 .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    @ViewBuilder private func purchasePreviewForReport(_ draft: BondTermsDraft, range: ClosedRange<MarketDay>) -> some View {
+        ForEach(focusedPurchases, id: \.objectID) { bond in
+            switch Result(catching: { try BondSchedule.preview(trade: BondTermsStore.trade(bond), terms: draft.proposed,
+                from: range.lowerBound, context: draft.projectionContext) }) {
+            case .success(let preview):
+                if preview.assessment.supported {
+                    ForEach(preview.payments.filter { range.contains($0.paymentDay) }, id: \.identity) { payment in
+                        Text(payment.paymentDay.rawValue + " | " + (payment.kind == .interest ? "Coupon" : "Redemption") + " | "
+                            + (Formatters.paymentCurrency.string(from: NSNumber(value: payment.amount)) ?? String(payment.amount)))
+                    }
+                } else { ForEach(preview.assessment.reasons, id: \.self) { Text($0).foregroundStyle(.orange) } }
+            case .failure(let error): Text(error.localizedDescription).foregroundStyle(.red)
+            }
         }
     }
     @ViewBuilder private func purchasePreview(_ bond: BondEntity, terms: BondTerms, from day: MarketDay) -> some View {
@@ -238,7 +306,7 @@ private struct BondTermsReviewContent: View {
         focused = id; refreshEditor()
     }
     private func collect(refresh: Bool) {
-        let ids = selectedIDs.filter { id in refresh || (review.drafts[id] == nil && instruments.contains { $0.representative.id == id && $0.needsReview }) }
+        let ids = selectedIDs.filter { id in refresh || (review.drafts[id] == nil && instruments.contains { $0.representative.id == id && needsReview($0) }) }
         guard !ids.isEmpty else { message = "Select ISINs without a draft, or use Refresh for a new collection."; return }
         Task { await review.collect(ids: Array(ids)); refreshEditor() }
     }
@@ -266,7 +334,7 @@ private struct BondTermsReviewContent: View {
         let ids = selectedIDs; busy = true
         Task { @MainActor in
             defer { busy = false }
-            do { finishApply(try await review.refreshForecasts(ids: ids, context: context)) }
+            do { finishApply(try await review.refreshForecasts(ids: ids, context: context, reportFrom: reportRange?.lowerBound)) }
             catch { message = error.localizedDescription }
         }
     }
@@ -275,7 +343,7 @@ private struct BondTermsReviewContent: View {
         Task { @MainActor in
             defer { busy = false }
             do {
-                let report = try await (reuse ? review.reuseApproved(ids: ids) : review.apply(ids: ids))
+                let report = try await (reuse ? review.reuseApproved(ids: ids, reportFrom: reportRange?.lowerBound) : review.apply(ids: ids, reportFrom: reportRange?.lowerBound))
                 finishApply(report)
             } catch {
                 if let report = review.lastApplyReport { finishApply(report) }

@@ -34,13 +34,13 @@ final class MainNavigationTests: XCTestCase {
             view.layoutSubtreeIfNeeded()
         }
         try await settle()
-        let control = try XCTUnwrap(descendants(view).compactMap { $0 as? NSSegmentedControl }.first { $0.segmentCount == 4 })
+        let control = try XCTUnwrap(descendants(view).compactMap { $0 as? NSSegmentedControl }.first { $0.segmentCount == 5 })
         for width in [900.0, 1100.0, 1500.0] {
             window.setContentSize(NSSize(width: width, height: 800)); view.frame.size.width = width
             try await settle()
             var initialX: CGFloat?
             var initialY: CGFloat?
-            for index in [0,1,2,3,0] {
+            for index in [0,1,2,3,4,0] {
                 let started = Date()
                 control.selectedSegment = index
                 control.sendAction(control.action, to: control.target)
@@ -50,13 +50,27 @@ final class MainNavigationTests: XCTestCase {
                 XCTAssertGreaterThanOrEqual(frame.width, control.intrinsicContentSize.width)
                 XCTAssertGreaterThanOrEqual(frame.minX, 12)
                 XCTAssertLessThanOrEqual(frame.maxX, view.bounds.maxX - 12)
-                if width == 1500, index == 1 {
+                if (width == 900 || width == 1500), (index == 1 || index == 2) {
                     let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
                     view.cacheDisplay(in: view.bounds, to: bitmap)
                     let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
                     let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
-                    attachment.name = "stable-navigation-cashflows"; attachment.lifetime = .keepAlways
+                    attachment.name = "stable-navigation-\(index == 1 ? "cashflows" : "reporting")-\(Int(width))"; attachment.lifetime = .keepAlways
                     XCTContext.runActivity(named: "Native navigation layout") { $0.add(attachment) }
+                }
+                if width == 900, index == 1 {
+                    try NativeSnapshotTestSupport.click("Summary", in: view, window: window)
+                    try await settle()
+                    let hidden = try NativeSnapshotTestSupport.text(in: view)
+                    XCTAssertFalse(hidden.contains("Portfolio Summary"), hidden)
+                    XCTAssertTrue(hidden.contains("Bank"), hidden)
+                    let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+                    view.cacheDisplay(in: view.bounds, to: bitmap)
+                    let attachment = XCTAttachment(data: try XCTUnwrap(bitmap.representation(using: .png, properties: [:])), uniformTypeIdentifier: "public.png")
+                    attachment.name = "cash-flow-summary-hidden-900"; attachment.lifetime = .keepAlways
+                    XCTContext.runActivity(named: "Cash-flow summary collapse") { $0.add(attachment) }
+                    try NativeSnapshotTestSupport.click("Summary", in: view, window: window)
+                    try await settle()
                 }
                 if let initialX { XCTAssertEqual(frame.minX, initialX, accuracy: 0.01) }
                 else { initialX = frame.minX }

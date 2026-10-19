@@ -4,7 +4,6 @@ struct CashFlowCalendarView: View {
     let data: CashFlowCalendarData
     @Binding var navigation: CashFlowCalendarNavigation
     var reviewTerms: (() -> Void)? = nil
-    @State private var showExclusions = false
 
     private var periodReceipts: [CalendarReceipt] {
         data.receipts.filter {
@@ -17,10 +16,7 @@ struct CashFlowCalendarView: View {
             toolbar
             if !data.exclusions.isEmpty { exclusionNotice }
             totals(CalendarTotals(periodReceipts))
-            if periodReceipts.contains(where: { $0.rateSource == .projected || $0.conditional || !$0.warnings.isEmpty }) {
-                Text("Some payments use assumptions or frozen market data. Open a payment day for details.")
-                    .font(.caption).foregroundStyle(.orange).frame(maxWidth: .infinity, alignment: .leading)
-            }
+            CashFlowAssumptionsView(receipts: periodReceipts)
             if navigation.level == .years {
                 if data.years.isEmpty {
                     ContentUnavailableView("No payments in this period", systemImage: "calendar",
@@ -86,37 +82,10 @@ struct CashFlowCalendarView: View {
         }.pickerStyle(.segmented).labelsHidden().fixedSize()
     }
     private var exclusionNotice: some View {
-        HStack {
-            Image(systemName: "exclamationmark.triangle")
-            Button("\(data.exclusions.count) holdings excluded from forecasts") { showExclusions.toggle() }
-                .buttonStyle(.link)
-                .popover(isPresented: $showExclusions) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(data.exclusions) { item in
-                                VStack(alignment: .leading) { Text(item.name).bold(); Text(item.reason).font(.caption) }
-                            }
-                        }.padding().frame(width: 350)
-                    }.frame(maxHeight: 350)
-                }
-            Spacer()
-            if let reviewTerms { Button("Review terms", action: reviewTerms) }
-        }.font(.callout).foregroundStyle(.orange)
+        CashFlowExclusionNotice(exclusions: data.exclusions, review: reviewTerms)
     }
     private func totals(_ value: CalendarTotals) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 24) {
-                Text("\(money(value.total)) total receipts").font(.title2).fontWeight(.semibold)
-                Spacer(minLength: 0)
-                Text("Coupons \(money(value.coupons))").foregroundStyle(.green)
-                Text("Repayments \(money(value.repayments))").foregroundStyle(.blue)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                Text("\(money(value.total)) total receipts").font(.title2).fontWeight(.semibold)
-                Text("Coupons \(money(value.coupons))").foregroundStyle(.green)
-                Text("Repayments \(money(value.repayments))").foregroundStyle(.blue)
-            }.frame(maxWidth: .infinity, alignment: .leading)
-        }.monospacedDigit().padding(.vertical, 8)
+        CashFlowTotalsView(coupons: value.coupons, repayments: value.repayments)
     }
     private func yearSummary(_ year: Int) -> some View {
         let value = CalendarTotals(data.receipts.filter { $0.paymentDay.year == year })
@@ -125,9 +94,9 @@ struct CashFlowCalendarView: View {
         } label: {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(String(year)).font(.largeTitle).fontWeight(.semibold)
+                    Text(String(year)).font(.system(size: 28, weight: .semibold))
                     Spacer()
-                    Image(systemName: "chevron.right").font(.callout).foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right").font(.callout)
                 }
                 Text(money(value.total)).font(.title2).fontWeight(.medium).monospacedDigit()
                     .lineLimit(1).minimumScaleFactor(0.8)
@@ -137,15 +106,16 @@ struct CashFlowCalendarView: View {
                         Text("Coupons")
                         Spacer(minLength: 8)
                         Text(money(value.coupons)).monospacedDigit()
-                    }.foregroundStyle(.green)
+                    }
                     HStack {
                         Text("Repayments")
                         Spacer(minLength: 8)
                         Text(money(value.repayments)).monospacedDigit()
-                    }.foregroundStyle(.blue)
+                    }
                 }.font(.callout).lineLimit(1).minimumScaleFactor(0.8)
             }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor).opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
+                .foregroundStyle(.white)
+                .background(AppTheme.tileBackground, in: RoundedRectangle(cornerRadius: 10))
                 .contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityLabel("Open year \(year)")
             .accessibilityValue("\(money(value.total)) total receipts")
@@ -153,11 +123,6 @@ struct CashFlowCalendarView: View {
     private func yearPanel(_ year: Int) -> some View {
         let receipts = data.receipts.filter { $0.paymentDay.year == year }
         return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(String(year)).font(.largeTitle).fontWeight(.semibold)
-                Spacer()
-                Text(money(CalendarTotals(receipts).total)).font(.title2).monospacedDigit()
-            }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 18)], spacing: 22) {
                 ForEach(1...12, id: \.self) { month in
                     Button {
@@ -170,7 +135,7 @@ struct CashFlowCalendarView: View {
                 }
             }
         }.padding(18)
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
+            .background(CashFlowStyle.surface, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 0.5))
     }
     private func miniMonth(year: Int, month: Int, receipts: [CalendarReceipt]) -> some View {
@@ -183,8 +148,8 @@ struct CashFlowCalendarView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 1), count: 7), spacing: 3) {
                 ForEach(Array(model.days.enumerated()), id: \.offset) { _, day in
                     Text(day.map { String($0.day) } ?? " ")
-                        .font(.system(size: 10)).monospacedDigit()
-                        .frame(maxWidth: .infinity, minHeight: 15)
+                        .font(.system(size: 12)).monospacedDigit()
+                        .frame(maxWidth: .infinity, minHeight: 18)
                         .background(day.map { days.contains($0) } == true ? Color.blue.opacity(0.35) : .clear, in: Circle())
                         .foregroundStyle(day == MarketDay(date: Date()) ? Color.orange : Color.primary)
                 }
@@ -200,7 +165,7 @@ struct CashFlowCalendarView: View {
         HStack(spacing: 0) {
             ForEach(Array(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].enumerated()), id: \.offset) { _, day in
                 Text(compact ? String(day.prefix(1)) : day)
-                    .font(compact ? .system(size: 9) : .caption).foregroundStyle(.secondary)
+                    .font(compact ? .system(size: 11) : .callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
             }
         }
@@ -222,32 +187,38 @@ struct CashFlowCalendarView: View {
                     } else { Color.clear.frame(height: 98) }
                 }
             }
-        }.background(Color(nsColor: .controlBackgroundColor).opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+        }.background(CashFlowStyle.surface, in: RoundedRectangle(cornerRadius: 8))
     }
     private func dayCell(_ day: MarketDay, receipts: [CalendarReceipt]) -> some View {
         let value = CalendarTotals(receipts)
-        return VStack(alignment: .leading, spacing: 4) {
+        return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(String(day.day)).fontWeight(.medium)
-                    .foregroundStyle(day == MarketDay(date: Date()) ? Color.orange : Color.primary)
+                Text(String(day.day)).font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(day == MarketDay(date: Date()) ? Color.accentColor : Color.primary)
                 Spacer(minLength: 0)
                 if receipts.contains(where: { $0.conditional || $0.rateSource == .projected }) {
-                    Image(systemName: "clock").foregroundStyle(.secondary).font(.caption2)
+                    Image(systemName: "clock").foregroundStyle(.secondary).font(.caption)
                 }
             }
             if !receipts.isEmpty {
-                Text(money(value.total)).font(.callout).fontWeight(.semibold).lineLimit(1).minimumScaleFactor(0.6)
-                if receipts.contains(where: { $0.kind == .interest }) {
-                    Text("Coupon \(money(value.coupons))").foregroundStyle(.green).lineLimit(1).minimumScaleFactor(0.5)
-                }
-                if value.repayments != 0 {
-                    Text("Repay \(money(value.repayments))").foregroundStyle(.blue).lineLimit(1).minimumScaleFactor(0.5)
-                }
+                ViewThatFits(in: .horizontal) {
+                    Text(money(value.total)).fixedSize()
+                    Text(value.total.formatted(.currency(code: "EUR").notation(.compactName).precision(.fractionLength(0)))).fixedSize()
+                }.font(.system(size: 13, weight: .semibold)).monospacedDigit()
+                Text("\(receipts.count) payment\(receipts.count == 1 ? "" : "s")").font(.system(size: 12)).foregroundStyle(.secondary)
+                HStack(spacing: 5) {
+                    if receipts.contains(where: { $0.kind == .interest }) {
+                        Image(systemName: "circle.fill").foregroundStyle(CashFlowStyle.coupon).accessibilityLabel("Coupons")
+                    }
+                    if receipts.contains(where: { $0.kind == .maturity }) {
+                        Image(systemName: "square.fill").foregroundStyle(CashFlowStyle.repayment).accessibilityLabel("Repayments")
+                    }
+                }.font(.system(size: 6))
             }
             Spacer(minLength: 0)
-        }.font(.caption2).monospacedDigit().padding(7).frame(maxWidth: .infinity, minHeight: 98, maxHeight: 98, alignment: .topLeading)
+        }.padding(8).frame(maxWidth: .infinity, minHeight: 98, maxHeight: 98, alignment: .topLeading)
             .background(navigation.selectedDay == day ? Color.accentColor.opacity(0.12) : .clear)
-            .overlay(Rectangle().stroke(navigation.selectedDay == day ? Color.blue : Color.secondary.opacity(0.2), lineWidth: 0.5))
+            .overlay(Rectangle().stroke(navigation.selectedDay == day ? Color.blue : Color.secondary.opacity(0.18), lineWidth: 0.5))
             .contentShape(Rectangle())
     }
     private func dayDetails(_ day: MarketDay) -> some View {
@@ -288,7 +259,7 @@ struct CashFlowCalendarView: View {
                             Text("\(isin) · \(Set(values.map(\.purchaseID)).count) purchases · \(Set(values.map(\.bank)).sorted().joined(separator: ", "))")
                                 .font(.caption).foregroundStyle(.secondary)
                             if values.contains(where: { $0.rateSource == .projected }) {
-                                Text("Projected coupon · frozen market snapshot").font(.caption).foregroundStyle(.orange)
+                                Text("Projected coupon · frozen market snapshot").font(.caption).foregroundStyle(.blue)
                             }
                             if values.contains(where: \.conditional) {
                                 Text("Conditional payment · receipt is not guaranteed").font(.caption).foregroundStyle(.orange)

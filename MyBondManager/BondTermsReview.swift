@@ -158,7 +158,7 @@ final class BondTermsReview: ObservableObject, Identifiable {
         return Dictionary(grouping: ids, by: { ETFPurchase.normalizedISIN(frozen[$0]?.trade.isin ?? storedISINs[$0] ?? $0.uuidString) })
     }
     @discardableResult
-    func apply(ids: [UUID]) async throws -> BondTermsApplyReport {
+    func apply(ids: [UUID], reportFrom: MarketDay? = nil) async throws -> BondTermsApplyReport {
         guard !isWorking, !ids.isEmpty, Set(ids).count == ids.count else { throw PortfolioError("Select distinct instruments for approval.") }
         lastApplyReport = nil
         let frozen = drafts
@@ -191,6 +191,10 @@ final class BondTermsReview: ObservableObject, Identifiable {
                         let trade = try BondTermsStore.trade(bond)
                         let result = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay(date: appliedAt), context: source.projectionContext)
                         guard result.assessment.supported else { throw PortfolioError(result.assessment.reasons.joined(separator: "\n")) }
+                        if let reportFrom {
+                            let historical = try BondSchedule.preview(trade: trade, terms: terms, from: reportFrom, context: source.projectionContext)
+                            guard historical.assessment.supported else { throw PortfolioError(historical.assessment.reasons.joined(separator: "\n")) }
+                        }
                         try BondTermsStore.replaceProjections(for: bond, terms: terms, preview: result, now: appliedAt,
                             acquisitionDay: trade.acquisitionDay, legacyDateZone: bond.termsLegacyDateZone ?? TimeZone.current.identifier, context: context, projectionContext: source.projectionContext)
                         guard bond.termsReady else { throw PortfolioError(bond.termsIssue ?? "Needs review.") }
@@ -208,7 +212,7 @@ final class BondTermsReview: ObservableObject, Identifiable {
         return report
     }
     @discardableResult
-    func refreshForecasts(ids: [UUID], context selectedContext: ProjectionContext) async throws -> BondTermsApplyReport {
+    func refreshForecasts(ids: [UUID], context selectedContext: ProjectionContext, reportFrom: MarketDay? = nil) async throws -> BondTermsApplyReport {
         guard !isWorking, !ids.isEmpty, Set(ids).count == ids.count else { throw PortfolioError("Select distinct instruments to rebuild.") }
         try selectedContext.validate()
         let at = now()
@@ -229,6 +233,10 @@ final class BondTermsReview: ObservableObject, Identifiable {
                         let trade = try BondTermsStore.trade(bond)
                         let preview = try BondSchedule.preview(trade: trade, terms: terms, from: MarketDay(date: at), context: selectedContext)
                         guard preview.assessment.supported else { throw PortfolioError(preview.assessment.reasons.joined(separator: " ")) }
+                        if let reportFrom {
+                            let historical = try BondSchedule.preview(trade: trade, terms: terms, from: reportFrom, context: selectedContext)
+                            guard historical.assessment.supported else { throw PortfolioError(historical.assessment.reasons.joined(separator: "\n")) }
+                        }
                         try BondTermsStore.replaceProjections(for: bond, terms: terms, preview: preview, now: at,
                             acquisitionDay: trade.acquisitionDay, legacyDateZone: bond.termsLegacyDateZone ?? TimeZone.current.identifier,
                             context: context, projectionContext: selectedContext)
@@ -250,7 +258,7 @@ final class BondTermsReview: ObservableObject, Identifiable {
         return report
     }
     @discardableResult
-    func reuseApproved(ids: [UUID]) async throws -> BondTermsApplyReport {
+    func reuseApproved(ids: [UUID], reportFrom: MarketDay? = nil) async throws -> BondTermsApplyReport {
         guard !isWorking, !ids.isEmpty else { throw PortfolioError("Select instruments whose existing approvals should be reused.") }
         lastApplyReport = nil; isWorking = true; defer { isWorking = false }
         let at = now()
@@ -266,6 +274,11 @@ final class BondTermsReview: ObservableObject, Identifiable {
                     let bonds = try context.fetch(BondEntity.fetchRequest()).filter { ETFPurchase.normalizedISIN($0.isin) == isin }
                     guard bonds.allSatisfy(BondTermsStore.isReady) else {
                         throw PortfolioError("No reusable approval, or a purchase requires history/trade review. Collect or correct this ISIN's terms.")
+                    }
+                    if let reportFrom {
+                        for bond in bonds where try BondTermsStore.validatedPreview(bond, from: reportFrom) == nil {
+                            throw PortfolioError(try BondTermsStore.exclusionReason(bond, from: reportFrom))
+                        }
                     }
                     var retained: [UUID: BondTermsDraft] = [:]
                     for bond in bonds { retained[bond.id] = try BondTermsStore.readDraft(bond) }

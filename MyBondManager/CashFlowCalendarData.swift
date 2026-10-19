@@ -1,6 +1,6 @@
 import Foundation
 
-struct CalendarReceipt: Identifiable {
+struct CalendarReceipt: Identifiable, Sendable {
     let id: String
     let purchaseID: UUID
     let isin: String
@@ -28,8 +28,8 @@ struct CalendarTotals {
     }
 }
 
-struct CashFlowCalendarData {
-    struct Exclusion: Identifiable {
+struct CashFlowCalendarData: Sendable {
+    struct Exclusion: Identifiable, Codable, Sendable {
         let id: UUID
         let name: String
         let reason: String
@@ -39,17 +39,16 @@ struct CashFlowCalendarData {
     var totals: CalendarTotals { CalendarTotals(receipts) }
     var years: [Int] { Set(receipts.map { $0.paymentDay.year }).sorted() }
 
-    @MainActor
     static func build(bonds: [BondEntity], from: MarketDay, through: MarketDay,
-                      kind: BondPayment.Kind? = nil) -> Self {
+                      kind: BondPayment.Kind? = nil, includeInactiveExclusions: Bool = false) -> Self {
         var receipts: [CalendarReceipt] = []
         var exclusions: [Exclusion] = []
         for bond in bonds {
             do {
                 guard let preview = try BondTermsStore.validatedPreview(bond, from: from) else {
-                    if BondEligibility.isActive(bond, on: MarketDay(date: Date())) {
+                    if includeInactiveExclusions || BondEligibility.isActive(bond, on: MarketDay(date: Date())) {
                         exclusions.append(Exclusion(id: bond.id, name: bond.name,
-                            reason: bond.termsIssue ?? "Saved instrument terms need review."))
+                            reason: try BondTermsStore.exclusionReason(bond, from: from)))
                     }
                     continue
                 }
@@ -66,7 +65,7 @@ struct CashFlowCalendarData {
                 }
             } catch {
                 NSLog("Cannot prepare calendar for %@: %@", bond.id.uuidString, error.localizedDescription)
-                if BondEligibility.isActive(bond, on: MarketDay(date: Date())) {
+                if includeInactiveExclusions || BondEligibility.isActive(bond, on: MarketDay(date: Date())) {
                     exclusions.append(Exclusion(id: bond.id, name: bond.name, reason: error.localizedDescription))
                 }
             }

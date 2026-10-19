@@ -3,6 +3,11 @@ import CoreData
 enum BondEligibility {
     static func redemptionDay(_ bond: BondEntity) -> MarketDay {
         if BondTermsStore.isReady(bond), let date = bond.redemptionPaymentDate { return MarketDay(date: date) }
+        return contractualMaturityDay(bond)
+    }
+    static func contractualMaturityDay(_ bond: BondEntity) -> MarketDay {
+        // Saving an approval normalizes maturityDate to the contractual Berlin day.
+        if bond.termsData != nil { return MarketDay(date: bond.maturityDate) }
         if let zone = bond.termsLegacyDateZone.flatMap(TimeZone.init(identifier:)) {
             var calendar = MarketDay.calendar; calendar.timeZone = zone
             return MarketDay(date: bond.maturityDate, calendar: calendar)

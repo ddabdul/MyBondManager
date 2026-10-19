@@ -2,6 +2,32 @@ import XCTest
 @testable import MyBondManager
 
 final class BondPreviewCacheTests: XCTestCase {
+    func testSavedProfilesDecodeOncePerDistinctBytesAndRetryFailures() throws {
+        let cache = BondPreviewCache()
+        let original = BondTermsStore.Profile(terms: try BondTermsFixtures.fixed(), trade: try BondTermsFixtures.trade(),
+            acquisitionInstant: TestPortfolio.date("2026-02-01T00:00:00Z"), projectionContext: nil)
+        var changed = original.terms; changed.couponRate = 4
+        let replacement = BondTermsStore.Profile(terms: changed, trade: original.trade,
+            acquisitionInstant: original.acquisitionInstant, projectionContext: nil)
+        let first = try BondTermsStore.encode(original), second = try BondTermsStore.encode(replacement)
+        var decodes = 0
+        for data in [first, first, second, second, first] {
+            let profile = try cache.profile(data) {
+                decodes += 1
+                return try BondTermsStore.decode(BondTermsStore.Profile.self, data)
+            }
+            XCTAssertEqual(profile.terms.couponRate, data == first ? original.terms.couponRate : 4)
+        }
+        XCTAssertEqual(decodes, 2, "Summary tiles and rows must reuse already decoded profiles")
+        for _ in 0..<2 {
+            XCTAssertThrowsError(try cache.profile(Data([0])) {
+                decodes += 1
+                return try BondTermsStore.decode(BondTermsStore.Profile.self, Data([0]))
+            })
+        }
+        XCTAssertEqual(decodes, 4, "Decoding failures must not become cached success values")
+    }
+
     func testRepeatedProfileAndDateReuseCalculatedSchedule() throws {
         let cache = BondPreviewCache()
         let terms = try BondTermsFixtures.fixed()

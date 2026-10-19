@@ -30,7 +30,7 @@ struct BondTermsDraft: Codable, Equatable, Sendable {
 enum BondTermsStore {
     private static let previewCache = BondPreviewCache()
     private struct Envelope<T: Codable>: Codable { let version: Int; let value: T }
-    private struct Profile: Codable {
+    struct Profile: Codable, Sendable {
         let terms: BondTerms
         let trade: BondTrade
         let acquisitionInstant: Date
@@ -46,11 +46,17 @@ enum BondTermsStore {
         guard envelope.version == 1 else { throw PortfolioError("Unsupported saved bond terms version.") }
         return envelope.value
     }
+    private static func cachedProfile(_ data: Data) throws -> Profile {
+        try previewCache.profile(data) {
+            do { return try decode(Profile.self, data) }
+            catch { throw PortfolioError("Saved approval cannot be decoded: " + error.localizedDescription) }
+        }
+    }
     static func read(_ bond: BondEntity) throws -> BondTerms? {
-        try bond.termsData.map { try decode(Profile.self, $0).terms }
+        try bond.termsData.map { try cachedProfile($0).terms }
     }
     static func projectionContext(_ bond: BondEntity) throws -> ProjectionContext? {
-        try bond.termsData.map { try decode(Profile.self, $0).projectionContext } ?? nil
+        try bond.termsData.map { try cachedProfile($0).projectionContext } ?? nil
     }
     static func trade(_ bond: BondEntity) throws -> BondTrade {
         let day: MarketDay
@@ -136,7 +142,7 @@ enum BondTermsStore {
     }
     static func validatedPreview(_ bond: BondEntity, from day: MarketDay) throws -> BondSchedulePreview? {
         guard bond.termsReady, let data = bond.termsData else { return nil }
-        let profile = try decode(Profile.self, data)
+        let profile = try cachedProfile(data)
         guard profile.terms.approvedAt != nil, profile.trade == (try trade(bond)),
               profile.acquisitionInstant == bond.acquisitionDate,
               (profile.terms.couponRate ?? 0) == bond.couponRate,
@@ -145,6 +151,27 @@ enum BondTermsStore {
             try BondSchedule.preview(trade: profile.trade, terms: profile.terms, from: day, context: profile.projectionContext)
         }
         return preview.assessment.supported ? preview : nil
+    }
+    static func exclusionReason(_ bond: BondEntity, from day: MarketDay) throws -> String {
+        guard let data = bond.termsData else {
+            return "No saved approved terms. Collect terms from ING or enter and approve them manually."
+        }
+        let profile = try cachedProfile(data)
+        guard profile.terms.approvedAt != nil else { return "Saved terms have not been approved." }
+        let current = try trade(bond)
+        var changes: [String] = []
+        if profile.trade.isin != current.isin { changes.append("ISIN") }
+        if profile.trade.nominal != current.nominal { changes.append("nominal") }
+        if profile.trade.cost != current.cost { changes.append("purchase cost") }
+        if profile.trade.bank != current.bank { changes.append("bank") }
+        if profile.trade.acquisitionDay != current.acquisitionDay || profile.acquisitionInstant != bond.acquisitionDate { changes.append("acquisition date") }
+        if (profile.terms.couponRate ?? 0) != bond.couponRate { changes.append("coupon rate") }
+        if profile.terms.maturity != MarketDay(date: bond.maturityDate) { changes.append("maturity") }
+        if !changes.isEmpty { return "Saved approval no longer matches: " + changes.joined(separator: ", ") + ". Review or reuse approved terms to rebuild the purchase preview." }
+        if let issue = bond.termsIssue, !issue.isEmpty { return issue }
+        if !bond.termsReady { return "Saved approval is retained, but this purchase needs a rebuilt preview. Review or reuse approved terms." }
+        let preview = try BondSchedule.preview(trade: current, terms: profile.terms, from: day, context: profile.projectionContext)
+        return preview.assessment.reasons.isEmpty ? "Saved terms require review." : preview.assessment.reasons.joined(separator: "\n")
     }
     static func isReady(_ bond: BondEntity) -> Bool {
         do { return try validatedPreview(bond, from: MarketDay(date: Date())) != nil }

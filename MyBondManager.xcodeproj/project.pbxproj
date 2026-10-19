@@ -393,6 +393,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = MyBondManager;
+                INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "MyBondManager reads and updates its Bond payments calendar to keep payment reminders in sync with your approved holdings.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -431,6 +432,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = MyBondManager;
+                INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "MyBondManager reads and updates its Bond payments calendar to keep payment reminders in sync with your approved holdings.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (

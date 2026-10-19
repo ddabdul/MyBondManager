@@ -34,12 +34,12 @@ struct CashFlowTabView: View {
                 displayModeSelection: displayModeSelection, navigationSelection: navigationSelection)
                 .environment(\.managedObjectContext, viewContext)
                 .environmentObject(notifier)
-                .background(AppTheme.panelBackground)
+                .background(CashFlowStyle.background)
         }
         .alert("Cash flows recalculated", isPresented: $showingRecalc) {
             Button("OK", role: .cancel) {}
         }
-        .padding()
+        .background(CashFlowStyle.background)
     }
 }
 

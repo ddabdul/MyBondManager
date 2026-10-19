@@ -16,6 +16,7 @@ struct BondPortfolioManagerApp: App {
     private let isTesting: Bool
     @StateObject private var priceUpdater: ETFPriceUpdater
     @StateObject private var notifier: LaunchNotifier
+    @StateObject private var paymentCalendar: PaymentCalendarSync
     private let viewContext: NSManagedObjectContext
 
     init() {
@@ -26,6 +27,8 @@ struct BondPortfolioManagerApp: App {
         self.viewContext = context
         let notifier = LaunchNotifier()
         _notifier = StateObject(wrappedValue: notifier)
+        let calendarSync = PaymentCalendarSync(container: persistenceController.container)
+        _paymentCalendar = StateObject(wrappedValue: calendarSync)
         let updater = ETFPriceUpdater(container: persistenceController.container)
         _priceUpdater = StateObject(wrappedValue: updater)
         if !isTesting { persistenceController.deleteEmptyETFs() }
@@ -37,6 +40,7 @@ struct BondPortfolioManagerApp: App {
                 .environment(\.managedObjectContext, viewContext)
                 .environment(\.portfolioContainer, persistenceController.container)
                 .environmentObject(notifier)
+                .environment(\.paymentCalendarSync, paymentCalendar)
                 .environmentObject(priceUpdater)
                 .preferredColorScheme(.dark)
                 .accentColor(.white)
@@ -45,6 +49,7 @@ struct BondPortfolioManagerApp: App {
                 .toolbarBackground(Color.panelBackground, for: .windowToolbar)
                 .task {
                     guard !isTesting else { return }
+                    paymentCalendar.start()
                     await notifier.processLaunch(in: persistenceController.container)
                     do {
                         try await priceUpdater.refreshAllPrices()

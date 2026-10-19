@@ -18,11 +18,13 @@ private struct FolderSelection: Identifiable {
 struct MainTabView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.portfolioContainer) private var portfolioContainer
+    @Environment(\.paymentCalendarSync) private var paymentCalendarSync
     @EnvironmentObject private var priceUpdater: ETFPriceUpdater
     @EnvironmentObject private var notifier: LaunchNotifier
 
     @State private var selectedDepotBank: String = "All"
     @State private var selectedTab: Tab = .portfolio
+    @State private var showCashFlowSummary = true
     @State private var cashFlowDisplayMode = "List"
     @State private var cashFlowNavigation = CashFlowCalendarNavigation()
     @State private var validationSelection: FolderSelection?
@@ -47,7 +49,7 @@ struct MainTabView: View {
     private var unresolvedCount: Int { BondTermsReviewInstrument.grouped(allBonds.filter { BondEligibility.isActive($0, on: MarketDay(date: Date())) }).filter(\.needsReview).count }
 
     enum Tab: String, CaseIterable, Identifiable {
-        case portfolio, cashflows, etf, history
+        case portfolio, cashflows, reporting, etf, history
         var id: String { rawValue }
     }
 
@@ -58,6 +60,7 @@ struct MainTabView: View {
                 Picker("", selection: $selectedTab) {
                     Label("Portfolio", systemImage: "list.bullet").tag(Tab.portfolio)
                     Label("Cash Flows", systemImage: "dollarsign.circle").tag(Tab.cashflows)
+                    Label("Reporting", systemImage: "chart.bar.xaxis").tag(Tab.reporting)
                     Label("ETF", systemImage: "chart.bar").tag(Tab.etf)
                     Label("History", systemImage: "clock.arrow.circlepath").tag(Tab.history)
                     
@@ -92,6 +95,10 @@ struct MainTabView: View {
                     }
 
                 case .cashflows:
+                    Button("Summary", systemImage: "sidebar.left") { showCashFlowSummary.toggle() }
+                        .accessibilityLabel(showCashFlowSummary ? "Hide portfolio summary" : "Show portfolio summary")
+                        .help(showCashFlowSummary ? "Hide portfolio summary" : "Show portfolio summary")
+                    if let paymentCalendarSync { PaymentCalendarButton(sync: paymentCalendarSync) }
                     Button {
                         recalculateAllCashFlows()
                     } label: {
@@ -119,7 +126,7 @@ struct MainTabView: View {
                     } label: {
                         Label("Sell", systemImage: "minus.circle")
                     }
-                case .history:
+                case .history, .reporting:
                                     // No buttons needed for snapshot view
                                     EmptyView()
                 }
@@ -132,9 +139,11 @@ struct MainTabView: View {
             Divider()
 
             HSplitView {
-                PortfolioSummaryView(selectedDepotBank: $selectedDepotBank)
-                    .frame(minWidth: 260, idealWidth: 300, maxWidth: 360)
-                    .background(AppTheme.panelBackground)
+                if selectedTab != .cashflows || showCashFlowSummary {
+                    PortfolioSummaryView(selectedDepotBank: $selectedDepotBank)
+                        .frame(minWidth: 260, idealWidth: 300, maxWidth: 360)
+                        .background(AppTheme.panelBackground)
+                }
 
                 detailContent(for: selectedTab)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -215,6 +224,8 @@ struct MainTabView: View {
                     displayModeSelection: $cashFlowDisplayMode,
                     navigationSelection: $cashFlowNavigation
                 )
+            case .reporting:
+                ReportingView(selectedDepotBank: $selectedDepotBank, reviewTerms: openTermsReview)
             case .etf:
                 ETFTabView(
                     geo: geo,
